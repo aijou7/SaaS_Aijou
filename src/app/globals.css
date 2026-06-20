@@ -139,6 +139,421 @@ a {
   min-height: 100vh;
 }
 
+.landing-page {
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(29, 78, 216, 0.11), transparent 30%),
+    radial-gradient(circle at 86% 14%, rgba(14, 165, 233, 0.1), transparent 28%),
+    #ffffff;
+  color: #0f172a;
+}
+
+.landing-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 22px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.84);
+  background: rgba(255, 255, 255, 0.86);
+  padding: 14px clamp(18px, 5vw, 72px);
+  backdrop-filter: blur(14px);
+}
+
+.landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.landing-brand span,
+.landing-feature-card span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.landing-nav {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.landing-nav a:hover,
+.landing-link:hover {
+  color: var(--accent);
+}
+
+.landing-actions,
+.landing-cta-row,
+.landing-trust-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-link {
+  color: #475569;
+  font-weight: 700;
+}
+
+.landing-button,
+.landing-primary,
+.landing-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border-radius: 10px;
+  font-weight: 800;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.landing-button,
+.landing-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0 16px;
+  box-shadow: 0 12px 24px rgba(29, 78, 216, 0.18);
+}
+
+.landing-secondary {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: #0f172a;
+  padding: 0 16px;
+}
+
+.landing-button:hover,
+.landing-primary:hover,
+.landing-secondary:hover {
+  transform: translateY(-1px);
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.78fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 70px);
+  width: min(1180px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: clamp(54px, 8vw, 94px) 0 46px;
+}
+
+.landing-hero-copy {
+  display: grid;
+  gap: 20px;
+}
+
+.landing-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.82);
+  color: var(--accent);
+  font-weight: 800;
+  padding: 8px 12px;
+}
+
+.landing-hero h1 {
+  max-width: 780px;
+  margin: 0;
+  font-size: clamp(40px, 6vw, 72px);
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+.landing-hero-copy > p,
+.landing-section-heading p,
+.landing-workflow > div > p,
+.landing-final-card p {
+  max-width: 650px;
+  margin: 0;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.landing-trust-row {
+  flex-wrap: wrap;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.landing-trust-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.landing-trust-row svg {
+  color: #16a34a;
+}
+
+.landing-demo-card {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.13);
+  padding: 16px;
+}
+
+.demo-window-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.demo-window-top span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.demo-window-top strong {
+  margin-left: auto;
+}
+
+.demo-chat {
+  display: grid;
+  gap: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.demo-bubble {
+  max-width: 86%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+  line-height: 1.6;
+}
+
+.demo-bubble.agent {
+  justify-self: end;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.demo-payment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 12px;
+}
+
+.demo-payment div {
+  display: grid;
+  gap: 2px;
+}
+
+.demo-payment span {
+  color: #4d7c0f;
+  font-size: 12px;
+}
+
+.demo-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.demo-stats span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #64748b;
+  padding: 12px;
+}
+
+.demo-stats strong {
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.landing-section,
+.landing-workflow,
+.landing-final-card {
+  width: min(1180px, calc(100% - 36px));
+  margin: 0 auto;
+}
+
+.landing-section {
+  padding: 54px 0;
+}
+
+.landing-section-heading {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+  margin-bottom: 22px;
+}
+
+.landing-section-heading h2,
+.landing-workflow h2,
+.landing-final-card h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.landing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.landing-feature-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 230px;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+}
+
+.landing-feature-card h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.landing-feature-card p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.65;
+}
+
+.landing-workflow {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr;
+  gap: 22px;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: clamp(24px, 4vw, 36px);
+}
+
+.landing-workflow .eyebrow,
+.landing-workflow > div > p {
+  color: #cbd5e1;
+}
+
+.workflow-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: start;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 14px;
+}
+
+.workflow-item span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.workflow-item p {
+  margin: 0;
+  color: #e2e8f0;
+  line-height: 1.6;
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.channel-grid span {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+.channel-grid svg {
+  color: var(--accent);
+}
+
+.landing-final-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
+  margin-bottom: 54px;
+  padding: clamp(24px, 4vw, 34px);
+}
+
+.landing-final-card > div {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-final-card svg {
+  color: var(--accent);
+}
+
 .app-frame {
   min-height: 100vh;
 }
@@ -3495,6 +3910,45 @@ sup {
 }
 
 @media (max-width: 800px) {
+  .landing-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .landing-nav {
+    display: none;
+  }
+
+  .landing-actions {
+    justify-content: end;
+  }
+
+  .landing-link {
+    display: none;
+  }
+
+  .landing-hero,
+  .landing-workflow {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-hero {
+    padding-top: 38px;
+  }
+
+  .landing-hero h1 {
+    font-size: 40px;
+  }
+
+  .landing-feature-grid,
+  .channel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-final-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .app-topbar {
     overflow-x: auto;
   }

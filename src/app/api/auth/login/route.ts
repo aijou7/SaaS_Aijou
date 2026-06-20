@@ -30,5 +30,5 @@ export async function POST(request: NextRequest) {
     email: user.email,
   });
 
-  return NextResponse.redirect(new URL("/", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/dashboard", request.url), { status: 303 });
 }

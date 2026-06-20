@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WhatsApp AI Assistant",
-  description: "MVP dashboard for WhatsApp expense capture and receipt review.",
+  title: "Aijou AI - AI Sales Agent",
+  description: "AI agent untuk balas chat, bantu closing, dan catat pembayaran otomatis.",
 };
 
 export default function RootLayout({

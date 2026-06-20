@@ -59,7 +59,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
   settings: {
     title: "Workspace",
     items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
       { href: "/setup", label: "Setup Wizard", icon: BadgeCheck, key: "setup" },
       { href: "/usage", label: "Usage", icon: Activity, key: "usage" },
     ],
@@ -160,13 +160,13 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
     <main className="app-frame">
       <header className="app-topbar">
         <div className="app-logo-menu">
-          <Link className="app-logo" href="/" aria-label="Dashboard">
+          <Link className="app-logo" href="/dashboard" aria-label="Dashboard">
             <Bot size={20} aria-hidden="true" />
           </Link>
           <div className="logo-popover" role="tooltip">
             <strong>WA AI Assistant</strong>
             <span>Dashboard, setup, and workspace overview.</span>
-            <Link href="/">Open dashboard</Link>
+            <Link href="/dashboard">Open dashboard</Link>
           </div>
         </div>
 

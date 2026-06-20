@@ -1,285 +1,233 @@
 import {
+  ArrowRight,
+  BadgeCheck,
   Bot,
   CheckCircle2,
-  ClipboardCheck,
+  FileText,
   MessageCircle,
-  ReceiptText,
+  Package,
+  ShieldCheck,
   Sparkles,
   WalletCards,
 } from "lucide-react";
-import type { Route } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
-import { formatCurrencyIDR } from "@/lib/format";
-import { getSession } from "@/lib/session";
-import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
 
-export default async function Home() {
-  const session = await getSession();
+const features = [
+  {
+    icon: MessageCircle,
+    title: "Balas chat 24 jam",
+    description:
+      "AI agent jawab pertanyaan klien, follow up prospek, dan tahu kapan harus handover ke manusia.",
+  },
+  {
+    icon: FileText,
+    title: "Training dari dashboard",
+    description:
+      "Upload knowledge, FAQ, dan percakapan WhatsApp lama dalam format .txt untuk membentuk gaya jawaban AI.",
+  },
+  {
+    icon: Package,
+    title: "Produk dan harga",
+    description:
+      "Masukkan katalog produk atau jasa supaya AI bisa rekomendasi, jelaskan paket, dan bantu closing.",
+  },
+  {
+    icon: WalletCards,
+    title: "Payment otomatis",
+    description:
+      "Siapkan alur Xendit, QRIS, dan payment link agar pembayaran bisa lanjut dari percakapan.",
+  },
+];
 
-  if (!session) {
-    redirect("/login" as Route);
-  }
+const channels = ["WhatsApp", "Instagram", "Messenger", "Gmail", "Web Live Chat", "TikTok"];
 
-  const dashboard = await getFinanceDashboardSnapshot(session.userId);
+const steps = [
+  "Latih AI dengan profil bisnis, produk, dan chat lama.",
+  "AI membalas customer dari channel yang tersambung.",
+  "AI merekomendasikan produk, menjawab objection, lalu kirim link bayar.",
+  "Payment dan laporan masuk dashboard secara otomatis.",
+];
 
+export default function LandingPage() {
   return (
-    <AppShell active="dashboard" businessName={dashboard.businessName}>
-      <div className="dashboard-topbar">
-        <div>
-          <p className="eyebrow">Control center</p>
-          <h1>AI agent 24 jam buat balas chat, rekomendasi produk, dan bantu closing.</h1>
-          <p className="muted">
-            Fokus app ini sederhana: klien chat, AI jawab pakai training data, AI arahkan ke
-            produk, payment dibuat, dan laporan otomatis update.
+    <main className="landing-page">
+      <header className="landing-header">
+        <Link className="landing-brand" href="/">
+          <span>
+            <Bot size={18} aria-hidden="true" />
+          </span>
+          Aijou AI
+        </Link>
+        <nav className="landing-nav" aria-label="Landing navigation">
+          <a href="#features">Fitur</a>
+          <a href="#workflow">Cara kerja</a>
+          <a href="#channels">Platform</a>
+        </nav>
+        <div className="landing-actions">
+          <Link className="landing-link" href="/login">
+            Login
+          </Link>
+          <Link className="landing-button" href="/dashboard">
+            Buka dashboard
+          </Link>
+        </div>
+      </header>
+
+      <section className="landing-hero">
+        <div className="landing-hero-copy">
+          <div className="landing-pill">
+            <Sparkles size={15} aria-hidden="true" />
+            AI sales agent untuk bisnis chat-first
+          </div>
+          <h1>AI agent yang balas chat, bantu closing, dan catat pembayaran otomatis.</h1>
+          <p>
+            Bangun customer service yang tetap aktif 24 jam. Latih AI dari dashboard,
+            sambungkan platform chat, masukkan produk, lalu biarkan AI membantu customer
+            sampai siap bayar.
+          </p>
+          <div className="landing-cta-row">
+            <Link className="landing-primary" href="/login">
+              Mulai setup
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+            <a className="landing-secondary" href="#workflow">
+              Lihat alur produk
+            </a>
+          </div>
+          <div className="landing-trust-row" aria-label="Highlights">
+            <span>
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Human takeover
+            </span>
+            <span>
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Groq AI ready
+            </span>
+            <span>
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Xendit-ready flow
+            </span>
+          </div>
+        </div>
+
+        <div className="landing-demo-card" aria-label="Product preview">
+          <div className="demo-window-top">
+            <span />
+            <span />
+            <span />
+            <strong>Live inbox</strong>
+          </div>
+          <div className="demo-chat">
+            <div className="demo-bubble customer">
+              Kak, paket yang cocok buat bisnis kecil apa ya?
+            </div>
+            <div className="demo-bubble agent">
+              Bisa mulai dari paket Starter. Fiturnya sudah termasuk setup AI, FAQ produk,
+              dan follow up otomatis. Mau saya bantu buatkan link pembayaran?
+            </div>
+            <div className="demo-payment">
+              <WalletCards size={18} aria-hidden="true" />
+              <div>
+                <strong>Payment link generated</strong>
+                <span>Rp499.000 - Pending payment</span>
+              </div>
+            </div>
+          </div>
+          <div className="demo-stats">
+            <span>
+              <strong>38</strong>
+              chats handled
+            </span>
+            <span>
+              <strong>12</strong>
+              hot leads
+            </span>
+            <span>
+              <strong>4</strong>
+              paid
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section" id="features">
+        <div className="landing-section-heading">
+          <p className="eyebrow">Core features</p>
+          <h2>Fitur yang fokus ke chat sampai closing</h2>
+          <p>
+            Semua modul dibuat untuk satu tujuan: customer masuk dari chat, AI bantu jawab,
+            jualan, bayar, lalu laporan kebaca jelas.
           </p>
         </div>
-      </div>
+        <div className="landing-feature-grid">
+          {features.map((feature) => {
+            const Icon = feature.icon;
 
-      <section className="onboarding-panel">
+            return (
+              <article className="landing-feature-card" key={feature.title}>
+                <span>
+                  <Icon size={19} aria-hidden="true" />
+                </span>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="landing-workflow" id="workflow">
         <div>
-          <p className="eyebrow">Quick start</p>
-          <h2>Flow utama yang perlu matang dulu</h2>
-          <p className="muted">
-            Jangan kebanyakan fitur dulu. Semua halaman harus mendukung flow chat sampai paid.
+          <p className="eyebrow">Workflow</p>
+          <h2>Dari training sampai laporan penjualan</h2>
+          <p>
+            Mulai dari demo mode dulu, lalu tinggal diganti ke WhatsApp Cloud API dan
+            Xendit production saat bisnis siap live.
           </p>
         </div>
-        <div className="step-grid">
-          <Link className="step-card" href="/training">
-            <span>1</span>
-            <strong>Train AI</strong>
-            <small>Isi knowledge, upload .txt, dan import contoh percakapan WhatsApp lama.</small>
-          </Link>
-          <Link className="step-card" href="/products">
-            <span>2</span>
-            <strong>Isi Produk</strong>
-            <small>Masukkan produk/jasa dan harga supaya AI bisa jualan dengan jelas.</small>
-          </Link>
-          <Link className="step-card" href="/integrations">
-            <span>3</span>
-            <strong>Connect Channel</strong>
-            <small>Sambungkan WhatsApp dulu, lalu siapkan slot Instagram, Messenger, email, web chat.</small>
-          </Link>
+        <div className="workflow-list">
+          {steps.map((step, index) => (
+            <div className="workflow-item" key={step}>
+              <span>{index + 1}</span>
+              <p>{step}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      <section className="grid" aria-label="Ringkasan MVP">
-        <div className="card metric-card">
-          <WalletCards size={22} aria-hidden="true" />
-          <span>Revenue Bulan Ini</span>
-          <strong>{formatCurrencyIDR(dashboard.totalThisMonth)}</strong>
-          <p>Masuk otomatis dari order/payment yang sudah confirmed.</p>
+      <section className="landing-section" id="channels">
+        <div className="landing-section-heading">
+          <p className="eyebrow">Platforms</p>
+          <h2>Satu agent untuk banyak channel</h2>
+          <p>
+            WhatsApp jadi prioritas awal, tapi struktur app sudah disiapkan untuk platform
+            lain saat produk makin matang.
+          </p>
         </div>
-        <div className="card metric-card">
-          <MessageCircle size={22} aria-hidden="true" />
-          <span>Customer Chats</span>
-          <strong>{dashboard.customerConversationCount}</strong>
-          <p>Chat klien yang diproses AI agent.</p>
-        </div>
-        <div className="card metric-card">
-          <CheckCircle2 size={22} aria-hidden="true" />
-          <span>Paid / Confirmed</span>
-          <strong>{dashboard.confirmedCount}</strong>
-          <p>Order atau payment yang sudah masuk laporan.</p>
+        <div className="channel-grid">
+          {channels.map((channel) => (
+            <span key={channel}>
+              <BadgeCheck size={16} aria-hidden="true" />
+              {channel}
+            </span>
+          ))}
         </div>
       </section>
 
-      <section className="section module-map">
-        <div className="section-header">
-          <div>
-            <h2>Ada apa aja di app ini?</h2>
-            <p className="muted">Peta modul inti, semuanya mendukung AI closing flow.</p>
-          </div>
+      <section className="landing-final-card">
+        <div>
+          <ShieldCheck size={22} aria-hidden="true" />
+          <h2>Bangun dulu flow yang bisa didemo, baru integrasi real.</h2>
+          <p>
+            Landing ini nunjukin arah produknya: AI agent untuk bisnis yang jualan lewat chat,
+            bukan dashboard random penuh menu.
+          </p>
         </div>
-        <div className="module-grid">
-          <Link className="module-card" href="/conversations">
-            <MessageCircle size={22} aria-hidden="true" />
-            <strong>Inbox</strong>
-            <p>AI jawab chat klien 24 jam, owner bisa take over kapan pun.</p>
-          </Link>
-          <Link className="module-card" href="/training">
-            <Sparkles size={22} aria-hidden="true" />
-            <strong>Training</strong>
-            <p>Manual knowledge, .txt, dan percakapan WhatsApp lama buat bahan belajar AI.</p>
-          </Link>
-          <Link className="module-card" href="/agent">
-            <Bot size={22} aria-hidden="true" />
-            <strong>AI Agent</strong>
-            <p>Atur tone, bahasa, handoff rules, dan instruksi closing.</p>
-          </Link>
-          <Link className="module-card" href="/products">
-            <ReceiptText size={22} aria-hidden="true" />
-            <strong>Products</strong>
-            <p>Catalog produk/jasa dan harga yang dipakai AI saat menawarkan solusi.</p>
-          </Link>
-          <Link className="module-card" href="/payments">
-            <WalletCards size={22} aria-hidden="true" />
-            <strong>Payments</strong>
-            <p>Xendit, QRIS, VA, dan payment status yang update otomatis.</p>
-          </Link>
-          <Link className="module-card" href="/integrations">
-            <ClipboardCheck size={22} aria-hidden="true" />
-            <strong>Integrations</strong>
-            <p>WhatsApp, Instagram, Messenger, email, TikTok, dan web live chat.</p>
-          </Link>
-        </div>
+        <Link className="landing-primary" href="/login">
+          Masuk ke workspace
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
       </section>
-
-      <section className="section split-layout">
-        <div className="card">
-          <div className="section-header">
-            <div>
-              <h2>Action Queue</h2>
-              <p className="muted">Hal yang perlu owner cek hari ini.</p>
-            </div>
-          </div>
-          <div className="queue-grid">
-            <Link className="queue-item" href="/transactions?status=PENDING_CONFIRMATION">
-              <strong>{dashboard.pendingTransactionCount}</strong>
-              <span>Pending payments</span>
-            </Link>
-            <Link className="queue-item" href="/reports">
-              <strong>{dashboard.confirmedCount}</strong>
-              <span>Paid records</span>
-            </Link>
-            <Link className="queue-item" href="/conversations">
-              <strong>{dashboard.humanNeededCount}</strong>
-              <span>Human needed</span>
-            </Link>
-            <Link className="queue-item" href="/leads">
-              <strong>{dashboard.newLeadCount}</strong>
-              <span>New leads</span>
-            </Link>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="section-header">
-            <div>
-              <h2>Latest AI Actions</h2>
-              <p className="muted">Debug cepat keputusan AI terakhir.</p>
-            </div>
-            <Link className="ghost-button" href="/ai-activity">
-              View all
-            </Link>
-          </div>
-          {dashboard.latestAiActions.length === 0 ? (
-            <div className="empty-state">
-              <strong>Belum ada AI activity</strong>
-              <p>Coba kirim chat dari Simulator untuk melihat Groq extraction/reply log.</p>
-              <Link className="primary-button" href="/simulator">
-                Open simulator
-              </Link>
-            </div>
-          ) : (
-            <div className="activity-list">
-              {dashboard.latestAiActions.map((action) => (
-                <Link
-                  className="activity-row"
-                  href={
-                    action.conversationId
-                      ? `/conversations?conversationId=${action.conversationId}`
-                      : "/ai-activity"
-                  }
-                  key={action.id}
-                >
-                  <span>
-                    <strong>{action.actionTaken}</strong>
-                    <small>{action.intent}</small>
-                  </span>
-                  <span
-                    className={
-                      action.confidenceScore !== null && action.confidenceScore < 0.7
-                        ? "status status-warning"
-                        : "status"
-                    }
-                  >
-                    {action.confidenceScore === null
-                      ? "-"
-                      : `${Math.round(action.confidenceScore * 100)}%`}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="card">
-          <div className="section-header">
-            <div>
-              <h2>Transaksi Terbaru</h2>
-              <p className="muted">Order/payment yang sudah masuk dari chat AI atau manual.</p>
-            </div>
-            <Link className="ghost-button" href="/payments">
-              Open payments
-            </Link>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Deskripsi</th>
-                <th>Kategori</th>
-                <th>Project</th>
-                <th>Sumber</th>
-                <th>Nominal</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dashboard.recentTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="table-empty">
-                      <strong>Belum ada transaksi</strong>
-                      <span>Mulai dari Simulator atau tambah manual di Transactions.</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                dashboard.recentTransactions.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td>{transaction.description}</td>
-                    <td>{transaction.category}</td>
-                    <td>{transaction.project}</td>
-                    <td>{formatSource(transaction.source)}</td>
-                    <td>{formatCurrencyIDR(transaction.amount)}</td>
-                    <td>
-                      <span
-                        className={
-                          transaction.status === "CONFIRMED"
-                            ? "status"
-                            : "status status-warning"
-                        }
-                      >
-                        {formatStatus(transaction.status)}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </AppShell>
+    </main>
   );
-}
-
-function formatStatus(status: string) {
-  return status
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatSource(source: string) {
-  return source
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
