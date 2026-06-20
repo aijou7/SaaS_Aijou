@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+dist
+build
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vercel
+
+# Keep environment variables out of version control
+.env
+.env*.local
+
+/generated/prisma
+
+# Local media downloads
+storage/

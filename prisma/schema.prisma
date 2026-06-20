@@ -1,0 +1,466 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+}
+
+enum ContactType {
+  OWNER
+  CUSTOMER
+  UNKNOWN
+}
+
+enum ConversationType {
+  PERSONAL_FINANCE
+  CUSTOMER_SERVICE
+  UNKNOWN
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING_CONFIRMATION
+  HUMAN_NEEDED
+  CLOSED
+}
+
+enum SenderType {
+  USER
+  CUSTOMER
+  AI
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+}
+
+enum ProcessingStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED_DUPLICATE
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+}
+
+enum TransactionStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  NEEDS_REVIEW
+  REJECTED
+  CANCELLED
+}
+
+enum TransactionSource {
+  WHATSAPP_TEXT
+  WHATSAPP_RECEIPT
+  DASHBOARD_MANUAL
+}
+
+enum CategoryType {
+  EXPENSE
+  INCOME
+}
+
+enum ReviewStatus {
+  PENDING
+  REVIEWED
+  NEEDS_REVIEW
+  REJECTED
+}
+
+enum LeadStatus {
+  NEW
+  NEED_FOLLOW_UP
+  QUALIFIED
+  WON
+  LOST
+  CLOSED
+  SPAM
+}
+
+enum ConfirmationStatus {
+  ACTIVE
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum ActorType {
+  USER
+  AI
+  SYSTEM
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  phoneNumber  String?
+  role         UserRole      @default(OWNER)
+  businesses   Business[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("users")
+}
+
+model Business {
+  id                   String                 @id @default(cuid())
+  userId               String
+  businessName         String
+  businessType         String?
+  whatsappNumber       String?
+  serviceArea          String?
+  operatingHours       String?
+  mainServices         String?
+  websiteUrl           String?
+  address              String?
+  onboardingCompleted  Boolean                @default(false)
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contacts             Contact[]
+  conversations        WhatsAppConversation[]
+  mediaFiles           MediaFile[]
+  transactions         Transaction[]
+  categories           Category[]
+  projects             Project[]
+  confirmationSessions ConfirmationSession[]
+  aiLogs               AiLog[]
+  usageLogs            UsageLog[]
+  auditLogs            AuditLog[]
+  knowledgeBase        KnowledgeBase[]
+  leads                Lead[]
+  agentSettings        AgentSettings?
+  whatsAppSettings     WhatsAppSettings?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@map("businesses")
+}
+
+model Contact {
+  id            String                 @id @default(cuid())
+  businessId    String
+  phoneNumber   String
+  displayName   String?
+  contactType   ContactType            @default(UNKNOWN)
+  business      Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversations WhatsAppConversation[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@unique([businessId, phoneNumber])
+  @@map("contacts")
+}
+
+model WhatsAppConversation {
+  id                   String                @id @default(cuid())
+  businessId           String
+  contactId            String?
+  conversationType     ConversationType      @default(UNKNOWN)
+  status               ConversationStatus    @default(OPEN)
+  lastMessageAt        DateTime?
+  ownerNotes           String?
+  resolvedAt           DateTime?
+  business             Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contact              Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages             WhatsAppMessage[]
+  transactions         Transaction[]
+  confirmationSessions ConfirmationSession[]
+  aiLogs               AiLog[]
+  leads                Lead[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([businessId, lastMessageAt])
+  @@map("whatsapp_conversations")
+}
+
+model WhatsAppMessage {
+  id                String               @id @default(cuid())
+  conversationId    String
+  providerMessageId String               @unique
+  senderType        SenderType
+  messageType       MessageType
+  messageBody       String?
+  mediaFileId       String?
+  rawPayload        Json?
+  intent            String?
+  processingStatus  ProcessingStatus     @default(RECEIVED)
+  conversation      WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  mediaFile         MediaFile?           @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+  aiLogs            AiLog[]
+  createdAt         DateTime             @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+model MediaFile {
+  id              String            @id @default(cuid())
+  businessId      String
+  providerMediaId String?
+  fileUrl         String?
+  fileType        String
+  mimeType        String?
+  fileSize        Int?
+  storagePath     String?
+  business        Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  messages        WhatsAppMessage[]
+  receipts        Receipt[]
+  createdAt       DateTime          @default(now())
+
+  @@index([businessId, createdAt])
+  @@map("media_files")
+}
+
+model Transaction {
+  id                   String                @id @default(cuid())
+  businessId           String
+  userId               String?
+  conversationId       String?
+  transactionType      TransactionType       @default(EXPENSE)
+  transactionDate      DateTime
+  merchantName         String?
+  categoryId           String?
+  projectId            String?
+  totalAmount          Decimal               @db.Decimal(14, 2)
+  currency             String                @default("IDR")
+  description          String?
+  source               TransactionSource
+  status               TransactionStatus     @default(DRAFT)
+  confidenceScore      Decimal?              @db.Decimal(5, 4)
+  business             Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversation         WhatsAppConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  category             Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  items                TransactionItem[]
+  receipt              Receipt?
+  confirmationSessions ConfirmationSession[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([businessId, transactionDate])
+  @@index([businessId, status])
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String      @id @default(cuid())
+  transactionId String
+  itemName      String
+  quantity      Decimal?    @db.Decimal(10, 2)
+  unitPrice     Decimal?    @db.Decimal(14, 2)
+  subtotal      Decimal?    @db.Decimal(14, 2)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("transaction_items")
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  businessId   String
+  name         String
+  type         CategoryType  @default(EXPENSE)
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([businessId, name, type])
+  @@map("categories")
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  businessId   String
+  projectName  String
+  clientName   String?
+  status       String        @default("active")
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([businessId, projectName])
+  @@map("projects")
+}
+
+model Receipt {
+  id              String       @id @default(cuid())
+  transactionId   String       @unique
+  mediaFileId     String
+  rawOcrText      String?
+  extractedJson   Json?
+  confidenceScore Decimal?     @db.Decimal(5, 4)
+  reviewStatus    ReviewStatus @default(PENDING)
+  transaction     Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  mediaFile       MediaFile    @relation(fields: [mediaFileId], references: [id], onDelete: Restrict)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@map("receipts")
+}
+
+model KnowledgeBase {
+  id         String   @id @default(cuid())
+  businessId String
+  title      String
+  content    String
+  category   String?
+  isActive   Boolean  @default(true)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId, isActive])
+  @@map("knowledge_base")
+}
+
+model AgentSettings {
+  id                  String   @id @default(cuid())
+  businessId          String   @unique
+  agentName           String   @default("AI Assistant")
+  tone                String   @default("friendly")
+  language            String   @default("id")
+  openingMessage      String?
+  closingMessage      String?
+  businessDescription String?
+  handoffRules        String?
+  systemInstruction   String?
+  isActive            Boolean  @default(true)
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("agent_settings")
+}
+
+model WhatsAppSettings {
+  id             String   @id @default(cuid())
+  businessId     String   @unique
+  phoneNumberId  String?
+  accessToken    String?
+  verifyToken    String?
+  appSecret      String?
+  webhookUrl     String?
+  isActive       Boolean  @default(false)
+  lastConnectedAt DateTime?
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("whatsapp_settings")
+}
+
+model Lead {
+  id              String               @id @default(cuid())
+  businessId      String
+  conversationId  String
+  customerName    String?
+  customerPhone   String?
+  needSummary     String
+  serviceInterest String?
+  location        String?
+  budget          String?
+  urgency         String?
+  status          LeadStatus           @default(NEW)
+  ownerNotes      String?
+  extractedJson   Json?
+  business        Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversation    WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([businessId, conversationId])
+  @@index([businessId, status])
+  @@map("leads")
+}
+
+model ConfirmationSession {
+  id             String               @id @default(cuid())
+  businessId     String
+  conversationId String
+  transactionId  String
+  status         ConfirmationStatus   @default(ACTIVE)
+  expiresAt      DateTime
+  business       Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  transaction    Transaction          @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([conversationId, status])
+  @@map("confirmation_sessions")
+}
+
+model AiLog {
+  id               String                @id @default(cuid())
+  businessId       String
+  conversationId   String?
+  messageId        String?
+  inputText        String?
+  outputText       String?
+  structuredOutput Json?
+  intent           String?
+  confidenceScore  Decimal?              @db.Decimal(5, 4)
+  actionTaken      String?
+  business         Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversation     WhatsAppConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  message          WhatsAppMessage?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  createdAt        DateTime              @default(now())
+
+  @@index([businessId, createdAt])
+  @@map("ai_logs")
+}
+
+model UsageLog {
+  id              String   @id @default(cuid())
+  businessId      String
+  usageType       String
+  provider        String
+  totalMessages   Int      @default(0)
+  totalAiRequests Int      @default(0)
+  estimatedCost   Decimal? @db.Decimal(14, 4)
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@map("usage_logs")
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  businessId String
+  actorType  ActorType
+  actorId    String?
+  entityType String
+  entityId   String
+  action     String
+  beforeJson Json?
+  afterJson  Json?
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@index([businessId, entityType, entityId])
+  @@map("audit_logs")
+}
