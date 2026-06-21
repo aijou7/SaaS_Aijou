@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+const DEFAULT_VERIFY_TOKEN = "aijou_verify_2026";
+
 export type WhatsAppSettingsInput = {
   phoneNumberId?: string | null;
   accessToken?: string | null;
@@ -81,7 +83,9 @@ export async function getWhatsAppCredentialsForBusiness(businessId: string) {
 }
 
 export async function isAnyVerifyTokenValid(token: string) {
-  if (process.env.WHATSAPP_VERIFY_TOKEN && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+  const envVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN || DEFAULT_VERIFY_TOKEN;
+
+  if (token === envVerifyToken) {
     return true;
   }
 
