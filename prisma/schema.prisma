@@ -145,6 +145,7 @@ model Business {
   usageLogs            UsageLog[]
   auditLogs            AuditLog[]
   knowledgeBase        KnowledgeBase[]
+  products             Product[]
   leads                Lead[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
@@ -334,6 +335,24 @@ model KnowledgeBase {
 
   @@index([businessId, isActive])
   @@map("knowledge_base")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(14, 2)
+  currency    String   @default("IDR")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId, isActive, sortOrder])
+  @@map("products")
 }
 
 model AgentSettings {

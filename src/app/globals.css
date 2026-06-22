@@ -12,6 +12,7 @@
   --accent-strong: #1747c7;
   --accent-soft: #eff6ff;
   --accent-line: #bfdbfe;
+  --brand-sky: #7dd3fc;
   --warning: #b56a00;
   --warning-soft: #fff5e4;
   --danger: #ba1a1a;
@@ -25,7 +26,7 @@
 }
 
 ::selection {
-  background: rgba(22, 121, 76, 0.18);
+  background: rgba(29, 78, 216, 0.2);
 }
 
 * {
@@ -171,7 +172,6 @@ a {
   font-weight: 800;
 }
 
-.landing-brand span,
 .landing-feature-card span {
   display: grid;
   width: 34px;
@@ -556,6 +556,10 @@ a {
 
 .app-frame {
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 98% -8%, rgba(125, 211, 252, 0.18), transparent 24%),
+    radial-gradient(circle at 40% -12%, rgba(29, 78, 216, 0.1), transparent 29%),
+    var(--background);
 }
 
 .app-topbar {
@@ -564,21 +568,37 @@ a {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 28px;
   height: 60px;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.88);
   padding: 0 16px;
 }
 
 .app-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--foreground);
+}
+
+.app-wordmark {
   display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 2px solid #38bdf8;
-  border-radius: 999px;
-  color: #0284c7;
+  gap: 0;
+  line-height: 1.05;
+}
+
+.app-wordmark strong {
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.app-wordmark small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .app-logo-menu {
@@ -903,9 +923,7 @@ a {
   height: 32px;
   place-items: center;
   border-radius: 8px;
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: 700;
+  overflow: hidden;
 }
 
 .settings-search {
@@ -958,8 +976,8 @@ a {
 
 .settings-nav-item.active,
 .settings-nav-item:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   transform: translateX(1px);
 }
 
@@ -1297,7 +1315,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(22, 121, 76, 0.18);
+  outline: 3px solid rgba(29, 78, 216, 0.2);
   outline-offset: 2px;
 }
 
@@ -1852,6 +1870,30 @@ sup {
   padding: 14px;
 }
 
+.product-card-muted {
+  background: var(--panel-soft);
+  opacity: 0.72;
+}
+
+.product-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.product-card-heading .status {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.product-card > p {
+  min-height: 38px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .product-thumb {
   display: grid;
   height: 120px;
@@ -1867,6 +1909,49 @@ sup {
 
 .product-card small {
   color: var(--muted);
+}
+
+.product-editor {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.product-editor summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.product-editor .form-grid {
+  margin-top: 12px;
+}
+
+.product-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 10px;
+  padding: 0;
+}
+
+.product-delete:hover {
+  text-decoration: underline;
+}
+
+.product-create-card {
+  align-self: start;
 }
 
 .product-modal-backdrop {
@@ -2154,6 +2239,10 @@ sup {
   box-shadow: 0 8px 18px rgba(29, 78, 216, 0.18);
 }
 
+.login-brand-mark {
+  filter: drop-shadow(0 8px 18px rgba(29, 78, 216, 0.18));
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--accent-strong);
@@ -2172,7 +2261,9 @@ sup {
 .compact-hero {
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--panel);
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.86), rgba(255, 255, 255, 0.94) 58%),
+    var(--panel);
   box-shadow: var(--shadow-sm);
   padding: 22px 28px;
 }
@@ -2212,7 +2303,9 @@ sup {
   gap: 20px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--panel);
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.97) 58%),
+    var(--panel);
   box-shadow: var(--shadow-sm);
   margin-bottom: 14px;
   padding: 22px 28px;
@@ -2296,7 +2389,7 @@ sup {
 .card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow-sm);
   padding: 16px;
 }

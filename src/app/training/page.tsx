@@ -25,17 +25,17 @@ export default async function TrainingPage() {
       <section className="core-page">
         <div className="core-hero">
           <div>
-            <p className="eyebrow">AI Training</p>
-            <h1>Latih AI supaya bisa jawab chat klien sampai closing.</h1>
+            <p className="eyebrow">Otak bisnis Aijou</p>
+            <h1>Beri Aijou konteks agar setiap jawaban terasa tepat.</h1>
             <p>
               Masukkan FAQ, product knowledge, script closing, aturan harga, dan percakapan
-              WhatsApp lama. Semua entry aktif dipakai sebagai konteks jawaban AI.
+              WhatsApp lama. Semua entry aktif dipakai Aijou sebagai konteks jawaban.
             </p>
           </div>
           <form action={generateStarterKnowledgeAction}>
             <button className="primary-button icon-link" type="submit">
               <Sparkles size={17} aria-hidden="true" />
-              Generate starter knowledge
+              Buat knowledge awal
             </button>
           </form>
         </div>
@@ -48,12 +48,12 @@ export default async function TrainingPage() {
           </div>
           <div className="core-metric">
             <Sparkles size={20} aria-hidden="true" />
-            <span>Active for AI</span>
+            <span>Aktif untuk Aijou</span>
             <strong>{page.activeCount}</strong>
           </div>
           <div className="core-metric">
             <MessageCircle size={20} aria-hidden="true" />
-            <span>Training Sources</span>
+            <span>Sumber pembelajaran</span>
             <strong>Manual + TXT</strong>
           </div>
         </div>

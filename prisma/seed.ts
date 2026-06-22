@@ -93,6 +93,37 @@ async function main() {
     });
   }
 
+  const defaultProducts = [
+    {
+      name: "IT Support Visit",
+      description: "Kunjungan teknisi untuk troubleshooting jaringan atau perangkat.",
+      price: 350000,
+    },
+    {
+      name: "WiFi Router Setup",
+      description: "Setup router, SSID, password, keamanan dasar, dan pengujian koneksi.",
+      price: 500000,
+    },
+    {
+      name: "Instalasi Kabel LAN",
+      description: "Instalasi kabel LAN per titik; kebutuhan material khusus dihitung setelah survei.",
+      price: 150000,
+    },
+    {
+      name: "Maintenance IT Bulanan",
+      description: "Dukungan bulanan untuk kantor kecil, termasuk remote support dan visit ringan.",
+      price: 1500000,
+    },
+  ];
+
+  for (const product of defaultProducts) {
+    await prisma.product.upsert({
+      where: { businessId_name: { businessId: business.id, name: product.name } },
+      update: { description: product.description, price: product.price, isActive: true },
+      create: { businessId: business.id, ...product, isActive: true },
+    });
+  }
+
   await prisma.agentSettings.upsert({
     where: {
       businessId: business.id,

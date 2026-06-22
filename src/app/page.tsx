@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   BadgeCheck,
-  Bot,
   CheckCircle2,
   FileText,
   MessageCircle,
@@ -11,6 +10,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { AijouLogo } from "@/components/aijou-logo";
 
 const features = [
   {
@@ -53,9 +53,7 @@ export default function LandingPage() {
     <main className="landing-page">
       <header className="landing-header">
         <Link className="landing-brand" href="/">
-          <span>
-            <Bot size={18} aria-hidden="true" />
-          </span>
+          <AijouLogo size={34} />
           Aijou AI
         </Link>
         <nav className="landing-nav" aria-label="Landing navigation">
@@ -79,15 +77,14 @@ export default function LandingPage() {
             <Sparkles size={15} aria-hidden="true" />
             AI sales agent untuk bisnis chat-first
           </div>
-          <h1>AI agent yang balas chat, bantu closing, dan catat pembayaran otomatis.</h1>
+          <h1>Percakapan yang bergerak jadi penjualan.</h1>
           <p>
-            Bangun customer service yang tetap aktif 24 jam. Latih AI dari dashboard,
-            sambungkan platform chat, masukkan produk, lalu biarkan AI membantu customer
-            sampai siap bayar.
+            Aijou menjawab chat, membantu pelanggan memilih, dan menjaga follow-up berjalan
+            sampai mereka siap bayar—sementara tim Anda tetap memegang kendali.
           </p>
           <div className="landing-cta-row">
             <Link className="landing-primary" href="/login">
-              Mulai setup
+              Latih Aijou untuk bisnis Anda
               <ArrowRight size={16} aria-hidden="true" />
             </Link>
             <a className="landing-secondary" href="#workflow">
@@ -97,15 +94,15 @@ export default function LandingPage() {
           <div className="landing-trust-row" aria-label="Highlights">
             <span>
               <CheckCircle2 size={15} aria-hidden="true" />
-              Human takeover
+              Kendali manusia
             </span>
             <span>
               <CheckCircle2 size={15} aria-hidden="true" />
-              Groq AI ready
+              AI yang siap belajar
             </span>
             <span>
               <CheckCircle2 size={15} aria-hidden="true" />
-              Xendit-ready flow
+              Alur pembayaran rapi
             </span>
           </div>
         </div>
@@ -153,10 +150,10 @@ export default function LandingPage() {
       <section className="landing-section" id="features">
         <div className="landing-section-heading">
           <p className="eyebrow">Core features</p>
-          <h2>Fitur yang fokus ke chat sampai closing</h2>
+          <h2>Setiap chat punya langkah berikutnya</h2>
           <p>
-            Semua modul dibuat untuk satu tujuan: customer masuk dari chat, AI bantu jawab,
-            jualan, bayar, lalu laporan kebaca jelas.
+            Dari pertanyaan pertama sampai pembayaran, Aijou memberi tim Anda konteks dan
+            langkah yang jelas untuk membuat percakapan terus bergerak.
           </p>
         </div>
         <div className="landing-feature-grid">
@@ -179,7 +176,7 @@ export default function LandingPage() {
       <section className="landing-workflow" id="workflow">
         <div>
           <p className="eyebrow">Workflow</p>
-          <h2>Dari training sampai laporan penjualan</h2>
+          <h2>Dari konteks bisnis ke percakapan yang lebih berarti</h2>
           <p>
             Mulai dari demo mode dulu, lalu tinggal diganti ke WhatsApp Cloud API dan
             Xendit production saat bisnis siap live.
@@ -198,7 +195,7 @@ export default function LandingPage() {
       <section className="landing-section" id="channels">
         <div className="landing-section-heading">
           <p className="eyebrow">Platforms</p>
-          <h2>Satu agent untuk banyak channel</h2>
+          <h2>Satu rekan AI di setiap channel</h2>
           <p>
             WhatsApp jadi prioritas awal, tapi struktur app sudah disiapkan untuk platform
             lain saat produk makin matang.
@@ -217,14 +214,13 @@ export default function LandingPage() {
       <section className="landing-final-card">
         <div>
           <ShieldCheck size={22} aria-hidden="true" />
-          <h2>Bangun dulu flow yang bisa didemo, baru integrasi real.</h2>
+          <h2>Biarkan setiap percakapan membawa bisnis Anda maju.</h2>
           <p>
-            Landing ini nunjukin arah produknya: AI agent untuk bisnis yang jualan lewat chat,
-            bukan dashboard random penuh menu.
+            Mulai dari satu inbox, satu knowledge base, dan satu alur yang terasa manusiawi.
           </p>
         </div>
         <Link className="landing-primary" href="/login">
-          Masuk ke workspace
+          Masuk ke Aijou
           <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </section>

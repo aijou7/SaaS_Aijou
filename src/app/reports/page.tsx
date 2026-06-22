@@ -21,11 +21,11 @@ export default async function ReportsPage() {
       <section className="core-page">
         <div className="core-hero">
           <div>
-            <p className="eyebrow">Reports</p>
-            <h1>Laporan otomatis dari chat, order, payment, dan AI activity.</h1>
+            <p className="eyebrow">Dampak percakapan</p>
+            <h1>Lihat bagaimana percakapan bergerak menjadi peluang dan pembayaran.</h1>
             <p>
-              Begitu customer bayar, order masuk revenue. Begitu AI handoff, owner tahu mana
-              chat yang perlu diselesaikan.
+              Saat pelanggan membayar, order masuk ke revenue. Saat Aijou meneruskan chat,
+              tim Anda tahu percakapan mana yang perlu diselesaikan.
             </p>
           </div>
         </div>
@@ -33,22 +33,22 @@ export default async function ReportsPage() {
         <div className="core-metrics">
           <div className="core-metric">
             <WalletCards size={20} aria-hidden="true" />
-            <span>Revenue this month</span>
+            <span>Pendapatan bulan ini</span>
             <strong>{formatCurrencyIDR(dashboard.totalThisMonth)}</strong>
           </div>
           <div className="core-metric">
             <MessageCircle size={20} aria-hidden="true" />
-            <span>Customer chats</span>
+            <span>Percakapan pelanggan</span>
             <strong>{dashboard.customerConversationCount}</strong>
           </div>
           <div className="core-metric">
             <TrendingUp size={20} aria-hidden="true" />
-            <span>New leads</span>
+            <span>Prospek baru</span>
             <strong>{dashboard.newLeadCount}</strong>
           </div>
           <div className="core-metric">
             <Activity size={20} aria-hidden="true" />
-            <span>Human needed</span>
+            <span>Butuh bantuan tim</span>
             <strong>{dashboard.humanNeededCount}</strong>
           </div>
         </div>
@@ -57,11 +57,11 @@ export default async function ReportsPage() {
           <section className="core-card">
             <div className="section-header">
               <div>
-                <h2>Latest AI actions</h2>
-                <p className="muted">Log keputusan AI terakhir.</p>
+                <h2>Aktivitas Aijou terbaru</h2>
+                <p className="muted">Keputusan Aijou berdasarkan percakapan terakhir.</p>
               </div>
               <Link className="ghost-button" href="/ai-activity">
-                View all
+                Lihat semua
               </Link>
             </div>
             <div className="activity-list">

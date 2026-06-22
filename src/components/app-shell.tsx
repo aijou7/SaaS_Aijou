@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { AijouLogo } from "@/components/aijou-logo";
 
 type ModuleKey =
   | "settings"
@@ -46,76 +47,76 @@ type NavigationItem = {
 };
 
 const topNavigation = [
-  { href: "/conversations", label: "Inbox", icon: MessageCircle, module: "inbox" as ModuleKey },
-  { href: "/agent", label: "AI Agent", icon: Bot, module: "agent" as ModuleKey },
-  { href: "/training", label: "Training", icon: Tags, module: "training" as ModuleKey },
-  { href: "/products", label: "Products", icon: Package, module: "products" as ModuleKey },
-  { href: "/payments", label: "Payments", icon: WalletCards, module: "payments" as ModuleKey },
-  { href: "/reports", label: "Reports", icon: TrendingUp, module: "reports" as ModuleKey },
-  { href: "/integrations", label: "Integrations", icon: Building2, module: "integrations" as ModuleKey },
+  { href: "/conversations", label: "Percakapan", icon: MessageCircle, module: "inbox" as ModuleKey },
+  { href: "/agent", label: "Aijou AI", icon: Bot, module: "agent" as ModuleKey },
+  { href: "/training", label: "Pelatihan", icon: Tags, module: "training" as ModuleKey },
+  { href: "/products", label: "Produk", icon: Package, module: "products" as ModuleKey },
+  { href: "/payments", label: "Pembayaran", icon: WalletCards, module: "payments" as ModuleKey },
+  { href: "/reports", label: "Laporan", icon: TrendingUp, module: "reports" as ModuleKey },
+  { href: "/integrations", label: "Integrasi", icon: Building2, module: "integrations" as ModuleKey },
 ];
 
 const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem[] }> = {
   settings: {
-    title: "Workspace",
+    title: "Ruang kerja",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
-      { href: "/setup", label: "Setup Wizard", icon: BadgeCheck, key: "setup" },
-      { href: "/usage", label: "Usage", icon: Activity, key: "usage" },
+      { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup" },
+      { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage" },
     ],
   },
   inbox: {
-    title: "Inbox",
+    title: "Percakapan",
     items: [
-      { href: "/conversations", label: "Live Chat", icon: MessageCircle, key: "conversations" },
-      { href: "/conversations?status=HUMAN_NEEDED", label: "Human Takeover", icon: Send, key: "human-takeover" },
-      { href: "/simulator", label: "Test Simulator", icon: Zap, key: "simulator" },
+      { href: "/conversations", label: "Chat langsung", icon: MessageCircle, key: "conversations" },
+      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover" },
+      { href: "/simulator", label: "Simulator", icon: Zap, key: "simulator" },
     ],
   },
   agent: {
-    title: "AI Agent",
+    title: "Aijou AI",
     items: [
-      { href: "/agent", label: "Behavior", icon: Bot, key: "agent" },
-      { href: "/ai-activity", label: "AI Logs", icon: Activity, key: "ai-activity" },
+      { href: "/agent", label: "Kepribadian", icon: Bot, key: "agent" },
+      { href: "/ai-activity", label: "Aktivitas Aijou", icon: Activity, key: "ai-activity" },
     ],
   },
   training: {
-    title: "Training",
+    title: "Pelatihan",
     items: [
       { href: "/training", label: "Knowledge", icon: Tags, key: "training" },
-      { href: "/knowledge", label: "Legacy KB", icon: ReceiptText, key: "knowledge" },
-      { href: "/simulator", label: "Import Chat Sample", icon: MessageCircle, key: "training-import" },
+      { href: "/knowledge", label: "Knowledge lanjutan", icon: ReceiptText, key: "knowledge" },
+      { href: "/simulator", label: "Contoh percakapan", icon: MessageCircle, key: "training-import" },
     ],
   },
   products: {
-    title: "Products",
+    title: "Produk",
     items: [
-      { href: "/products", label: "Catalog", icon: Package, key: "products" },
-      { href: "/transactions?view=create", label: "Create Order", icon: CheckCircle2, key: "order-create" },
+      { href: "/products", label: "Katalog", icon: Package, key: "products" },
+      { href: "/transactions?view=create", label: "Buat pesanan", icon: CheckCircle2, key: "order-create" },
     ],
   },
   payments: {
-    title: "Payments",
+    title: "Pembayaran",
     items: [
-      { href: "/payments", label: "Payment Setup", icon: WalletCards, key: "payments" },
-      { href: "/transactions", label: "Orders & Sales", icon: Package, key: "transactions" },
-      { href: "/transactions?view=payment-settings", label: "Xendit Settings", icon: ReceiptText, key: "xendit-settings" },
+      { href: "/payments", label: "Setup pembayaran", icon: WalletCards, key: "payments" },
+      { href: "/transactions", label: "Pesanan & penjualan", icon: Package, key: "transactions" },
+      { href: "/transactions?view=payment-settings", label: "Pengaturan Xendit", icon: ReceiptText, key: "xendit-settings" },
     ],
   },
   reports: {
-    title: "Reports",
+    title: "Laporan",
     items: [
-      { href: "/reports", label: "Dashboard", icon: TrendingUp, key: "reports" },
-      { href: "/transactions", label: "Sales Report", icon: WalletCards, key: "report-sales" },
-      { href: "/ai-activity", label: "AI Performance", icon: Activity, key: "report-ai" },
+      { href: "/reports", label: "Ringkasan", icon: TrendingUp, key: "reports" },
+      { href: "/transactions", label: "Laporan penjualan", icon: WalletCards, key: "report-sales" },
+      { href: "/ai-activity", label: "Performa Aijou", icon: Activity, key: "report-ai" },
     ],
   },
   integrations: {
-    title: "Integrations",
+    title: "Integrasi",
     items: [
-      { href: "/integrations", label: "Platforms", icon: Building2, key: "integrations" },
+      { href: "/integrations", label: "Platform", icon: Building2, key: "integrations" },
       { href: "/whatsapp", label: "WhatsApp", icon: Code2, key: "whatsapp" },
-      { href: "/readiness", label: "Go Live Check", icon: BadgeCheck, key: "readiness" },
+      { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
     ],
   },
 };
@@ -160,13 +161,17 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
     <main className="app-frame">
       <header className="app-topbar">
         <div className="app-logo-menu">
-          <Link className="app-logo" href="/dashboard" aria-label="Dashboard">
-            <Bot size={20} aria-hidden="true" />
+          <Link className="app-logo" href="/dashboard" aria-label="Aijou AI dashboard">
+            <AijouLogo size={28} />
+            <span className="app-wordmark">
+              <strong>Aijou AI</strong>
+              <small>Sales workspace</small>
+            </span>
           </Link>
           <div className="logo-popover" role="tooltip">
-            <strong>WA AI Assistant</strong>
-            <span>Dashboard, setup, and workspace overview.</span>
-            <Link href="/dashboard">Open dashboard</Link>
+            <strong>Aijou AI</strong>
+            <span>AI sales workspace untuk percakapan yang bergerak maju.</span>
+            <Link href="/dashboard">Buka dashboard</Link>
           </div>
         </div>
 
@@ -215,16 +220,18 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
             </div>
 
             <div className="settings-account">
-              <div className="account-avatar">W</div>
+              <div className="account-avatar">
+                <AijouLogo size={32} />
+              </div>
               <div>
-                <strong>{businessName ?? "WA AI Assistant"}</strong>
-                <span>{groqConfigured ? "AI connected" : "Local workspace"}</span>
+                <strong>{businessName ?? "Aijou AI"}</strong>
+                <span>{groqConfigured ? "Aijou AI terhubung" : "Workspace Aijou"}</span>
               </div>
             </div>
 
             <label className="settings-search">
               <Search size={15} aria-hidden="true" />
-              <input type="search" placeholder="Search" />
+              <input type="search" placeholder="Cari menu" />
             </label>
 
             <nav className="settings-nav" aria-label="Settings navigation">
@@ -251,7 +258,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
                 </span>
                 <div>
                   <strong>owner</strong>
-                  <small>Super Agent</small>
+                  <small>Workspace owner</small>
                 </div>
                 <span className="online-badge">Online</span>
               </div>
@@ -268,17 +275,17 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <div className="app-main-inner">
             <div className="workspace-bar">
               <div>
-                <p className="workspace-kicker">Workspace</p>
+                <p className="workspace-kicker">Aijou workspace</p>
                 <strong>{activeSettingsItem?.label ?? "Dashboard"}</strong>
               </div>
               <div className="workspace-meta" aria-label="Workspace status">
                 <span className="meta-pill">
                   <BadgeCheck size={14} aria-hidden="true" />
-                  Local ready
+                  Workspace siap
                 </span>
                 <span className={groqConfigured ? "meta-pill" : "meta-pill meta-pill-warning"}>
                   <Zap size={14} aria-hidden="true" />
-                  {groqConfigured ? "Groq active" : "Groq setup"}
+                  {groqConfigured ? "AI aktif" : "Siapkan AI"}
                 </span>
               </div>
             </div>

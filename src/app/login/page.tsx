@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { Bot, CheckCircle2, MessageCircle, WalletCards } from "lucide-react";
+import { CheckCircle2, MessageCircle, WalletCards } from "lucide-react";
 import { getSession } from "@/lib/session";
+import { AijouLogo } from "@/components/aijou-logo";
 
 export default async function LoginPage() {
   const session = await getSession();
@@ -13,35 +14,33 @@ export default async function LoginPage() {
     <main className="page login-page">
       <div className="login-shell">
         <section className="login-hero-card">
-          <div className="brand-mark">
-            <Bot size={20} aria-hidden="true" />
-          </div>
-          <p className="eyebrow">Owner workspace</p>
-          <h1>WhatsApp AI Assistant</h1>
+          <AijouLogo className="login-brand-mark" size={40} />
+          <p className="eyebrow">Aijou AI workspace</p>
+          <h1>Aijou AI</h1>
           <p>
-            Satu cockpit untuk expense, receipt review, customer chat, human takeover,
-            dan lead summary.
+            AI sales agent untuk menjawab chat, mendorong closing, dan menjaga tim Anda
+            tetap memegang kendali.
           </p>
           <div className="login-feature-grid">
             <span>
               <WalletCards size={17} aria-hidden="true" />
-              Finance assistant
+              Percakapan terarah
             </span>
             <span>
               <MessageCircle size={17} aria-hidden="true" />
-              AI CS inbox
+              AI yang belajar bisnis
             </span>
             <span>
               <CheckCircle2 size={17} aria-hidden="true" />
-              Local MVP ready
+              Kendali tetap di tim
             </span>
           </div>
         </section>
 
         <section className="login-panel">
           <div>
-            <p className="eyebrow">Login dashboard</p>
-            <h2>Masuk ke workspace</h2>
+            <p className="eyebrow">Masuk ke Aijou</p>
+            <h2>Lanjutkan percakapan yang penting.</h2>
             <p className="muted">Gunakan akun owner yang dibuat dari seed database lokal.</p>
           </div>
           <form className="login-form" action="/api/auth/login" method="post">

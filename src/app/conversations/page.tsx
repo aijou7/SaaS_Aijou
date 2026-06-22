@@ -712,12 +712,12 @@ function FlowPanel({
   return (
     <div className="chat-feature-grid">
       <div className="chat-feature-card">
-        <h2>Chat automation flow</h2>
+        <h2>Alur percakapan Aijou</h2>
         <div className="flow-builder">
-          <FlowStep icon={RadioTower} title="1. Incoming message" detail={whatsAppPage.ready ? "WhatsApp connected" : "Connect platform first"} />
-          <FlowStep icon={Bot} title="2. AI checks knowledge" detail="Agent uses business profile and knowledge base." />
-          <FlowStep icon={GitBranch} title="3. Route by intent" detail="Sales, support, finance, or human takeover." />
-          <FlowStep icon={ShieldCheck} title="4. Human safety" detail="Escalate when rules match." />
+          <FlowStep icon={RadioTower} title="1. Pesan masuk" detail={whatsAppPage.ready ? "WhatsApp terhubung" : "Hubungkan channel terlebih dahulu"} />
+          <FlowStep icon={Bot} title="2. Aijou membaca konteks" detail="Agent memakai profil bisnis dan knowledge base." />
+          <FlowStep icon={GitBranch} title="3. Tentukan langkah berikutnya" detail="Jualan, dukungan, pembayaran, atau handover." />
+          <FlowStep icon={ShieldCheck} title="4. Manusia tetap memegang kendali" detail="Aijou meneruskan chat ketika aturan terpenuhi." />
         </div>
       </div>
 
@@ -799,33 +799,34 @@ function WelcomeChecklist() {
   const steps = [
     {
       icon: RadioTower,
-      title: "Connect platforms",
-      description: "Start receiving messages from WhatsApp and simulator.",
+      title: "Hubungkan channel",
+      description: "Mulai menerima chat dari WhatsApp dan simulator.",
       href: "/conversations?view=platforms",
     },
     {
       icon: Bot,
-      title: "Create an AI agent",
-      description: "Answer incoming messages with your AI agent.",
+      title: "Siapkan Aijou",
+      description: "Ajarkan Aijou cara menjawab pelanggan Anda.",
       href: "/conversations?view=ai-agents",
     },
     {
       icon: MessageCircle,
-      title: "Invite human agents",
-      description: "Use human takeover to help answer chats.",
+      title: "Tetapkan handover",
+      description: "Beri tim Anda kendali saat percakapan butuh bantuan manusia.",
       href: "/conversations",
     },
     {
       icon: GitBranch,
-      title: "Connect AI agent to inbox",
-      description: "Connect your AI agent and human agents to your platforms.",
+      title: "Aktifkan alur percakapan",
+      description: "Hubungkan Aijou dan tim Anda ke setiap channel yang dipakai.",
       href: "/conversations?view=flow",
     },
   ];
 
   return (
     <div className="chat-welcome">
-      <h1>Welcome back to WA AI Assistant!</h1>
+      <p className="eyebrow">Aijou AI</p>
+      <h1>Jadikan setiap chat punya arah yang jelas.</h1>
       <div className="welcome-card-list">
         {steps.map((step, index) => {
           const Icon = step.icon;
@@ -846,7 +847,7 @@ function WelcomeChecklist() {
         })}
       </div>
       <Link className="tutorial-link" href="/setup">
-        Need more help? Open setup wizard
+        Butuh panduan? Buka setup Aijou
       </Link>
     </div>
   );

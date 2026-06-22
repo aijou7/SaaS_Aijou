@@ -19,26 +19,26 @@ export default async function AgentSettingsPage() {
     <AppShell active="agent" businessName={page.business?.businessName}>
 
         <section className="hero compact-hero">
-          <p className="eyebrow">AI agent customization</p>
-          <h1>Atur cara AI agent berbicara dan kapan harus berhenti.</h1>
+          <p className="eyebrow">Suara Aijou</p>
+          <h1>Atur cara Aijou berbicara dan kapan harus meneruskan chat ke tim.</h1>
           <p>
-            Setting ini dipakai saat customer chat masuk. Kalau agent dimatikan,
-            chat customer langsung masuk mode human needed.
+            Pengaturan ini membentuk pengalaman pelanggan. Saat Aijou dimatikan, chat langsung
+            masuk ke tim Anda.
           </p>
         </section>
 
         <section className="grid" aria-label="Agent summary">
           <div className="card">
             <Bot size={22} aria-hidden="true" />
-            <h2>Agent</h2>
+            <h2>Nama agent</h2>
             <div className="metric">{page.settings.agentName}</div>
             <p className="muted">{page.business?.businessName ?? "Business belum ada"}</p>
           </div>
           <div className="card">
             <Power size={22} aria-hidden="true" />
-            <h2>Status</h2>
-            <div className="metric">{page.settings.isActive ? "Active" : "Off"}</div>
-            <p className="muted">Auto-reply customer service.</p>
+            <h2>Status Aijou</h2>
+            <div className="metric">{page.settings.isActive ? "Aktif" : "Nonaktif"}</div>
+            <p className="muted">Membantu menjawab pelanggan secara otomatis.</p>
           </div>
           <div className="card">
             <SlidersHorizontal size={22} aria-hidden="true" />
@@ -50,7 +50,7 @@ export default async function AgentSettingsPage() {
 
         <section className="section">
           <div className="card">
-            <h2>Konfigurasi Agent</h2>
+            <h2>Konfigurasi Aijou</h2>
             <form className="form-grid" action={updateAgentSettingsAction}>
               <label>
                 Agent Name

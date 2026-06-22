@@ -1,33 +1,15 @@
-import { ImagePlus, Package, Plus, Search } from "lucide-react";
+import { Package, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Route } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  createProductAction,
+  deleteProductAction,
+  updateProductAction,
+} from "@/app/products/actions";
 import { AppShell } from "@/components/app-shell";
-import { formatCurrencyIDR } from "@/server/finance/transactions";
 import { getSession } from "@/lib/session";
-
-const products = [
-  {
-    name: "IT Support Visit",
-    description: "Kunjungan teknisi untuk troubleshooting jaringan atau perangkat.",
-    price: 350000,
-  },
-  {
-    name: "WiFi Router Setup",
-    description: "Setup router, SSID, password, basic security, dan testing koneksi.",
-    price: 500000,
-  },
-  {
-    name: "LAN Cable Installation",
-    description: "Instalasi kabel LAN per titik, belum termasuk kebutuhan material khusus.",
-    price: 150000,
-  },
-  {
-    name: "Monthly IT Maintenance",
-    description: "Support bulanan untuk kantor kecil, termasuk remote support dan visit ringan.",
-    price: 1500000,
-  },
-];
+import { formatCurrencyIDR } from "@/server/finance/transactions";
+import { getProductsPage } from "@/server/products/catalog";
 
 export default async function ProductsPage() {
   const session = await getSession();
@@ -36,54 +18,114 @@ export default async function ProductsPage() {
     redirect("/login" as Route);
   }
 
+  const page = await getProductsPage(session.userId);
+
   return (
-    <AppShell active="products">
+    <AppShell active="products" businessName={page.business?.businessName}>
       <section className="core-page">
         <div className="core-hero">
           <div>
-            <p className="eyebrow">Product Catalog</p>
-            <h1>Produk dan harga yang bisa dipakai AI buat closing.</h1>
+            <p className="eyebrow">Katalog Aijou</p>
+            <h1>Ajarkan Aijou apa yang bisa ditawarkan kepada pelanggan.</h1>
             <p>
-              Catalog ini nanti jadi sumber AI saat merekomendasikan produk, menghitung estimasi,
-              dan membuat payment link.
+              Produk aktif masuk ke konteks chat Aijou. Tambahkan harga mulai dan deskripsi yang
+              jelas agar Aijou bisa merekomendasikan pilihan yang tepat tanpa mengarang detail.
             </p>
           </div>
-          <Link className="primary-button icon-link" href="/products?modal=create">
-            <Plus size={17} aria-hidden="true" />
-            Create Product
-          </Link>
         </div>
 
-        <form className="products-search">
-          <Search size={16} aria-hidden="true" />
-          <input type="search" placeholder="Search products" />
-        </form>
-
-        <div className="products-grid">
-          {products.map((product) => (
-            <article className="product-card" key={product.name}>
-              <div className="product-thumb">
-                <Package size={24} aria-hidden="true" />
+        <div className="core-grid product-catalog-grid">
+          <section className="core-card">
+            <div className="section-header">
+              <div>
+                <h2>Produk aktif</h2>
+                <p className="muted">{page.products.length} produk tersimpan untuk {page.business?.businessName ?? "bisnis Anda"}.</p>
               </div>
-              <strong>{product.name}</strong>
-              <p className="muted">{product.description}</p>
-              <span>{formatCurrencyIDR(product.price)}</span>
-            </article>
-          ))}
-        </div>
-
-        <section className="core-card">
-          <div className="section-header">
-            <div>
-              <h2>Next database step</h2>
-              <p className="muted">
-                Setelah UI katalog ini cocok, kita tambah tabel Product dan Order supaya AI bisa
-                generate invoice/payment berdasarkan produk real.
-              </p>
             </div>
-            <ImagePlus size={24} aria-hidden="true" />
-          </div>
-        </section>
+            {page.products.length === 0 ? (
+              <div className="empty-state">
+                <strong>Belum ada produk</strong>
+                <p>Tambahkan produk atau jasa pertama agar Aijou punya referensi saat membantu pelanggan.</p>
+              </div>
+            ) : (
+              <div className="products-grid">
+                {page.products.map((product) => (
+                  <article className={product.isActive ? "product-card" : "product-card product-card-muted"} key={product.id}>
+                    <div className="product-thumb">
+                      <Package size={24} aria-hidden="true" />
+                    </div>
+                    <div className="product-card-heading">
+                      <strong>{product.name}</strong>
+                      <span className={product.isActive ? "status" : "status status-warning"}>
+                        {product.isActive ? "Aktif" : "Disembunyikan"}
+                      </span>
+                    </div>
+                    <p className="muted">{product.description || "Belum ada deskripsi produk."}</p>
+                    <span>{formatCurrencyIDR(product.price)}</span>
+                    <details className="product-editor">
+                      <summary><Pencil size={14} aria-hidden="true" /> Edit produk</summary>
+                      <form className="form-grid" action={updateProductAction}>
+                        <input name="productId" type="hidden" value={product.id} />
+                        <label>
+                          Nama produk
+                          <input name="name" type="text" defaultValue={product.name} required />
+                        </label>
+                        <label>
+                          Harga mulai (Rp)
+                          <input name="price" type="number" min="1" defaultValue={product.price} required />
+                        </label>
+                        <label className="span-2">
+                          Deskripsi singkat
+                          <textarea name="description" defaultValue={product.description ?? ""} />
+                        </label>
+                        <label className="checkbox-label span-2">
+                          <input name="isActive" type="checkbox" defaultChecked={product.isActive} />
+                          Produk ini boleh direkomendasikan Aijou
+                        </label>
+                        <button className="primary-button span-2" type="submit">Simpan perubahan</button>
+                      </form>
+                      <form action={deleteProductAction}>
+                        <input name="productId" type="hidden" value={product.id} />
+                        <button className="product-delete" type="submit"><Trash2 size={14} aria-hidden="true" /> Hapus produk</button>
+                      </form>
+                    </details>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="core-card product-create-card">
+            <div className="section-header">
+              <div>
+                <h2>Tambah produk</h2>
+                <p className="muted">Gunakan harga mulai bila harga akhir masih bergantung pada kebutuhan pelanggan.</p>
+              </div>
+              <Plus size={22} aria-hidden="true" />
+            </div>
+            <form className="form-grid" action={createProductAction}>
+              <label>
+                Nama produk atau jasa
+                <input name="name" type="text" placeholder="Contoh: Paket Setup WiFi Kantor" required />
+              </label>
+              <label>
+                Harga mulai (Rp)
+                <input name="price" type="number" min="1" placeholder="500000" required />
+              </label>
+              <label className="span-2">
+                Deskripsi singkat
+                <textarea name="description" placeholder="Jelaskan apa yang termasuk, batasan, atau kapan pelanggan perlu survei terlebih dahulu." />
+              </label>
+              <label className="checkbox-label span-2">
+                <input name="isActive" type="checkbox" defaultChecked />
+                Izinkan Aijou merekomendasikan produk ini di chat
+              </label>
+              <button className="primary-button span-2 icon-link" type="submit">
+                <Plus size={17} aria-hidden="true" /> Tambahkan ke katalog
+              </button>
+            </form>
+          </section>
+        </div>
       </section>
     </AppShell>
   );

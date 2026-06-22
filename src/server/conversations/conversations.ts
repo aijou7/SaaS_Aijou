@@ -15,6 +15,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
+import { getActiveProductContext } from "@/server/products/catalog";
 import { upsertLeadSummaryFromConversation } from "@/server/leads/leads";
 
 type SimulateMessageInput = {
@@ -229,10 +230,13 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     nextStatus = ConversationStatus.HUMAN_NEEDED;
     aiReply = `${settings.agentName}: Baik, saya panggilkan owner/admin untuk lanjut bantu ya.`;
   } else if (currentConversation?.status !== ConversationStatus.HUMAN_NEEDED) {
-    const knowledgeContext = await getActiveKnowledgeContext(business.id);
+    const [knowledgeContext, productContext] = await Promise.all([
+      getActiveKnowledgeContext(business.id),
+      getActiveProductContext(business.id),
+    ]);
     aiReply = await buildCustomerServiceReplyAi({
       message: input.message,
-      knowledgeContext,
+      knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
       settings,
     });
   }

@@ -28,28 +28,29 @@ export default async function DashboardPage() {
     <AppShell active="dashboard" businessName={dashboard.businessName}>
       <div className="dashboard-topbar">
         <div>
-          <p className="eyebrow">Control center</p>
-          <h1>AI agent 24 jam buat balas chat, rekomendasi produk, dan bantu closing.</h1>
+          <p className="eyebrow">Aijou control center</p>
+          <h1>Setiap percakapan punya langkah yang jelas untuk maju.</h1>
           <p className="muted">
-            Fokus app ini sederhana: klien chat, AI jawab pakai training data, AI arahkan ke
-            produk, payment dibuat, dan laporan otomatis update.
+            Aijou menjawab dengan konteks bisnis Anda, membantu pelanggan memilih, lalu
+            memberi tim Anda sinyal kapan perlu mengambil alih.
           </p>
         </div>
       </div>
 
       <section className="onboarding-panel">
         <div>
-          <p className="eyebrow">Quick start</p>
-          <h2>Flow utama yang perlu matang dulu</h2>
+          <p className="eyebrow">Mulai bersama Aijou</p>
+          <h2>Bangun alur percakapan yang siap membantu</h2>
           <p className="muted">
-            Jangan kebanyakan fitur dulu. Semua halaman harus mendukung flow chat sampai paid.
+            Mulai dari konteks bisnis, produk, dan channel. Selebihnya Aijou bantu menjaga
+            percakapan tetap bergerak.
           </p>
         </div>
         <div className="step-grid">
           <Link className="step-card" href="/training">
             <span>1</span>
-            <strong>Train AI</strong>
-            <small>Isi knowledge, upload .txt, dan import contoh percakapan WhatsApp lama.</small>
+            <strong>Latih Aijou</strong>
+            <small>Isi knowledge dan contoh percakapan supaya jawaban terasa sesuai bisnis Anda.</small>
           </Link>
           <Link className="step-card" href="/products">
             <span>2</span>
@@ -58,8 +59,8 @@ export default async function DashboardPage() {
           </Link>
           <Link className="step-card" href="/integrations">
             <span>3</span>
-            <strong>Connect Channel</strong>
-            <small>Sambungkan WhatsApp dulu, lalu siapkan slot Instagram, Messenger, email, web chat.</small>
+            <strong>Hubungkan channel</strong>
+            <small>Sambungkan WhatsApp, lalu siapkan Instagram, Messenger, email, dan web chat.</small>
           </Link>
         </div>
       </section>
@@ -73,13 +74,13 @@ export default async function DashboardPage() {
         </div>
         <div className="card metric-card">
           <MessageCircle size={22} aria-hidden="true" />
-          <span>Customer Chats</span>
+          <span>Percakapan pelanggan</span>
           <strong>{dashboard.customerConversationCount}</strong>
-          <p>Chat klien yang diproses AI agent.</p>
+          <p>Chat pelanggan yang dibantu Aijou.</p>
         </div>
         <div className="card metric-card">
           <CheckCircle2 size={22} aria-hidden="true" />
-          <span>Paid / Confirmed</span>
+          <span>Pembayaran terkonfirmasi</span>
           <strong>{dashboard.confirmedCount}</strong>
           <p>Order atau payment yang sudah masuk laporan.</p>
         </div>
@@ -88,25 +89,25 @@ export default async function DashboardPage() {
       <section className="section module-map">
         <div className="section-header">
           <div>
-            <h2>Ada apa aja di app ini?</h2>
-            <p className="muted">Peta modul inti, semuanya mendukung AI closing flow.</p>
+            <h2>Ruang kerja Aijou</h2>
+            <p className="muted">Setiap modul menjaga percakapan, konteks, dan tindak lanjut tetap selaras.</p>
           </div>
         </div>
         <div className="module-grid">
           <Link className="module-card" href="/conversations">
             <MessageCircle size={22} aria-hidden="true" />
             <strong>Inbox</strong>
-            <p>AI jawab chat klien 24 jam, owner bisa take over kapan pun.</p>
+            <p>Aijou menjawab chat dengan konteks; tim Anda bisa mengambil alih kapan pun.</p>
           </Link>
           <Link className="module-card" href="/training">
             <Sparkles size={22} aria-hidden="true" />
             <strong>Training</strong>
-            <p>Manual knowledge, .txt, dan percakapan WhatsApp lama buat bahan belajar AI.</p>
+            <p>Knowledge, .txt, dan percakapan lama untuk membentuk cara Aijou membantu.</p>
           </Link>
           <Link className="module-card" href="/agent">
             <Bot size={22} aria-hidden="true" />
             <strong>AI Agent</strong>
-            <p>Atur tone, bahasa, handoff rules, dan instruksi closing.</p>
+            <p>Atur gaya bahasa, batasan, dan kapan Aijou meneruskan chat ke tim.</p>
           </Link>
           <Link className="module-card" href="/products">
             <ReceiptText size={22} aria-hidden="true" />
@@ -130,8 +131,8 @@ export default async function DashboardPage() {
         <div className="card">
           <div className="section-header">
             <div>
-              <h2>Action Queue</h2>
-              <p className="muted">Hal yang perlu owner cek hari ini.</p>
+              <h2>Butuh perhatian Anda</h2>
+              <p className="muted">Hal yang paling berguna untuk dicek hari ini.</p>
             </div>
           </div>
           <div className="queue-grid">
@@ -145,11 +146,11 @@ export default async function DashboardPage() {
             </Link>
             <Link className="queue-item" href="/conversations">
               <strong>{dashboard.humanNeededCount}</strong>
-              <span>Human needed</span>
+              <span>Butuh bantuan tim</span>
             </Link>
             <Link className="queue-item" href="/leads">
               <strong>{dashboard.newLeadCount}</strong>
-              <span>New leads</span>
+              <span>Prospek baru</span>
             </Link>
           </div>
         </div>
@@ -157,19 +158,19 @@ export default async function DashboardPage() {
         <div className="card">
           <div className="section-header">
             <div>
-              <h2>Latest AI Actions</h2>
-              <p className="muted">Debug cepat keputusan AI terakhir.</p>
+              <h2>Aktivitas Aijou terbaru</h2>
+              <p className="muted">Keputusan terbaru yang dibuat berdasarkan percakapan.</p>
             </div>
             <Link className="ghost-button" href="/ai-activity">
-              View all
+              Lihat semua
             </Link>
           </div>
           {dashboard.latestAiActions.length === 0 ? (
             <div className="empty-state">
-              <strong>Belum ada AI activity</strong>
-              <p>Coba kirim chat dari Simulator untuk melihat Groq extraction/reply log.</p>
+              <strong>Belum ada aktivitas Aijou</strong>
+              <p>Coba kirim chat dari Simulator untuk melihat cara Aijou memproses percakapan.</p>
               <Link className="primary-button" href="/simulator">
-                Open simulator
+                Buka simulator
               </Link>
             </div>
           ) : (
