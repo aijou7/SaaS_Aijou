@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { MessageType, SenderType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { simulateCustomerMessage } from "@/server/conversations/conversations";
 
@@ -30,11 +31,7 @@ export async function POST(request: NextRequest) {
     return json(request, { error: "Pesan wajib diisi dan maksimal 1200 karakter." }, 400);
   }
 
-  const hostname = new URL(origin).hostname;
-  const business = await prisma.business.findFirst({
-    where: { websiteUrl: { contains: hostname } },
-    select: { userId: true },
-  });
+  const business = await getWebsiteBusiness(origin);
 
   if (!business) {
     return json(
@@ -44,10 +41,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const visitorKey = createHash("sha256")
-    .update(`${origin}:${sessionId || visitorName || "anonymous"}`)
-    .digest("hex")
-    .slice(0, 20);
+  const visitorKey = getVisitorKey(origin, sessionId || visitorName || "anonymous");
 
   const result = await simulateCustomerMessage(business.userId, {
     phoneNumber: `web-${visitorKey}`,
@@ -60,6 +54,54 @@ export async function POST(request: NextRequest) {
       result.aiReply ??
       "Pesanmu sudah diterima. Tim Aijou akan melanjutkan percakapan ini secepatnya.",
     handoff: result.status === "HUMAN_NEEDED",
+  });
+}
+
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get("origin");
+
+  if (!origin || !allowedOrigins.has(origin)) {
+    return json(request, { error: "Origin website tidak diizinkan." }, 403);
+  }
+
+  const sessionId = request.nextUrl.searchParams.get("sessionId")?.trim();
+  if (!sessionId) {
+    return json(request, { error: "Sesi chat tidak ditemukan." }, 400);
+  }
+
+  const business = await getWebsiteBusiness(origin);
+  if (!business) {
+    return json(request, { error: "Website belum dihubungkan ke workspace Aijou." }, 503);
+  }
+
+  const sinceValue = request.nextUrl.searchParams.get("since");
+  const since = sinceValue ? new Date(sinceValue) : new Date(Date.now() - 60_000);
+  const createdAfter = Number.isNaN(since.getTime()) ? new Date(Date.now() - 60_000) : since;
+  const phoneNumber = `web-${getVisitorKey(origin, sessionId)}`;
+  const conversation = await prisma.whatsAppConversation.findFirst({
+    where: { businessId: business.id, contact: { phoneNumber } },
+    select: {
+      status: true,
+      messages: {
+        where: {
+          senderType: SenderType.USER,
+          messageType: MessageType.TEXT,
+          createdAt: { gt: createdAfter },
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, messageBody: true, createdAt: true },
+      },
+    },
+  });
+
+  return json(request, {
+    handoff: conversation?.status === "HUMAN_NEEDED",
+    messages:
+      conversation?.messages.map((message) => ({
+        id: message.id,
+        text: message.messageBody ?? "",
+        createdAt: message.createdAt.toISOString(),
+      })) ?? [],
   });
 }
 
@@ -76,8 +118,20 @@ function corsHeaders(request: NextRequest): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     Vary: "Origin",
   };
+}
+
+async function getWebsiteBusiness(origin: string) {
+  const hostname = new URL(origin).hostname;
+  return prisma.business.findFirst({
+    where: { websiteUrl: { contains: hostname } },
+    select: { id: true, userId: true },
+  });
+}
+
+function getVisitorKey(origin: string, sessionKey: string) {
+  return createHash("sha256").update(`${origin}:${sessionKey}`).digest("hex").slice(0, 20);
 }
