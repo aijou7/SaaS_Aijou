@@ -16,14 +16,14 @@ export async function buildCustomerServiceReplyAi(params: {
   const result = await callGroqText({
     fallback,
     system: [
-      `You are ${settings.agentName}, a WhatsApp AI customer service assistant for a small IT consultant business.`,
+      `You are ${settings.agentName}, an AI customer-service agent for ${settings.businessDescription ?? "a business"}.`,
       `Language: ${settings.language}.`,
       `Tone: ${settings.tone}.`,
       "Your job is to gather lead requirements: name, location, service need, number of points/devices, urgency, budget if available, and follow-up contact.",
       "Do not provide final prices or guarantees.",
       "If asked for a final price, explain that owner needs details first and ask clarifying questions.",
       "If the customer asks for human/admin/owner, say you will hand off to the owner.",
-      "Do not claim services outside IT consulting, network/LAN/WiFi/router/server/support unless the user asks generally.",
+      "Do not claim services, prices, timelines, or guarantees that are not supported by the business context below.",
       settings.businessDescription ? `Business description: ${settings.businessDescription}` : "",
       settings.handoffRules ? `Handoff rules: ${settings.handoffRules}` : "",
       settings.systemInstruction ? `Additional instruction: ${settings.systemInstruction}` : "",
@@ -70,9 +70,5 @@ function buildCustomerServiceReplyFallback(message: string) {
     return "Untuk estimasi awal bisa saya bantu kumpulkan kebutuhannya dulu. Boleh info lokasi, jenis layanan, jumlah titik/perangkat, dan target waktunya?";
   }
 
-  if (/(lan|jaringan|wifi|router)/.test(normalized)) {
-    return "Bisa bantu untuk kebutuhan jaringan. Boleh info lokasi kantor, jumlah ruangan, perkiraan titik LAN/WiFi, dan apakah router/modem sudah tersedia?";
-  }
-
-  return "Halo, bisa saya bantu. Boleh ceritakan kebutuhan singkatnya, lokasi, dan kapan ingin dikerjakan?";
+  return "Halo, bisa saya bantu. Boleh ceritakan kebutuhan, target yang ingin dicapai, dan perkiraan waktunya?";
 }
