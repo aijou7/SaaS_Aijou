@@ -4,9 +4,10 @@ import type { AgentRuntimeSettings } from "@/server/agent/settings";
 export async function buildCustomerServiceReplyAi(params: {
   message: string;
   knowledgeContext: string;
+  conversationContext?: string;
   settings: AgentRuntimeSettings;
 }) {
-  const { message, knowledgeContext, settings } = params;
+  const { message, knowledgeContext, conversationContext, settings } = params;
   const fallback = buildCustomerServiceReplyFallback(message);
 
   if (isHandoffRequest(message)) {
@@ -19,7 +20,11 @@ export async function buildCustomerServiceReplyAi(params: {
       `You are ${settings.agentName}, an AI customer-service agent for ${settings.businessDescription ?? "a business"}.`,
       `Language: ${settings.language}.`,
       `Tone: ${settings.tone}.`,
-      "Your job is to gather lead requirements: name, location, service need, number of points/devices, urgency, budget if available, and follow-up contact.",
+      "Your job is to understand the customer's need, move the conversation toward a useful next step, and collect only the details that are still needed.",
+      "Use natural, warm Indonesian. Write like a capable solution consultant, not a generic chatbot.",
+      "Read the conversation history before replying. Never repeat a welcome, business introduction, or a question the customer already answered.",
+      "Acknowledge the specific facts the customer gave. For complex projects, briefly summarize what is understood, explain the most sensible next step, then ask at most two high-impact follow-up questions.",
+      "When a project involves a physical site or network, suggest a survey/design process before a final quote; do not invent an exact solution or final price.",
       "Do not provide final prices or guarantees.",
       "If asked for a final price, explain that owner needs details first and ask clarifying questions.",
       "If the customer asks for human/admin/owner, say you will hand off to the owner.",
@@ -31,7 +36,8 @@ export async function buildCustomerServiceReplyAi(params: {
       settings.closingMessage ? `Preferred closing: ${settings.closingMessage}` : "",
       "Use this knowledge base as your only business-specific source:",
       knowledgeContext,
-      "Keep response under 80 words.",
+      conversationContext ? "Conversation history:\n" + conversationContext : "",
+      "Keep the response under 110 words. Do not use headings, bullet points, or canned phrases unless the customer asks for them.",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -67,7 +73,7 @@ function buildCustomerServiceReplyFallback(message: string) {
   const normalized = message.toLowerCase();
 
   if (/(harga|biaya|budget|quotation|penawaran)/.test(normalized)) {
-    return "Untuk estimasi awal bisa saya bantu kumpulkan kebutuhannya dulu. Boleh info lokasi, jenis layanan, jumlah titik/perangkat, dan target waktunya?";
+    return "Siap, untuk estimasi yang masuk akal kami perlu melihat scope-nya dulu. Boleh info lokasi, kebutuhan utamanya, dan target waktunya? Setelah itu tim kami bisa arahkan langkah berikutnya tanpa menebak-nebak.";
   }
 
   return "Halo, bisa saya bantu. Boleh ceritakan kebutuhan, target yang ingin dicapai, dan perkiraan waktunya?";

@@ -230,13 +230,23 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     nextStatus = ConversationStatus.HUMAN_NEEDED;
     aiReply = `${settings.agentName}: Baik, saya panggilkan owner/admin untuk lanjut bantu ya.`;
   } else if (currentConversation?.status !== ConversationStatus.HUMAN_NEEDED) {
-    const [knowledgeContext, productContext] = await Promise.all([
+    const [knowledgeContext, productContext, messages] = await Promise.all([
       getActiveKnowledgeContext(business.id),
       getActiveProductContext(business.id),
+      prisma.whatsAppMessage.findMany({
+        where: { conversationId: conversation.id, messageType: MessageType.TEXT },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        select: { senderType: true, messageBody: true },
+      }),
     ]);
     aiReply = await buildCustomerServiceReplyAi({
       message: input.message,
       knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
+      conversationContext: messages
+        .reverse()
+        .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Aijou"}: ${item.messageBody ?? ""}`)
+        .join("\n"),
       settings,
     });
   }
