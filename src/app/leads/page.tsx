@@ -60,6 +60,24 @@ export default async function LeadsPage() {
             <div className="metric">{page.summary.lost}</div>
             <p className="muted">Lead tidak lanjut.</p>
           </div>
+          <div className="card">
+            <ClipboardList size={22} aria-hidden="true" />
+            <h2>Hot Leads</h2>
+            <div className="metric">{page.summary.hot}</div>
+            <p className="muted">Score 70+ dan layak cepat di-follow up.</p>
+          </div>
+          <div className="card">
+            <ClipboardList size={22} aria-hidden="true" />
+            <h2>Web Chat</h2>
+            <div className="metric">{page.summary.webChat}</div>
+            <p className="muted">Masuk dari widget website.</p>
+          </div>
+          <div className="card">
+            <ClipboardList size={22} aria-hidden="true" />
+            <h2>Brief</h2>
+            <div className="metric">{page.summary.brief}</div>
+            <p className="muted">Masuk dari form brief project.</p>
+          </div>
         </section>
 
         <section className="section">
@@ -87,7 +105,10 @@ export default async function LeadsPage() {
                         key={lead.id}
                       >
                         <strong>{lead.customerName ?? lead.customerPhone ?? "Unknown lead"}</strong>
-                        <small>{lead.serviceInterest ?? "Service belum jelas"}</small>
+                        <small>
+                          {lead.serviceInterest ?? "Service belum jelas"} · {lead.source} ·{" "}
+                          {lead.qualificationScore ?? 0}/100
+                        </small>
                       </Link>
                     ))}
                     {leads.length === 0 ? <p className="muted">Kosong</p> : null}
@@ -114,7 +135,7 @@ export default async function LeadsPage() {
                       <span>
                         <strong>{lead.customerName ?? lead.customerPhone ?? "Unknown lead"}</strong>
                         <small>
-                          {lead.serviceInterest ?? "Service belum jelas"} · Updated {lead.updatedAt}
+                          {lead.serviceInterest ?? "Service belum jelas"} · {lead.source} · Updated {lead.updatedAt}
                         </small>
                         <span className="muted conversation-preview">{lead.needSummary}</span>
                       </span>
@@ -135,6 +156,13 @@ export default async function LeadsPage() {
                         <p className="muted">Location: {lead.location ?? "-"}</p>
                         <p className="muted">Budget: {lead.budget ?? "-"}</p>
                         <p className="muted">Urgency: {lead.urgency ?? "-"}</p>
+                        <p className="muted">Lead score: {lead.qualificationScore ?? 0}/100</p>
+                        <p className="muted">Source: {lead.source}</p>
+                        <p className="muted">
+                          Estimasi awal: {formatEstimateRange(lead.estimatedValueMin, lead.estimatedValueMax)}
+                        </p>
+                        {lead.estimateNote ? <p>{lead.estimateNote}</p> : null}
+                        {lead.nextStep ? <p className="muted">Next step: {lead.nextStep}</p> : null}
                       </div>
                       <form className="form-grid" action={updateLeadAction}>
                         <input name="leadId" type="hidden" value={lead.id} />
@@ -181,4 +209,30 @@ function formatLeadStatus(status: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatEstimateRange(min?: string | null, max?: string | null) {
+  if (!min && !max) {
+    return "-";
+  }
+
+  if (min && max) {
+    return `${formatRupiah(min)} - ${formatRupiah(max)}`;
+  }
+
+  return formatRupiah(min ?? max ?? "0");
+}
+
+function formatRupiah(value: string) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+
+  return new Intl.NumberFormat("id-ID", {
+    currency: "IDR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(numeric);
 }

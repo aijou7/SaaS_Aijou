@@ -127,17 +127,17 @@ async function requireBusinessForUser(userId: string) {
 
 function defaultAgentSettings(): AgentRuntimeSettings {
   return {
-    agentName: "Nara",
+    agentName: "Aijou",
     tone: "friendly, helpful, concise",
     language: "id",
     openingMessage: null,
     closingMessage: null,
     businessDescription:
-      "IT consultant kecil untuk instalasi jaringan, WiFi, router, troubleshooting, dan IT support.",
+      "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
     handoffRules:
       "Handoff jika customer meminta manusia/admin, meminta harga final, komplain, marah, atau kebutuhan terlalu teknis.",
     systemInstruction:
-      "Kumpulkan kebutuhan customer. Jangan memberi harga final. Minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan.",
+      "Kumpulkan kebutuhan customer secara natural. Jangan memberi harga final. Minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan. Untuk project besar, arahkan ke discovery atau survey.",
     isActive: true,
   };
 }

@@ -402,6 +402,13 @@ model Lead {
   location        String?
   budget          String?
   urgency         String?
+  source          String               @default("CHAT")
+  qualificationScore Int?
+  estimatedValueMin Decimal?           @db.Decimal(14, 2)
+  estimatedValueMax Decimal?           @db.Decimal(14, 2)
+  estimateNote    String?
+  nextStep        String?
+  lastCustomerMessageAt DateTime?
   status          LeadStatus           @default(NEW)
   ownerNotes      String?
   extractedJson   Json?

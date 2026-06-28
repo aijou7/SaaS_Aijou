@@ -129,28 +129,28 @@ async function main() {
       businessId: business.id,
     },
     update: {
-      agentName: "Nara",
+      agentName: "Aijou",
       tone: "friendly, helpful, concise",
       language: "id",
       businessDescription:
-        "IT consultant kecil yang membantu instalasi jaringan, WiFi, router, troubleshooting, dan IT support untuk kantor/usaha kecil.",
+        "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
       handoffRules:
         "Handoff ke owner jika customer meminta manusia/admin, meminta harga final, komplain, marah, atau kebutuhan terlalu teknis.",
       systemInstruction:
-        "Kumpulkan kebutuhan customer dengan sopan. Jangan memberi harga final. Selalu minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan.",
+        "Kumpulkan kebutuhan customer secara natural. Jangan memberi harga final. Minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan. Untuk project besar, arahkan ke discovery atau survey.",
       isActive: true,
     },
     create: {
       businessId: business.id,
-      agentName: "Nara",
+      agentName: "Aijou",
       tone: "friendly, helpful, concise",
       language: "id",
       businessDescription:
-        "IT consultant kecil yang membantu instalasi jaringan, WiFi, router, troubleshooting, dan IT support untuk kantor/usaha kecil.",
+        "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
       handoffRules:
         "Handoff ke owner jika customer meminta manusia/admin, meminta harga final, komplain, marah, atau kebutuhan terlalu teknis.",
       systemInstruction:
-        "Kumpulkan kebutuhan customer dengan sopan. Jangan memberi harga final. Selalu minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan.",
+        "Kumpulkan kebutuhan customer secara natural. Jangan memberi harga final. Minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan. Untuk project besar, arahkan ke discovery atau survey.",
       isActive: true,
     },
   });

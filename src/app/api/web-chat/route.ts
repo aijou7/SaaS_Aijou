@@ -47,13 +47,25 @@ export async function POST(request: NextRequest) {
     phoneNumber: `web-${visitorKey}`,
     displayName: visitorName.slice(0, 80) || "Pengunjung website",
     message,
+    leadSource: "WEB_CHAT",
   });
 
   return json(request, {
+    conversationId: result.conversationId,
     reply:
       result.aiReply ??
       "Pesanmu sudah diterima. Tim Aijou akan melanjutkan percakapan ini secepatnya.",
     handoff: result.status === "HUMAN_NEEDED",
+    lead: result.leadSummary
+      ? {
+          status: result.leadSummary.status,
+          qualificationScore: result.leadSummary.qualificationScore,
+          estimateNote: result.leadSummary.estimateNote,
+          nextStep: result.leadSummary.nextStep,
+          estimatedValueMin: result.leadSummary.estimatedValueMin?.toString() ?? null,
+          estimatedValueMax: result.leadSummary.estimatedValueMax?.toString() ?? null,
+        }
+      : null,
   });
 }
 

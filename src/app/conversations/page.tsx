@@ -197,7 +197,7 @@ function ConversationTicketList({
             <p>{conversation.lastMessage || "Conversation assigned..."}</p>
             <div className="ticket-meta">
               <span className="channel-dot" aria-hidden="true" />
-              <span>Helpdesk WA</span>
+              <span>{conversation.lead?.source === "WEB_CHAT" ? "Web Chat" : conversation.lead?.source === "BRIEF" ? "Brief" : "Helpdesk WA"}</span>
               <span
                 className={
                   conversation.status === "HUMAN_NEEDED"
@@ -207,6 +207,9 @@ function ConversationTicketList({
               >
                 {conversation.status === "HUMAN_NEEDED" ? "Pending" : "Assigned"}
               </span>
+              {conversation.lead ? (
+                <span className="count-badge">{conversation.lead.qualificationScore ?? 0}/100</span>
+              ) : null}
               <span className="count-badge">{conversation.messageCount}</span>
             </div>
           </Link>
@@ -237,13 +240,13 @@ function ConversationDetailPanel({ selectedConversation }: { selectedConversatio
         <form action={takeoverConversationAction}>
           <input name="conversationId" type="hidden" value={selectedConversation.id} />
           <button className="primary-button" type="submit">
-            Take over
+            Ambil alih chat
           </button>
         </form>
         <form action={releaseConversationAction}>
           <input name="conversationId" type="hidden" value={selectedConversation.id} />
           <button className="ghost-button" type="submit">
-            Release AI
+            Aktifkan AI lagi
           </button>
         </form>
         <form action={resolveConversationAction}>
@@ -253,6 +256,50 @@ function ConversationDetailPanel({ selectedConversation }: { selectedConversatio
           </button>
         </form>
       </div>
+
+      {selectedConversation.lead ? (
+        <div className="card">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">{selectedConversation.lead.source}</p>
+              <h2>Lead snapshot</h2>
+            </div>
+            <span
+              className={
+                selectedConversation.lead.status === "QUALIFIED" ? "status" : "status status-warning"
+              }
+            >
+              {formatConversationStatus(selectedConversation.lead.status)} ·{" "}
+              {selectedConversation.lead.qualificationScore ?? 0}/100
+            </span>
+          </div>
+          <p>{selectedConversation.lead.needSummary}</p>
+          <div className="lead-grid">
+            <div>
+              <p className="muted">Service: {selectedConversation.lead.serviceInterest ?? "-"}</p>
+              <p className="muted">Lokasi: {selectedConversation.lead.location ?? "-"}</p>
+              <p className="muted">Budget: {selectedConversation.lead.budget ?? "-"}</p>
+              <p className="muted">Urgency: {selectedConversation.lead.urgency ?? "-"}</p>
+            </div>
+            <div>
+              <p className="muted">
+                Estimasi awal:{" "}
+                {formatEstimateRange(
+                  selectedConversation.lead.estimatedValueMin,
+                  selectedConversation.lead.estimatedValueMax,
+                )}
+              </p>
+              {selectedConversation.lead.estimateNote ? <p>{selectedConversation.lead.estimateNote}</p> : null}
+              {selectedConversation.lead.nextStep ? (
+                <p className="muted">Next step: {selectedConversation.lead.nextStep}</p>
+              ) : null}
+              <Link className="ghost-button" href="/leads">
+                Buka pipeline leads
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <form className="owner-notes-form" action={updateConversationNotesAction}>
         <input name="conversationId" type="hidden" value={selectedConversation.id} />
@@ -990,4 +1037,30 @@ function bubbleClassForSender(senderType: string) {
   }
 
   return "customer";
+}
+
+function formatEstimateRange(min?: string | null, max?: string | null) {
+  if (!min && !max) {
+    return "-";
+  }
+
+  if (min && max) {
+    return `${formatRupiah(min)} - ${formatRupiah(max)}`;
+  }
+
+  return formatRupiah(min ?? max ?? "0");
+}
+
+function formatRupiah(value: string) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+
+  return new Intl.NumberFormat("id-ID", {
+    currency: "IDR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(numeric);
 }

@@ -70,6 +70,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     items: [
       { href: "/conversations", label: "Chat langsung", icon: MessageCircle, key: "conversations" },
       { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover" },
+      { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads" },
       { href: "/simulator", label: "Simulator", icon: Zap, key: "simulator" },
     ],
   },
@@ -126,6 +127,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   setup: "settings",
   usage: "settings",
   conversations: "inbox",
+  leads: "inbox",
   simulator: "inbox",
   agent: "agent",
   "ai-activity": "agent",

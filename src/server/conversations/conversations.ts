@@ -23,6 +23,7 @@ type SimulateMessageInput = {
   displayName?: string;
   message: string;
   conversationType?: ConversationType;
+  leadSource?: string;
 };
 
 type ConversationInboxFilters = {
@@ -79,6 +80,15 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         _count: {
           select: { messages: true },
         },
+        leads: {
+          take: 1,
+          select: {
+            status: true,
+            qualificationScore: true,
+            source: true,
+            serviceInterest: true,
+          },
+        },
       },
     }),
     prisma.whatsAppConversation.count({
@@ -116,6 +126,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       messageCount: conversation._count.messages,
       lastMessage: conversation.messages[0]?.messageBody ?? "",
       lastSender: conversation.messages[0]?.senderType ?? null,
+      lead: conversation.leads[0] ?? null,
     })),
   };
 }
@@ -159,6 +170,28 @@ export async function getConversationDetail(userId: string, conversationId?: str
           createdAt: true,
         },
       },
+      leads: {
+        take: 1,
+        select: {
+          id: true,
+          customerName: true,
+          customerPhone: true,
+          needSummary: true,
+          serviceInterest: true,
+          location: true,
+          budget: true,
+          urgency: true,
+          source: true,
+          qualificationScore: true,
+          estimatedValueMin: true,
+          estimatedValueMax: true,
+          estimateNote: true,
+          nextStep: true,
+          status: true,
+          ownerNotes: true,
+          updatedAt: true,
+        },
+      },
     },
   });
 
@@ -184,6 +217,14 @@ export async function getConversationDetail(userId: string, conversationId?: str
       intent: message.intent,
       createdAt: message.createdAt.toISOString(),
     })),
+    lead: conversation.leads[0]
+      ? {
+          ...conversation.leads[0],
+          estimatedValueMin: conversation.leads[0].estimatedValueMin?.toString() ?? null,
+          estimatedValueMax: conversation.leads[0].estimatedValueMax?.toString() ?? null,
+          updatedAt: conversation.leads[0].updatedAt.toISOString(),
+        }
+      : null,
   };
 }
 
@@ -288,13 +329,16 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     },
   });
 
-  await upsertLeadSummaryFromConversation(conversation.id);
+  const leadSummary = await upsertLeadSummaryFromConversation(conversation.id, {
+    source: input.leadSource,
+  });
 
   return {
     conversationId: conversation.id,
     customerMessageId: customerMessage.id,
     aiReply,
     status: nextStatus,
+    leadSummary,
   };
 }
 
