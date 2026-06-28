@@ -78,6 +78,12 @@ export default async function LeadsPage() {
             <div className="metric">{page.summary.brief}</div>
             <p className="muted">Masuk dari form brief project.</p>
           </div>
+          <div className="card">
+            <ClipboardList size={22} aria-hidden="true" />
+            <h2>Follow-up Due</h2>
+            <div className="metric">{page.summary.dueFollowUp}</div>
+            <p className="muted">Lead yang waktunya dikejar lagi.</p>
+          </div>
         </section>
 
         <section className="section">
@@ -109,6 +115,7 @@ export default async function LeadsPage() {
                           {lead.serviceInterest ?? "Service belum jelas"} · {lead.source} ·{" "}
                           {lead.qualificationScore ?? 0}/100
                         </small>
+                        {lead.isFollowUpDue ? <small>Follow-up due now</small> : null}
                       </Link>
                     ))}
                     {leads.length === 0 ? <p className="muted">Kosong</p> : null}
@@ -141,10 +148,12 @@ export default async function LeadsPage() {
                       </span>
                       <span
                         className={
-                          lead.status === "QUALIFIED" ? "status" : "status status-warning"
+                          lead.isFollowUpDue || lead.status !== "QUALIFIED"
+                            ? "status status-warning"
+                            : "status"
                         }
                       >
-                        {formatLeadStatus(lead.status)}
+                        {lead.isFollowUpDue ? "Follow-up due" : formatLeadStatus(lead.status)}
                       </span>
                     </summary>
 
@@ -158,6 +167,10 @@ export default async function LeadsPage() {
                         <p className="muted">Urgency: {lead.urgency ?? "-"}</p>
                         <p className="muted">Lead score: {lead.qualificationScore ?? 0}/100</p>
                         <p className="muted">Source: {lead.source}</p>
+                        <p className="muted">
+                          Next follow-up: {lead.nextFollowUpAt ? formatDateTime(lead.nextFollowUpAt) : "-"}
+                        </p>
+                        {lead.followUpReason ? <p className="muted">{lead.followUpReason}</p> : null}
                         <p className="muted">
                           Estimasi awal: {formatEstimateRange(lead.estimatedValueMin, lead.estimatedValueMax)}
                         </p>
@@ -235,4 +248,11 @@ function formatRupiah(value: string) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(numeric);
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }

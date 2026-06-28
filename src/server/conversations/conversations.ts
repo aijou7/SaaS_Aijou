@@ -29,6 +29,7 @@ type SimulateMessageInput = {
 type ConversationInboxFilters = {
   status?: string;
   q?: string;
+  unread?: boolean;
 };
 
 export async function getConversationsInbox(userId: string, filters: ConversationInboxFilters = {}) {
@@ -43,6 +44,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         humanNeeded: 0,
         customerService: 0,
         closed: 0,
+        unread: 0,
       },
     };
   }
@@ -59,6 +61,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         conversationType: true,
         status: true,
         lastMessageAt: true,
+        ownerLastReadAt: true,
         ownerNotes: true,
         resolvedAt: true,
         contact: {
@@ -70,7 +73,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         },
         messages: {
           orderBy: { createdAt: "desc" },
-          take: 1,
+          take: 20,
           select: {
             messageBody: true,
             senderType: true,
@@ -105,6 +108,10 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
     }),
   ]);
 
+  const visibleConversations = filters.unread
+    ? conversations.filter((conversation) => getUnreadCount(conversation) > 0)
+    : conversations;
+
   return {
     business,
     summary: {
@@ -112,12 +119,14 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       humanNeeded,
       customerService,
       closed,
+      unread: conversations.reduce((sum, conversation) => sum + getUnreadCount(conversation), 0),
     },
-    conversations: conversations.map((conversation) => ({
+    conversations: visibleConversations.map((conversation) => ({
       id: conversation.id,
       conversationType: conversation.conversationType,
       status: conversation.status,
       lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
+      ownerLastReadAt: conversation.ownerLastReadAt?.toISOString() ?? null,
       ownerNotes: conversation.ownerNotes,
       resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
       contactName: conversation.contact?.displayName ?? conversation.contact?.phoneNumber ?? "Unknown",
@@ -126,6 +135,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       messageCount: conversation._count.messages,
       lastMessage: conversation.messages[0]?.messageBody ?? "",
       lastSender: conversation.messages[0]?.senderType ?? null,
+      unreadCount: getUnreadCount(conversation),
       lead: conversation.leads[0] ?? null,
     })),
   };
@@ -149,6 +159,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
       conversationType: true,
       status: true,
       lastMessageAt: true,
+      ownerLastReadAt: true,
       ownerNotes: true,
       resolvedAt: true,
       contact: {
@@ -187,6 +198,8 @@ export async function getConversationDetail(userId: string, conversationId?: str
           estimatedValueMax: true,
           estimateNote: true,
           nextStep: true,
+          nextFollowUpAt: true,
+          followUpReason: true,
           status: true,
           ownerNotes: true,
           updatedAt: true,
@@ -199,11 +212,17 @@ export async function getConversationDetail(userId: string, conversationId?: str
     return null;
   }
 
+  await prisma.whatsAppConversation.update({
+    where: { id: conversation.id },
+    data: { ownerLastReadAt: new Date() },
+  });
+
   return {
     id: conversation.id,
     conversationType: conversation.conversationType,
     status: conversation.status,
     lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
+    ownerLastReadAt: conversation.ownerLastReadAt?.toISOString() ?? null,
     ownerNotes: conversation.ownerNotes,
     resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
     contactName: conversation.contact?.displayName ?? conversation.contact?.phoneNumber ?? "Unknown",
@@ -222,6 +241,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
           ...conversation.leads[0],
           estimatedValueMin: conversation.leads[0].estimatedValueMin?.toString() ?? null,
           estimatedValueMax: conversation.leads[0].estimatedValueMax?.toString() ?? null,
+          nextFollowUpAt: conversation.leads[0].nextFollowUpAt?.toISOString() ?? null,
           updatedAt: conversation.leads[0].updatedAt.toISOString(),
         }
       : null,
@@ -360,6 +380,7 @@ export async function setConversationTakeover(userId: string, conversationId: st
     data: {
       status,
       resolvedAt: null,
+      ownerLastReadAt: new Date(),
     },
   });
 
@@ -392,6 +413,7 @@ export async function resolveConversation(userId: string, conversationId: string
     data: {
       status: ConversationStatus.CLOSED,
       resolvedAt: new Date(),
+      ownerLastReadAt: new Date(),
     },
   });
 
@@ -465,6 +487,7 @@ export async function sendOwnerConversationReply(userId: string, conversationId:
     data: {
       status: ConversationStatus.HUMAN_NEEDED,
       lastMessageAt: new Date(),
+      ownerLastReadAt: new Date(),
     },
   });
 }
@@ -535,6 +558,20 @@ function buildConversationWhere(businessId: string, filters: ConversationInboxFi
 
 function isConversationStatus(value: string): value is ConversationStatus {
   return Object.values(ConversationStatus).includes(value as ConversationStatus);
+}
+
+function getUnreadCount(conversation: {
+  ownerLastReadAt: Date | null;
+  messages: Array<{
+    senderType: SenderType;
+    createdAt: Date;
+  }>;
+}) {
+  return conversation.messages.filter(
+    (message) =>
+      message.senderType === SenderType.CUSTOMER &&
+      (!conversation.ownerLastReadAt || message.createdAt > conversation.ownerLastReadAt),
+  ).length;
 }
 
 async function upsertContact(params: {

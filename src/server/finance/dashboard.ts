@@ -1,4 +1,10 @@
-import { ConversationStatus, ConversationType, LeadStatus, TransactionStatus } from "@/generated/prisma/client";
+import {
+  ConversationStatus,
+  ConversationType,
+  LeadStatus,
+  SenderType,
+  TransactionStatus,
+} from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function getFinanceDashboardSnapshot(userId: string) {
@@ -20,6 +26,9 @@ export async function getFinanceDashboardSnapshot(userId: string) {
       customerConversationCount: 0,
       pendingTransactionCount: 0,
       newLeadCount: 0,
+      unreadConversationCount: 0,
+      hotLeadCount: 0,
+      dueFollowUpCount: 0,
       latestAiActions: [],
       recentTransactions: [],
     };
@@ -28,6 +37,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
   const now = new Date();
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
+  const followUpDueAt = new Date();
   const [
     totalThisMonth,
     receiptReviewCount,
@@ -36,6 +46,9 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     customerConversationCount,
     pendingTransactionCount,
     newLeadCount,
+    conversationsForUnread,
+    hotLeadCount,
+    dueFollowUpCount,
     latestAiActions,
     recentTransactions,
   ] = await Promise.all([
@@ -85,6 +98,35 @@ export async function getFinanceDashboardSnapshot(userId: string) {
       where: {
         businessId: business.id,
         status: LeadStatus.NEW,
+      },
+    }),
+    prisma.whatsAppConversation.findMany({
+      where: {
+        businessId: business.id,
+        conversationType: ConversationType.CUSTOMER_SERVICE,
+      },
+      select: {
+        ownerLastReadAt: true,
+        messages: {
+          where: { senderType: SenderType.CUSTOMER },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { createdAt: true },
+        },
+      },
+    }),
+    prisma.lead.count({
+      where: {
+        businessId: business.id,
+        qualificationScore: { gte: 70 },
+        status: { notIn: [LeadStatus.WON, LeadStatus.LOST, LeadStatus.CLOSED, LeadStatus.SPAM] },
+      },
+    }),
+    prisma.lead.count({
+      where: {
+        businessId: business.id,
+        nextFollowUpAt: { lte: followUpDueAt },
+        status: { notIn: [LeadStatus.WON, LeadStatus.LOST, LeadStatus.CLOSED, LeadStatus.SPAM] },
       },
     }),
     prisma.aiLog.findMany({
@@ -139,6 +181,15 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     customerConversationCount,
     pendingTransactionCount,
     newLeadCount,
+    unreadConversationCount: conversationsForUnread.filter((conversation) => {
+      const lastCustomerMessageAt = conversation.messages[0]?.createdAt;
+      return Boolean(
+        lastCustomerMessageAt &&
+          (!conversation.ownerLastReadAt || lastCustomerMessageAt > conversation.ownerLastReadAt),
+      );
+    }).length,
+    hotLeadCount,
+    dueFollowUpCount,
     latestAiActions: latestAiActions.map((action) => ({
       id: action.id,
       actionTaken: action.actionTaken ?? "-",

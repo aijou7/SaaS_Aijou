@@ -177,6 +177,7 @@ model WhatsAppConversation {
   conversationType     ConversationType      @default(UNKNOWN)
   status               ConversationStatus    @default(OPEN)
   lastMessageAt        DateTime?
+  ownerLastReadAt      DateTime?
   ownerNotes           String?
   resolvedAt           DateTime?
   business             Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -409,6 +410,8 @@ model Lead {
   estimateNote    String?
   nextStep        String?
   lastCustomerMessageAt DateTime?
+  nextFollowUpAt  DateTime?
+  followUpReason  String?
   status          LeadStatus           @default(NEW)
   ownerNotes      String?
   extractedJson   Json?

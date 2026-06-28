@@ -2873,7 +2873,7 @@ sup {
 
 .chat-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr 34px;
+  grid-template-columns: 1fr 1fr 1fr 34px;
   align-items: center;
   border-bottom: 1px solid var(--line);
 }
@@ -3621,6 +3621,13 @@ sup {
     linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.24)),
     #f3f6f4;
   padding: 14px;
+}
+
+.quick-reply-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .chat-bubble {

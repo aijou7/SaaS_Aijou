@@ -148,6 +148,18 @@ export default async function DashboardPage() {
               <strong>{dashboard.humanNeededCount}</strong>
               <span>Butuh bantuan tim</span>
             </Link>
+            <Link className="queue-item" href="/conversations">
+              <strong>{dashboard.unreadConversationCount}</strong>
+              <span>Unread chat</span>
+            </Link>
+            <Link className="queue-item" href="/leads">
+              <strong>{dashboard.hotLeadCount}</strong>
+              <span>Hot leads</span>
+            </Link>
+            <Link className="queue-item" href="/leads">
+              <strong>{dashboard.dueFollowUpCount}</strong>
+              <span>Follow-up due</span>
+            </Link>
             <Link className="queue-item" href="/leads">
               <strong>{dashboard.newLeadCount}</strong>
               <span>Prospek baru</span>

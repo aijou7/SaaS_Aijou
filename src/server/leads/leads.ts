@@ -18,6 +18,13 @@ type LeadSummary = {
   status: LeadStatus;
 };
 
+const completedLeadStatuses: LeadStatus[] = [
+  LeadStatus.WON,
+  LeadStatus.LOST,
+  LeadStatus.CLOSED,
+  LeadStatus.SPAM,
+];
+
 export async function upsertLeadSummaryFromConversation(
   conversationId: string,
   options: { source?: string } = {},
@@ -100,6 +107,7 @@ export async function upsertLeadSummaryFromConversation(
     conversation.messages
       .filter((message) => message.senderType === "CUSTOMER")
       .at(-1)?.createdAt ?? null;
+  const followUp = buildFollowUpReminder(parsed, lastCustomerMessageAt);
 
   const lead = await prisma.lead.upsert({
     where: {
@@ -123,6 +131,8 @@ export async function upsertLeadSummaryFromConversation(
       estimateNote: parsed.estimateNote,
       nextStep: parsed.nextStep,
       lastCustomerMessageAt,
+      nextFollowUpAt: followUp.nextFollowUpAt,
+      followUpReason: followUp.reason,
       status: parsed.status,
       extractedJson: toJson(parsed),
     },
@@ -143,6 +153,8 @@ export async function upsertLeadSummaryFromConversation(
       estimateNote: parsed.estimateNote,
       nextStep: parsed.nextStep,
       lastCustomerMessageAt,
+      nextFollowUpAt: followUp.nextFollowUpAt,
+      followUpReason: followUp.reason,
       status: parsed.status,
       extractedJson: toJson(parsed),
     },
@@ -184,7 +196,8 @@ export async function getLeadsPage(userId: string) {
     };
   }
 
-  const [leads, newCount, followUp, qualified, won, lost, webChat, brief, hot] = await Promise.all([
+  const followUpDueAt = new Date();
+  const [leads, newCount, followUp, qualified, won, lost, webChat, brief, hot, dueFollowUp] = await Promise.all([
     prisma.lead.findMany({
       where: { businessId: business.id },
       orderBy: { updatedAt: "desc" },
@@ -206,6 +219,8 @@ export async function getLeadsPage(userId: string) {
         estimateNote: true,
         nextStep: true,
         lastCustomerMessageAt: true,
+        nextFollowUpAt: true,
+        followUpReason: true,
         status: true,
         ownerNotes: true,
         updatedAt: true,
@@ -219,17 +234,29 @@ export async function getLeadsPage(userId: string) {
     prisma.lead.count({ where: { businessId: business.id, source: "WEB_CHAT" } }),
     prisma.lead.count({ where: { businessId: business.id, source: "BRIEF" } }),
     prisma.lead.count({ where: { businessId: business.id, qualificationScore: { gte: 70 } } }),
+    prisma.lead.count({
+      where: {
+        businessId: business.id,
+        nextFollowUpAt: { lte: followUpDueAt },
+        status: { notIn: completedLeadStatuses },
+      },
+    }),
   ]);
 
   return {
     business,
-    summary: { new: newCount, followUp, qualified, won, lost, webChat, brief, hot },
+    summary: { new: newCount, followUp, qualified, won, lost, webChat, brief, hot, dueFollowUp },
     leads: leads.map((lead) => ({
       ...lead,
       estimatedValueMin: lead.estimatedValueMin?.toString() ?? null,
       estimatedValueMax: lead.estimatedValueMax?.toString() ?? null,
       lastCustomerMessageAt: lead.lastCustomerMessageAt?.toISOString() ?? null,
+      nextFollowUpAt: lead.nextFollowUpAt?.toISOString() ?? null,
       updatedAt: lead.updatedAt.toISOString().slice(0, 10),
+      isFollowUpDue:
+        lead.nextFollowUpAt !== null &&
+        lead.nextFollowUpAt <= followUpDueAt &&
+        !completedLeadStatuses.includes(lead.status),
     })),
   };
 }
@@ -489,6 +516,30 @@ function normalizeMoney(value: unknown) {
 function normalizeLeadSource(value?: string) {
   const source = value?.trim().toUpperCase();
   return source && /^[A-Z0-9_-]{2,32}$/.test(source) ? source : "CHAT";
+}
+
+function buildFollowUpReminder(summary: LeadSummary, lastCustomerMessageAt: Date | null) {
+  if (completedLeadStatuses.includes(summary.status)) {
+    return { nextFollowUpAt: null, reason: null };
+  }
+
+  const base = lastCustomerMessageAt ?? new Date();
+  const hours =
+    (summary.qualificationScore ?? 0) >= 70 || summary.status === LeadStatus.QUALIFIED
+      ? 2
+      : summary.status === LeadStatus.NEED_FOLLOW_UP
+        ? 6
+        : 24;
+
+  return {
+    nextFollowUpAt: new Date(base.getTime() + hours * 60 * 60 * 1000),
+    reason:
+      hours === 2
+        ? "Hot lead: kebutuhan sudah cukup jelas, sebaiknya di-follow up cepat."
+        : hours === 6
+          ? "Lead menunjukkan minat, tapi masih perlu data tambahan."
+          : "Lead baru belum cukup lengkap; cek lagi kalau belum ada respons.",
+  };
 }
 
 function toJson(value: unknown) {

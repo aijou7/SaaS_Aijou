@@ -71,9 +71,10 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const conversationId = getSearchParam(resolvedSearchParams, "conversationId");
   const status = getSearchParam(resolvedSearchParams, "status");
   const q = getSearchParam(resolvedSearchParams, "q");
+  const unread = getSearchParam(resolvedSearchParams, "unread") === "1";
   const currentView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
 
-  const inbox = await getConversationsInbox(session.userId, { status, q });
+  const inbox = await getConversationsInbox(session.userId, { status, q, unread });
   const selectedConversation = conversationId
     ? await getConversationDetail(session.userId, conversationId)
     : null;
@@ -90,6 +91,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           q={q}
           selectedConversation={selectedConversation}
           status={status}
+          unread={unread}
         />
       ) : (
         <ChatFeaturePanel
@@ -109,11 +111,13 @@ function ChatInboxView({
   q,
   selectedConversation,
   status,
+  unread,
 }: {
   inbox: ConversationInbox;
   q?: string;
   selectedConversation: ConversationDetail;
   status?: string;
+  unread?: boolean;
 }) {
   return (
     <section className="chat-page">
@@ -144,8 +148,11 @@ function ChatInboxView({
         </form>
 
         <div className="chat-tabs">
-          <Link className={!status || status !== "CLOSED" ? "active" : ""} href="/conversations">
+          <Link className={!unread && (!status || status !== "CLOSED") ? "active" : ""} href="/conversations">
             Assigned <span>{inbox.summary.open + inbox.summary.humanNeeded}</span>
+          </Link>
+          <Link className={unread ? "active" : ""} href="/conversations?unread=1">
+            Unread <span>{inbox.summary.unread}</span>
           </Link>
           <Link className={status === "CLOSED" ? "active" : ""} href="/conversations?status=CLOSED">
             Closed <span>{inbox.summary.closed}</span>
@@ -209,6 +216,9 @@ function ConversationTicketList({
               </span>
               {conversation.lead ? (
                 <span className="count-badge">{conversation.lead.qualificationScore ?? 0}/100</span>
+              ) : null}
+              {conversation.unreadCount > 0 ? (
+                <span className="mini-badge pending">{conversation.unreadCount} unread</span>
               ) : null}
               <span className="count-badge">{conversation.messageCount}</span>
             </div>
@@ -293,6 +303,14 @@ function ConversationDetailPanel({ selectedConversation }: { selectedConversatio
               {selectedConversation.lead.nextStep ? (
                 <p className="muted">Next step: {selectedConversation.lead.nextStep}</p>
               ) : null}
+              {selectedConversation.lead.nextFollowUpAt ? (
+                <p className="muted">
+                  Follow-up: {formatDateTime(selectedConversation.lead.nextFollowUpAt)}
+                </p>
+              ) : null}
+              {selectedConversation.lead.followUpReason ? (
+                <p className="muted">{selectedConversation.lead.followUpReason}</p>
+              ) : null}
               <Link className="ghost-button" href="/leads">
                 Buka pipeline leads
               </Link>
@@ -322,6 +340,18 @@ function ConversationDetailPanel({ selectedConversation }: { selectedConversatio
             <small>{formatConversationStatus(message.senderType)}</small>
             <p>{message.messageBody}</p>
           </div>
+        ))}
+      </div>
+
+      <div className="quick-reply-strip" aria-label="Quick replies">
+        {ownerQuickReplies.map((reply) => (
+          <form action={sendOwnerReplyAction} key={reply.label}>
+            <input name="conversationId" type="hidden" value={selectedConversation.id} />
+            <input name="message" type="hidden" value={reply.message} />
+            <button className="small-outline-button" type="submit">
+              {reply.label}
+            </button>
+          </form>
         ))}
       </div>
 
@@ -983,6 +1013,27 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
   },
 };
 
+const ownerQuickReplies = [
+  {
+    label: "Minta lokasi",
+    message: "Siap, boleh share lokasi project dan area yang perlu dicover?",
+  },
+  {
+    label: "Ajak survey",
+    message:
+      "Untuk scope seperti ini idealnya kita survey/discovery dulu supaya rekomendasi dan estimasinya nggak asal. Kapan waktu yang enak untuk dibahas?",
+  },
+  {
+    label: "Minta kontak",
+    message: "Boleh kirim nomor WhatsApp aktif? Nanti tim Aijou follow up dari sana.",
+  },
+  {
+    label: "Minta detail scope",
+    message:
+      "Boleh bantu detailkan jumlah titik/user, kondisi existing, target waktu, dan budget range-nya? Dari situ kami bisa petakan solusi awal.",
+  },
+];
+
 function getSearchParam(
   searchParams: Record<string, string | string[] | undefined>,
   key: string,
@@ -1020,6 +1071,13 @@ function formatInboxDate(value: string | null) {
     month: "2-digit",
     day: "2-digit",
     year: "2-digit",
+  });
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
   });
 }
 
