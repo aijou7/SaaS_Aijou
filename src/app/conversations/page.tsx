@@ -39,6 +39,7 @@ import {
   getConversationDetail,
   getConversationsInbox,
 } from "@/server/conversations/conversations";
+import { getActiveQuickRepliesForUser } from "@/server/quick-replies/quick-replies";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
 type ChatView =
@@ -58,6 +59,7 @@ type ConversationsPageProps = {
 type ConversationInbox = Awaited<ReturnType<typeof getConversationsInbox>>;
 type ConversationDetail = Awaited<ReturnType<typeof getConversationDetail>>;
 type AgentSettingsPageData = Awaited<ReturnType<typeof getAgentSettingsPage>>;
+type QuickReplies = Awaited<ReturnType<typeof getActiveQuickRepliesForUser>>;
 type WhatsAppSettingsPageData = Awaited<ReturnType<typeof getWhatsAppSettingsPage>>;
 
 export default async function ConversationsPage({ searchParams }: ConversationsPageProps) {
@@ -78,8 +80,9 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const selectedConversation = conversationId
     ? await getConversationDetail(session.userId, conversationId)
     : null;
-  const [agentPage, whatsAppPage] = await Promise.all([
+  const [agentPage, quickReplies, whatsAppPage] = await Promise.all([
     getAgentSettingsPage(session.userId),
+    getActiveQuickRepliesForUser(session.userId),
     getWhatsAppSettingsPage(session.userId),
   ]);
 
@@ -89,6 +92,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
         <ChatInboxView
           inbox={inbox}
           q={q}
+          quickReplies={quickReplies}
           selectedConversation={selectedConversation}
           status={status}
           unread={unread}
@@ -109,12 +113,14 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
 function ChatInboxView({
   inbox,
   q,
+  quickReplies,
   selectedConversation,
   status,
   unread,
 }: {
   inbox: ConversationInbox;
   q?: string;
+  quickReplies: QuickReplies;
   selectedConversation: ConversationDetail;
   status?: string;
   unread?: boolean;
@@ -169,7 +175,7 @@ function ChatInboxView({
         {!selectedConversation ? (
           <WelcomeChecklist />
         ) : (
-          <ConversationDetailPanel selectedConversation={selectedConversation} />
+          <ConversationDetailPanel quickReplies={quickReplies} selectedConversation={selectedConversation} />
         )}
       </main>
     </section>
@@ -229,7 +235,13 @@ function ConversationTicketList({
   );
 }
 
-function ConversationDetailPanel({ selectedConversation }: { selectedConversation: NonNullable<ConversationDetail> }) {
+function ConversationDetailPanel({
+  quickReplies,
+  selectedConversation,
+}: {
+  quickReplies: QuickReplies;
+  selectedConversation: NonNullable<ConversationDetail>;
+}) {
   return (
     <section className="chat-detail-surface">
       <div className="chat-detail-header">
@@ -344,15 +356,18 @@ function ConversationDetailPanel({ selectedConversation }: { selectedConversatio
       </div>
 
       <div className="quick-reply-strip" aria-label="Quick replies">
-        {ownerQuickReplies.map((reply) => (
-          <form action={sendOwnerReplyAction} key={reply.label}>
+        {quickReplies.map((reply) => (
+          <form action={sendOwnerReplyAction} key={reply.id}>
             <input name="conversationId" type="hidden" value={selectedConversation.id} />
-            <input name="message" type="hidden" value={reply.message} />
+            <input name="message" type="hidden" value={reply.content} />
             <button className="small-outline-button" type="submit">
-              {reply.label}
+              {reply.shortcut ?? reply.name}
             </button>
           </form>
         ))}
+        <Link className="small-outline-button" href="/quick-replies">
+          Kelola template
+        </Link>
       </div>
 
       <form className="reply-form" action={sendOwnerReplyAction}>
@@ -1012,27 +1027,6 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
     description: "Tune chat messages, quick replies, and operational shortcuts.",
   },
 };
-
-const ownerQuickReplies = [
-  {
-    label: "Minta lokasi",
-    message: "Siap, boleh share lokasi project dan area yang perlu dicover?",
-  },
-  {
-    label: "Ajak survey",
-    message:
-      "Untuk scope seperti ini idealnya kita survey/discovery dulu supaya rekomendasi dan estimasinya nggak asal. Kapan waktu yang enak untuk dibahas?",
-  },
-  {
-    label: "Minta kontak",
-    message: "Boleh kirim nomor WhatsApp aktif? Nanti tim Aijou follow up dari sana.",
-  },
-  {
-    label: "Minta detail scope",
-    message:
-      "Boleh bantu detailkan jumlah titik/user, kondisi existing, target waktu, dan budget range-nya? Dari situ kami bisa petakan solusi awal.",
-  },
-];
 
 function getSearchParam(
   searchParams: Record<string, string | string[] | undefined>,

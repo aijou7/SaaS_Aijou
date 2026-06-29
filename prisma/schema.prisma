@@ -147,6 +147,7 @@ model Business {
   knowledgeBase        KnowledgeBase[]
   products             Product[]
   leads                Lead[]
+  quickReplies         QuickReply[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
   createdAt            DateTime               @default(now())
@@ -191,6 +192,7 @@ model WhatsAppConversation {
   updatedAt            DateTime              @updatedAt
 
   @@index([businessId, lastMessageAt])
+  @@index([businessId, ownerLastReadAt])
   @@map("whatsapp_conversations")
 }
 
@@ -356,6 +358,25 @@ model Product {
   @@map("products")
 }
 
+model QuickReply {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  content    String
+  shortcut   String?
+  category   String?
+  isPrivate  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId, isActive, sortOrder])
+  @@map("quick_replies")
+}
+
 model AgentSettings {
   id                  String   @id @default(cuid())
   businessId          String   @unique
@@ -422,6 +443,9 @@ model Lead {
 
   @@unique([businessId, conversationId])
   @@index([businessId, status])
+  @@index([businessId, source])
+  @@index([businessId, qualificationScore])
+  @@index([businessId, nextFollowUpAt])
   @@map("leads")
 }
 
