@@ -147,6 +147,7 @@ model Business {
   knowledgeBase        KnowledgeBase[]
   products             Product[]
   leads                Lead[]
+  proposalDrafts       ProposalDraft[]
   quickReplies         QuickReply[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
@@ -438,6 +439,7 @@ model Lead {
   extractedJson   Json?
   business        Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
   conversation    WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  proposalDrafts  ProposalDraft[]
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
@@ -447,6 +449,33 @@ model Lead {
   @@index([businessId, qualificationScore])
   @@index([businessId, nextFollowUpAt])
   @@map("leads")
+}
+
+model ProposalDraft {
+  id                String   @id @default(cuid())
+  businessId        String
+  leadId            String
+  title             String
+  clientName        String?
+  projectSummary    String
+  scopeOfWork       String[]
+  assumptions       String[]
+  exclusions        String[]
+  estimatedValueMin Decimal? @db.Decimal(14, 2)
+  estimatedValueMax Decimal? @db.Decimal(14, 2)
+  timeline          String?
+  nextSteps         String[]
+  disclaimer        String
+  status            String   @default("DRAFT")
+  generatedBy       String   @default("AI")
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([businessId, status, createdAt])
+  @@index([leadId, createdAt])
+  @@map("proposal_drafts")
 }
 
 model ConfirmationSession {

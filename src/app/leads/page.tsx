@@ -3,6 +3,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { updateLeadAction } from "@/app/leads/actions";
+import { generateProposalDraftAction } from "@/app/proposals/actions";
 import { AppShell } from "@/components/app-shell";
 import { LeadStatus } from "@/generated/prisma/client";
 import { getSession } from "@/lib/session";
@@ -176,6 +177,12 @@ export default async function LeadsPage() {
                         </p>
                         {lead.estimateNote ? <p>{lead.estimateNote}</p> : null}
                         {lead.nextStep ? <p className="muted">Next step: {lead.nextStep}</p> : null}
+                        <p className="muted">Proposal drafts: {lead.proposalDraftCount}</p>
+                        {lead.latestProposalDraft ? (
+                          <p className="muted">
+                            Latest proposal: {lead.latestProposalDraft.title} · {lead.latestProposalDraft.status}
+                          </p>
+                        ) : null}
                       </div>
                       <form className="form-grid" action={updateLeadAction}>
                         <input name="leadId" type="hidden" value={lead.id} />
@@ -199,6 +206,17 @@ export default async function LeadsPage() {
                       </form>
                     </div>
                     <div className="quick-actions">
+                      <form action={generateProposalDraftAction}>
+                        <input name="leadId" type="hidden" value={lead.id} />
+                        <button className="primary-button" type="submit">
+                          Generate proposal draft
+                        </button>
+                      </form>
+                      {lead.latestProposalDraft ? (
+                        <Link className="ghost-button" href="/proposals">
+                          View proposal drafts
+                        </Link>
+                      ) : null}
                       <Link
                         className="ghost-button"
                         href={`/conversations?conversationId=${lead.conversationId}`}

@@ -224,6 +224,20 @@ export async function getLeadsPage(userId: string) {
         status: true,
         ownerNotes: true,
         updatedAt: true,
+        proposalDrafts: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            generatedBy: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: { proposalDrafts: true },
+        },
       },
     }),
     prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.NEW } }),
@@ -253,6 +267,13 @@ export async function getLeadsPage(userId: string) {
       lastCustomerMessageAt: lead.lastCustomerMessageAt?.toISOString() ?? null,
       nextFollowUpAt: lead.nextFollowUpAt?.toISOString() ?? null,
       updatedAt: lead.updatedAt.toISOString().slice(0, 10),
+      latestProposalDraft: lead.proposalDrafts[0]
+        ? {
+            ...lead.proposalDrafts[0],
+            createdAt: lead.proposalDrafts[0].createdAt.toISOString(),
+          }
+        : null,
+      proposalDraftCount: lead._count.proposalDrafts,
       isFollowUpDue:
         lead.nextFollowUpAt !== null &&
         lead.nextFollowUpAt <= followUpDueAt &&
