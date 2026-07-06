@@ -1,4 +1,10 @@
-import { Prisma } from "@/generated/prisma/client";
+import {
+  ConversationStatus,
+  MessageType,
+  Prisma,
+  ProcessingStatus,
+  SenderType,
+} from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { callGroqJson } from "@/server/ai/groq";
 
@@ -15,6 +21,9 @@ type ProposalDraftAi = {
   nextSteps: string[];
   disclaimer: string;
 };
+
+const proposalStatuses = ["DRAFT", "REVIEWED", "SENT", "ACCEPTED", "REJECTED"] as const;
+type ProposalStatus = (typeof proposalStatuses)[number];
 
 export async function generateProposalDraftFromLead(userId: string, leadId: string) {
   const business = await requireBusinessForUser(userId);
@@ -141,6 +150,89 @@ export async function generateProposalDraftFromLead(userId: string, leadId: stri
   });
 
   return proposal;
+}
+
+export async function updateProposalDraftStatus(userId: string, proposalId: string, status: string) {
+  const business = await requireBusinessForUser(userId);
+  const parsedStatus = parseProposalStatus(status);
+
+  return prisma.proposalDraft.update({
+    where: { id: proposalId, businessId: business.id },
+    data: { status: parsedStatus },
+  });
+}
+
+export async function deleteProposalDraft(userId: string, proposalId: string) {
+  const business = await requireBusinessForUser(userId);
+
+  return prisma.proposalDraft.delete({
+    where: { id: proposalId, businessId: business.id },
+  });
+}
+
+export async function sendProposalDraftFollowUp(userId: string, proposalId: string) {
+  const business = await requireBusinessForUser(userId);
+  const proposal = await prisma.proposalDraft.findFirst({
+    where: { id: proposalId, businessId: business.id },
+    select: {
+      id: true,
+      title: true,
+      clientName: true,
+      projectSummary: true,
+      estimatedValueMin: true,
+      estimatedValueMax: true,
+      nextSteps: true,
+      disclaimer: true,
+      lead: {
+        select: {
+          conversationId: true,
+        },
+      },
+    },
+  });
+
+  if (!proposal) {
+    throw new Error("Proposal draft tidak ditemukan.");
+  }
+
+  const message = buildProposalFollowUpMessage({
+    clientName: proposal.clientName,
+    disclaimer: proposal.disclaimer,
+    estimateRange: formatEstimateRange(
+      proposal.estimatedValueMin?.toString() ?? null,
+      proposal.estimatedValueMax?.toString() ?? null,
+    ),
+    nextSteps: proposal.nextSteps,
+    projectSummary: proposal.projectSummary,
+    title: proposal.title,
+  });
+  const now = new Date();
+
+  await prisma.whatsAppMessage.create({
+    data: {
+      conversationId: proposal.lead.conversationId,
+      providerMessageId: `proposal-follow-up-${crypto.randomUUID()}`,
+      senderType: SenderType.USER,
+      messageType: MessageType.TEXT,
+      messageBody: message,
+      intent: "proposal_follow_up",
+      processingStatus: ProcessingStatus.PROCESSED,
+    },
+  });
+
+  await prisma.whatsAppConversation.update({
+    where: { id: proposal.lead.conversationId },
+    data: {
+      status: ConversationStatus.HUMAN_NEEDED,
+      lastMessageAt: now,
+      ownerLastReadAt: now,
+    },
+  });
+
+  return prisma.proposalDraft.update({
+    where: { id: proposal.id },
+    data: { status: "SENT" },
+  });
 }
 
 export async function getProposalDraftsForLead(userId: string, leadId: string) {
@@ -362,6 +454,67 @@ function normalizeMoney(value: unknown) {
 
   const normalized = value.replace(/[^\d]/g, "");
   return normalized ? normalized : null;
+}
+
+function parseProposalStatus(status: string): ProposalStatus {
+  const normalized = status.trim().toUpperCase();
+
+  if (!proposalStatuses.includes(normalized as ProposalStatus)) {
+    throw new Error("Status proposal tidak valid.");
+  }
+
+  return normalized as ProposalStatus;
+}
+
+function buildProposalFollowUpMessage(params: {
+  clientName: string | null;
+  disclaimer: string;
+  estimateRange: string;
+  nextSteps: string[];
+  projectSummary: string;
+  title: string;
+}) {
+  const greeting = params.clientName ? `Halo ${params.clientName},` : "Halo,";
+  const nextSteps = params.nextSteps.slice(0, 3).map((step, index) => `${index + 1}. ${step}`).join("\n");
+
+  return [
+    greeting,
+    `Saya sudah siapkan draft awal untuk ${params.title}.`,
+    "",
+    `Ringkasan: ${params.projectSummary}`,
+    `Estimasi awal: ${params.estimateRange}`,
+    "",
+    "Next step yang disarankan:",
+    nextSteps || "- Kita jadwalkan sesi discovery untuk validasi scope.",
+    "",
+    params.disclaimer,
+  ].join("\n");
+}
+
+function formatEstimateRange(min: string | null, max: string | null) {
+  if (!min && !max) {
+    return "belum bisa ditentukan sebelum scope divalidasi";
+  }
+
+  if (min && max) {
+    return `${formatRupiah(min)} - ${formatRupiah(max)}`;
+  }
+
+  return formatRupiah(min ?? max ?? "0");
+}
+
+function formatRupiah(value: string) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+
+  return new Intl.NumberFormat("id-ID", {
+    currency: "IDR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(numeric);
 }
 
 async function getBusinessForUser(userId: string) {

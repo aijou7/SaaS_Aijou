@@ -2,9 +2,16 @@ import { FileText } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  deleteProposalDraftAction,
+  sendProposalFollowUpAction,
+  updateProposalDraftStatusAction,
+} from "@/app/proposals/actions";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
 import { getProposalDraftsPage } from "@/server/proposals/proposal-drafts";
+
+const proposalStatuses = ["DRAFT", "REVIEWED", "SENT", "ACCEPTED", "REJECTED"];
 
 export default async function ProposalsPage() {
   const session = await getSession();
@@ -74,7 +81,9 @@ export default async function ProposalsPage() {
                       </small>
                       <span className="muted conversation-preview">{proposal.projectSummary}</span>
                     </span>
-                    <span className="status">{formatEstimateRange(proposal.estimatedValueMin, proposal.estimatedValueMax)}</span>
+                    <span className={proposal.status === "ACCEPTED" ? "status" : "status status-warning"}>
+                      {formatEstimateRange(proposal.estimatedValueMin, proposal.estimatedValueMax)}
+                    </span>
                   </summary>
 
                   <div className="lead-grid">
@@ -88,16 +97,45 @@ export default async function ProposalsPage() {
                     </div>
                     <div>
                       <h3>Actions</h3>
+                      <form className="form-grid" action={updateProposalDraftStatusAction}>
+                        <input name="proposalId" type="hidden" value={proposal.id} />
+                        <label>
+                          Status
+                          <select name="status" defaultValue={proposal.status}>
+                            {proposalStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {formatStatus(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button className="ghost-button" type="submit">
+                          Update status
+                        </button>
+                      </form>
+
                       <div className="quick-actions">
+                        <form action={sendProposalFollowUpAction}>
+                          <input name="proposalId" type="hidden" value={proposal.id} />
+                          <button className="primary-button" type="submit">
+                            Send follow-up to chat
+                          </button>
+                        </form>
                         <Link
                           className="ghost-button"
                           href={`/conversations?conversationId=${proposal.lead.conversationId}`}
                         >
                           Open conversation
                         </Link>
-                        <Link className="ghost-button" href={`/leads`}>
+                        <Link className="ghost-button" href="/leads">
                           Open lead pipeline
                         </Link>
+                        <form action={deleteProposalDraftAction}>
+                          <input name="proposalId" type="hidden" value={proposal.id} />
+                          <button className="small-danger-button" type="submit">
+                            Delete draft
+                          </button>
+                        </form>
                       </div>
                     </div>
                   </div>
@@ -159,4 +197,12 @@ function formatRupiah(value: string) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(numeric);
+}
+
+function formatStatus(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
