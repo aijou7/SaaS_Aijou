@@ -24,6 +24,7 @@ type SimulateMessageInput = {
   message: string;
   conversationType?: ConversationType;
   leadSource?: string;
+  providerMessageId?: string;
 };
 
 type ConversationInboxFilters = {
@@ -263,10 +264,45 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     status: ConversationStatus.OPEN,
   });
 
+  const providerMessageId = input.providerMessageId ?? `sim-${crypto.randomUUID()}`;
+  const duplicateMessage = input.providerMessageId
+    ? await prisma.whatsAppMessage.findUnique({
+        where: { providerMessageId },
+        select: {
+          id: true,
+          conversationId: true,
+          createdAt: true,
+          conversation: { select: { status: true } },
+        },
+      })
+    : null;
+
+  if (duplicateMessage) {
+    const latestAiReply = await prisma.whatsAppMessage.findFirst({
+      where: {
+        conversationId: duplicateMessage.conversationId,
+        senderType: SenderType.AI,
+        messageType: MessageType.TEXT,
+        createdAt: { gte: duplicateMessage.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { messageBody: true },
+    });
+
+    return {
+      conversationId: duplicateMessage.conversationId,
+      customerMessageId: duplicateMessage.id,
+      aiReply: latestAiReply?.messageBody ?? null,
+      status: duplicateMessage.conversation.status,
+      leadSummary: null,
+      deduped: true,
+    };
+  }
+
   const customerMessage = await prisma.whatsAppMessage.create({
     data: {
       conversationId: conversation.id,
-      providerMessageId: `sim-${crypto.randomUUID()}`,
+      providerMessageId,
       senderType: SenderType.CUSTOMER,
       messageType: MessageType.TEXT,
       messageBody: input.message,

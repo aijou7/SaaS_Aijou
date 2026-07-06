@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 import { callGroqJson } from "@/server/ai/groq";
 
 type KnowledgeBaseInput = {
@@ -48,6 +49,12 @@ export async function getKnowledgeBasePage(userId: string) {
 }
 
 export async function getActiveKnowledgeContext(businessId: string) {
+  return ttlCache(`knowledge-context:${businessId}`, 60_000, () =>
+    getActiveKnowledgeContextFresh(businessId),
+  );
+}
+
+async function getActiveKnowledgeContextFresh(businessId: string) {
   const entries = await prisma.knowledgeBase.findMany({
     where: {
       businessId,
@@ -77,6 +84,7 @@ export async function getActiveKnowledgeContext(businessId: string) {
 
 export async function createKnowledgeBaseEntry(userId: string, input: KnowledgeBaseInput) {
   const business = await requireBusinessForUser(userId);
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return prisma.knowledgeBase.create({
     data: {
@@ -103,6 +111,7 @@ export async function updateKnowledgeBaseEntry(
   if (!existing) {
     throw new Error("Knowledge base entry tidak ditemukan.");
   }
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return prisma.knowledgeBase.update({
     where: { id: entryId },
@@ -126,6 +135,7 @@ export async function deleteKnowledgeBaseEntry(userId: string, entryId: string) 
     throw new Error("Knowledge base entry tidak ditemukan.");
   }
 
+  invalidateTtlCache(`knowledge-context:${business.id}`);
   await prisma.knowledgeBase.delete({ where: { id: entryId } });
 }
 
@@ -136,6 +146,7 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
   if (!template) {
     throw new Error("Template knowledge tidak ditemukan.");
   }
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return prisma.knowledgeBase.create({
     data: {
@@ -203,6 +214,7 @@ export async function generateStarterKnowledge(userId: string) {
     user: JSON.stringify(business),
   });
   const entries = Array.isArray(result.data.entries) ? result.data.entries.slice(0, 5) : fallback.entries;
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 
   await Promise.all(
     entries.map((entry) =>

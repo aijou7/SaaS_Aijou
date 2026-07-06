@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 
 export type AgentRuntimeSettings = {
   agentName: string;
@@ -33,11 +34,12 @@ export async function getAgentSettingsPage(userId: string) {
 }
 
 export async function getAgentRuntimeSettings(businessId: string) {
-  return ensureAgentSettings(businessId);
+  return ttlCache(`agent-runtime:${businessId}`, 30_000, () => ensureAgentSettings(businessId));
 }
 
 export async function updateAgentSettings(userId: string, input: AgentSettingsInput) {
   const business = await requireBusinessForUser(userId);
+  invalidateTtlCache(`agent-runtime:${business.id}`);
 
   return prisma.agentSettings.upsert({
     where: { businessId: business.id },

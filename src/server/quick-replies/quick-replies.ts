@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 
 const defaultQuickReplies = [
   {
@@ -101,23 +102,26 @@ export async function getActiveQuickRepliesForUser(userId: string) {
 
   await ensureDefaultQuickReplies(business.id);
 
-  return prisma.quickReply.findMany({
-    where: { businessId: business.id, isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    take: 8,
-    select: {
-      id: true,
-      name: true,
-      content: true,
-      shortcut: true,
-      category: true,
-    },
-  });
+  return ttlCache(`quick-replies-active:${business.id}`, 30_000, () =>
+    prisma.quickReply.findMany({
+      where: { businessId: business.id, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      take: 8,
+      select: {
+        id: true,
+        name: true,
+        content: true,
+        shortcut: true,
+        category: true,
+      },
+    }),
+  );
 }
 
 export async function createQuickReply(userId: string, formData: FormData) {
   const business = await requireBusinessForUser(userId);
   const input = parseQuickReplyFormData(formData);
+  invalidateTtlCache(`quick-replies-active:${business.id}`);
 
   return prisma.quickReply.create({
     data: {
@@ -130,6 +134,7 @@ export async function createQuickReply(userId: string, formData: FormData) {
 export async function updateQuickReply(userId: string, quickReplyId: string, formData: FormData) {
   const business = await requireBusinessForUser(userId);
   const input = parseQuickReplyFormData(formData);
+  invalidateTtlCache(`quick-replies-active:${business.id}`);
 
   return prisma.quickReply.update({
     where: { id: quickReplyId, businessId: business.id },
@@ -139,6 +144,7 @@ export async function updateQuickReply(userId: string, quickReplyId: string, for
 
 export async function deleteQuickReply(userId: string, quickReplyId: string) {
   const business = await requireBusinessForUser(userId);
+  invalidateTtlCache(`quick-replies-active:${business.id}`);
 
   return prisma.quickReply.delete({
     where: { id: quickReplyId, businessId: business.id },

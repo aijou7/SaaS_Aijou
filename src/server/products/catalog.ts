@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 
 type ProductInput = {
   name: string;
@@ -34,6 +35,12 @@ export async function getProductsPage(userId: string) {
 }
 
 export async function getActiveProductContext(businessId: string) {
+  return ttlCache(`product-context:${businessId}`, 60_000, () =>
+    getActiveProductContextFresh(businessId),
+  );
+}
+
+async function getActiveProductContextFresh(businessId: string) {
   const products = await prisma.product.findMany({
     where: { businessId, isActive: true },
     orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }],
@@ -52,13 +59,17 @@ export async function getActiveProductContext(businessId: string) {
         currency: product.currency,
         maximumFractionDigits: 0,
       }).format(Number(product.price));
-      return [product.name, product.description, `Harga mulai: ${price}`].filter(Boolean).join(" — ");
+      return [product.name, product.description, `Harga mulai: ${price}`]
+        .filter(Boolean)
+        .join(" — ");
     })
     .join("\n");
 }
 
 export async function createProduct(userId: string, input: ProductInput) {
   const business = await requireBusinessForUser(userId);
+  invalidateTtlCache(`product-context:${business.id}`);
+
   return prisma.product.create({
     data: {
       businessId: business.id,
@@ -73,6 +84,7 @@ export async function createProduct(userId: string, input: ProductInput) {
 export async function updateProduct(userId: string, productId: string, input: ProductInput) {
   const business = await requireBusinessForUser(userId);
   await ensureProductBelongsToBusiness(productId, business.id);
+  invalidateTtlCache(`product-context:${business.id}`);
 
   return prisma.product.update({
     where: { id: productId },
@@ -88,6 +100,8 @@ export async function updateProduct(userId: string, productId: string, input: Pr
 export async function deleteProduct(userId: string, productId: string) {
   const business = await requireBusinessForUser(userId);
   await ensureProductBelongsToBusiness(productId, business.id);
+  invalidateTtlCache(`product-context:${business.id}`);
+
   await prisma.product.delete({ where: { id: productId } });
 }
 

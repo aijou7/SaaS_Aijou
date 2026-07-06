@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { MessageType, SenderType } from "@/generated/prisma/client";
+import { checkAbuseLimit, generousChatRules, getClientIp } from "@/lib/abuse-guard";
 import { prisma } from "@/lib/prisma";
+import { ttlCache } from "@/lib/ttl-cache";
 import { simulateCustomerMessage } from "@/server/conversations/conversations";
 
 const allowedOrigins = new Set([
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
   const message = typeof body?.message === "string" ? body.message.trim() : "";
   const visitorName = typeof body?.visitorName === "string" ? body.visitorName.trim() : "";
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
+  const clientMessageId = typeof body?.clientMessageId === "string" ? body.clientMessageId.trim() : "";
 
   if (!message || message.length > 1200) {
     return json(request, { error: "Pesan wajib diisi dan maksimal 1200 karakter." }, 400);
@@ -42,12 +45,30 @@ export async function POST(request: NextRequest) {
   }
 
   const visitorKey = getVisitorKey(origin, sessionId || visitorName || "anonymous");
+  const abuseKey = `web-chat:${origin}:${visitorKey}:${getClientIp(request)}`;
+  const abuseCheck = checkAbuseLimit(abuseKey, generousChatRules);
+
+  if (!abuseCheck.allowed) {
+    return json(
+      request,
+      {
+        error: "Traffic chat terlalu tinggi untuk sesi ini. Coba lagi sebentar ya.",
+        retryAfterSeconds: abuseCheck.retryAfterSeconds,
+      },
+      429,
+      { "Retry-After": String(abuseCheck.retryAfterSeconds) },
+    );
+  }
+  const providerMessageId = clientMessageId
+    ? `web-${getVisitorKey(origin, `${sessionId}:${clientMessageId}`)}`
+    : undefined;
 
   const result = await simulateCustomerMessage(business.userId, {
     phoneNumber: `web-${visitorKey}`,
     displayName: visitorName.slice(0, 80) || "Pengunjung website",
     message,
     leadSource: "WEB_CHAT",
+    providerMessageId,
   });
 
   return json(request, {
@@ -56,6 +77,7 @@ export async function POST(request: NextRequest) {
       result.aiReply ??
       "Pesanmu sudah diterima. Tim Aijou akan melanjutkan percakapan ini secepatnya.",
     handoff: result.status === "HUMAN_NEEDED",
+    deduped: result.deduped ?? false,
     lead: result.leadSummary
       ? {
           status: result.leadSummary.status,
@@ -117,8 +139,16 @@ export async function GET(request: NextRequest) {
   });
 }
 
-function json(request: NextRequest, body: Record<string, unknown>, status = 200) {
-  return NextResponse.json(body, { status, headers: corsHeaders(request) });
+function json(
+  request: NextRequest,
+  body: Record<string, unknown>,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: { ...corsHeaders(request), ...extraHeaders },
+  });
 }
 
 function corsHeaders(request: NextRequest): Record<string, string> {
@@ -138,10 +168,12 @@ function corsHeaders(request: NextRequest): Record<string, string> {
 
 async function getWebsiteBusiness(origin: string) {
   const hostname = new URL(origin).hostname;
-  return prisma.business.findFirst({
-    where: { websiteUrl: { contains: hostname } },
-    select: { id: true, userId: true },
-  });
+  return ttlCache(`website-business:${hostname}`, 60_000, () =>
+    prisma.business.findFirst({
+      where: { websiteUrl: { contains: hostname } },
+      select: { id: true, userId: true },
+    }),
+  );
 }
 
 function getVisitorKey(origin: string, sessionKey: string) {
