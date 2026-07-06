@@ -50,8 +50,7 @@ body {
 }
 
 .route-loading {
-  min-height: 100vh;
-  background: var(--background);
+  pointer-events: none;
 }
 
 .route-loading-bar {
@@ -66,69 +65,31 @@ body {
   animation: route-progress 900ms ease-in-out infinite;
 }
 
-.route-loading-shell {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 16px;
-  padding: 72px 14px 14px;
-}
-
-.route-loading-sidebar,
-.route-loading-main {
+.route-loading-pill {
+  position: fixed;
+  top: 72px;
+  right: 18px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #ffffff;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow-sm);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 11px;
+  backdrop-filter: blur(12px);
 }
 
-.route-loading-sidebar {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  min-height: calc(100vh - 86px);
-  padding: 18px;
-}
-
-.route-loading-sidebar span,
-.loading-title,
-.loading-metrics span,
-.loading-panel {
-  display: block;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #f1f5f9, #e2e8f0, #f1f5f9);
-  background-size: 220% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
-}
-
-.route-loading-sidebar span {
-  height: 34px;
-}
-
-.route-loading-main {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-  min-height: calc(100vh - 86px);
-  padding: 24px;
-}
-
-.loading-title {
-  width: min(420px, 70%);
-  height: 34px;
-}
-
-.loading-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.loading-metrics span {
-  height: 110px;
-}
-
-.loading-panel {
-  height: 360px;
+.route-loading-pill span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: loading-pulse 900ms ease-in-out infinite;
 }
 
 a {
@@ -3904,6 +3865,19 @@ sup {
   }
 }
 
+@keyframes loading-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .ai-log-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4064,19 +4038,6 @@ sup {
   .app-workspace {
     grid-template-columns: 1fr;
     padding: 10px;
-  }
-
-  .route-loading-shell {
-    grid-template-columns: 1fr;
-    padding: 70px 10px 10px;
-  }
-
-  .route-loading-sidebar {
-    min-height: auto;
-  }
-
-  .loading-metrics {
-    grid-template-columns: 1fr;
   }
 
   .chat-workspace {
