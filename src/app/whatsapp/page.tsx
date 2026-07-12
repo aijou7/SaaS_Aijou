@@ -47,7 +47,7 @@ export default async function WhatsAppSettingsPage() {
         <div className="card">
           <ShieldCheck size={22} aria-hidden="true" />
           <h2>Webhook</h2>
-          <div className="metric">{page.settings?.verifyToken ? "Token set" : "Missing"}</div>
+          <div className="metric">{page.settings?.verifyTokenSet ? "Token set" : "Missing"}</div>
           <p className="muted">Verify token dan app secret untuk Meta webhook.</p>
         </div>
       </section>
@@ -131,8 +131,8 @@ export default async function WhatsAppSettingsPage() {
           <div className="settings-note">
             <strong>Catatan security MVP</strong>
             <p>
-              Credential disimpan di database lokal. Untuk production SaaS nanti sebaiknya
-              dienkripsi per tenant sebelum disimpan.
+              Credential dienkripsi per workspace sebelum disimpan. Jangan pernah membagikan
+              access token, verify token, app secret, atau encryption key lewat chat.
             </p>
           </div>
         </div>

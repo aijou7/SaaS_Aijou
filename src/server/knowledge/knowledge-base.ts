@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  buildKnowledgePromptContext,
+  normalizeKnowledgeTextInput,
+} from "@/lib/knowledge-limits";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 import { callGroqJson } from "@/server/ai/groq";
 
@@ -9,7 +13,10 @@ type KnowledgeBaseInput = {
   isActive?: boolean;
 };
 
-export async function getKnowledgeBasePage(userId: string) {
+export async function getKnowledgeBasePage(
+  userId: string,
+  filters: { page?: number; q?: string } = {},
+) {
   const business = await getBusinessForUser(userId);
 
   if (!business) {
@@ -17,13 +24,31 @@ export async function getKnowledgeBasePage(userId: string) {
       business: null,
       entries: [],
       activeCount: 0,
+      pagination: { page: 1, pageCount: 1, pageSize: 20, total: 0 },
     };
   }
 
-  const [entries, activeCount] = await Promise.all([
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const pageSize = 20;
+  const query = filters.q?.trim().slice(0, 120) || undefined;
+  const where = {
+    businessId: business.id,
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" as const } },
+            { category: { contains: query, mode: "insensitive" as const } },
+            { content: { contains: query, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+  const [entries, total, activeCount] = await Promise.all([
     prisma.knowledgeBase.findMany({
-      where: { businessId: business.id },
+      where,
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         title: true,
@@ -33,6 +58,7 @@ export async function getKnowledgeBasePage(userId: string) {
         updatedAt: true,
       },
     }),
+    prisma.knowledgeBase.count({ where }),
     prisma.knowledgeBase.count({
       where: { businessId: business.id, isActive: true },
     }),
@@ -41,6 +67,12 @@ export async function getKnowledgeBasePage(userId: string) {
   return {
     business,
     activeCount,
+    pagination: {
+      page,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
+      pageSize,
+      total,
+    },
     entries: entries.map((entry) => ({
       ...entry,
       updatedAt: entry.updatedAt.toISOString().slice(0, 10),
@@ -61,7 +93,6 @@ async function getActiveKnowledgeContextFresh(businessId: string) {
       isActive: true,
     },
     orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
-    take: 20,
     select: {
       title: true,
       category: true,
@@ -73,28 +104,25 @@ async function getActiveKnowledgeContextFresh(businessId: string) {
     return "Belum ada knowledge base. Jawab secara umum dan kumpulkan kebutuhan customer tanpa membuat klaim spesifik.";
   }
 
-  return entries
-    .map((entry) =>
-      [`Title: ${entry.title}`, `Category: ${entry.category ?? "general"}`, entry.content].join(
-        "\n",
-      ),
-    )
-    .join("\n\n---\n\n");
+  return buildKnowledgePromptContext(entries);
 }
 
 export async function createKnowledgeBaseEntry(userId: string, input: KnowledgeBaseInput) {
   const business = await requireBusinessForUser(userId);
-  invalidateTtlCache(`knowledge-context:${business.id}`);
+  const normalized = normalizeKnowledgeTextInput(input);
 
-  return prisma.knowledgeBase.create({
+  const entry = await prisma.knowledgeBase.create({
     data: {
       businessId: business.id,
-      title: input.title.trim(),
-      content: input.content.trim(),
-      category: cleanOptional(input.category),
+      title: normalized.title,
+      content: normalized.content,
+      category: normalized.category,
       isActive: input.isActive ?? true,
     },
   });
+  invalidateTtlCache(`knowledge-context:${business.id}`);
+
+  return entry;
 }
 
 export async function updateKnowledgeBaseEntry(
@@ -103,6 +131,7 @@ export async function updateKnowledgeBaseEntry(
   input: KnowledgeBaseInput,
 ) {
   const business = await requireBusinessForUser(userId);
+  const normalized = normalizeKnowledgeTextInput(input);
   const existing = await prisma.knowledgeBase.findFirst({
     where: { id: entryId, businessId: business.id },
     select: { id: true },
@@ -111,17 +140,18 @@ export async function updateKnowledgeBaseEntry(
   if (!existing) {
     throw new Error("Knowledge base entry tidak ditemukan.");
   }
-  invalidateTtlCache(`knowledge-context:${business.id}`);
-
-  return prisma.knowledgeBase.update({
+  const entry = await prisma.knowledgeBase.update({
     where: { id: entryId },
     data: {
-      title: input.title.trim(),
-      content: input.content.trim(),
-      category: cleanOptional(input.category),
+      title: normalized.title,
+      content: normalized.content,
+      category: normalized.category,
       isActive: input.isActive ?? true,
     },
   });
+  invalidateTtlCache(`knowledge-context:${business.id}`);
+
+  return entry;
 }
 
 export async function deleteKnowledgeBaseEntry(userId: string, entryId: string) {
@@ -135,8 +165,11 @@ export async function deleteKnowledgeBaseEntry(userId: string, entryId: string) 
     throw new Error("Knowledge base entry tidak ditemukan.");
   }
 
+  await prisma.knowledgeBase.update({
+    where: { id: entryId },
+    data: { isActive: false },
+  });
   invalidateTtlCache(`knowledge-context:${business.id}`);
-  await prisma.knowledgeBase.delete({ where: { id: entryId } });
 }
 
 export async function createKnowledgeTemplate(userId: string, templateKey: string) {
@@ -146,9 +179,7 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
   if (!template) {
     throw new Error("Template knowledge tidak ditemukan.");
   }
-  invalidateTtlCache(`knowledge-context:${business.id}`);
-
-  return prisma.knowledgeBase.create({
+  const entry = await prisma.knowledgeBase.create({
     data: {
       businessId: business.id,
       title: template.title,
@@ -157,6 +188,9 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
       isActive: true,
     },
   });
+  invalidateTtlCache(`knowledge-context:${business.id}`);
+
+  return entry;
 }
 
 export async function generateStarterKnowledge(userId: string) {
@@ -214,35 +248,36 @@ export async function generateStarterKnowledge(userId: string) {
     user: JSON.stringify(business),
   });
   const entries = Array.isArray(result.data.entries) ? result.data.entries.slice(0, 5) : fallback.entries;
-  invalidateTtlCache(`knowledge-context:${business.id}`);
 
   await Promise.all(
-    entries.map((entry) =>
-      prisma.knowledgeBase.create({
+    entries.map((entry) => {
+      const normalized = normalizeKnowledgeTextInput({
+        title: entry.title || "Starter knowledge",
+        category: entry.category || "general",
+        content: entry.content || "Lengkapi knowledge ini.",
+      });
+
+      return prisma.knowledgeBase.create({
         data: {
           businessId: business.id,
-          title: entry.title || "Starter knowledge",
-          category: entry.category || "general",
-          content: entry.content || "Lengkapi knowledge ini.",
+          ...normalized,
           isActive: true,
         },
-      }),
-    ),
+      });
+    }),
   );
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 }
 
 export function parseKnowledgeBaseFormData(formData: FormData) {
-  const title = String(formData.get("title") ?? "").trim();
-  const content = String(formData.get("content") ?? "").trim();
-
-  if (!title || !content) {
-    throw new Error("Title dan content wajib diisi.");
-  }
+  const normalized = normalizeKnowledgeTextInput({
+    title: String(formData.get("title") ?? ""),
+    content: String(formData.get("content") ?? ""),
+    category: String(formData.get("category") ?? ""),
+  });
 
   return {
-    title,
-    content,
-    category: String(formData.get("category") ?? ""),
+    ...normalized,
     isActive: formData.get("isActive") === "on",
   } satisfies KnowledgeBaseInput;
 }
@@ -262,11 +297,6 @@ async function requireBusinessForUser(userId: string) {
   }
 
   return business;
-}
-
-function cleanOptional(value?: string) {
-  const cleaned = value?.trim();
-  return cleaned ? cleaned : undefined;
 }
 
 export const knowledgeTemplates = [

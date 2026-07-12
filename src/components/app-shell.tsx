@@ -7,7 +7,6 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   CircleHelp,
   Code2,
   FileText,
@@ -16,14 +15,12 @@ import {
   MessageCircle,
   Package,
   ReceiptText,
-  Search,
   Send,
   Settings,
   Tags,
   TrendingUp,
   UserCircle,
   WalletCards,
-  X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -62,8 +59,10 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     title: "Ruang kerja",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
+      { href: "/business", label: "Profil bisnis", icon: Building2, key: "business" },
       { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup" },
       { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage" },
+      { href: "/account", label: "Keamanan akun", icon: Settings, key: "account" },
     ],
   },
   inbox: {
@@ -104,7 +103,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     items: [
       { href: "/payments", label: "Setup pembayaran", icon: WalletCards, key: "payments" },
       { href: "/transactions", label: "Pesanan & penjualan", icon: Package, key: "transactions" },
-      { href: "/transactions?view=payment-settings", label: "Pengaturan Xendit", icon: ReceiptText, key: "xendit-settings" },
+      { href: "/receipts", label: "Review receipt", icon: ReceiptText, key: "receipts" },
     ],
   },
   reports: {
@@ -127,8 +126,10 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
 
 const moduleByActive: Record<string, ModuleKey> = {
   dashboard: "settings",
+  business: "settings",
   setup: "settings",
   usage: "settings",
+  account: "settings",
   conversations: "inbox",
   leads: "inbox",
   proposals: "inbox",
@@ -141,6 +142,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   products: "products",
   transactions: "payments",
   payments: "payments",
+  receipts: "payments",
   reports: "reports",
   integrations: "integrations",
   whatsapp: "integrations",
@@ -209,13 +211,12 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <Link className="top-icon-button" href="/ai-activity" aria-label="Notifications" data-tooltip="AI activity">
             <Bell size={17} aria-hidden="true" />
           </Link>
-          <div className="user-chip">
+          <Link className="user-chip" href="/account" aria-label="Buka keamanan akun">
             <span className="avatar-dot">
               <UserCircle size={20} aria-hidden="true" />
             </span>
             <strong>Owner</strong>
-            <ChevronDown size={15} aria-hidden="true" />
-          </div>
+          </Link>
         </div>
       </header>
 
@@ -223,7 +224,6 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <aside className="settings-sidebar">
             <div className="settings-panel-header">
               <strong>{activeNavigation.title}</strong>
-              <X size={16} aria-hidden="true" />
             </div>
 
             <div className="settings-account">
@@ -235,11 +235,6 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
                 <span>{groqConfigured ? "Aijou AI terhubung" : "Workspace Aijou"}</span>
               </div>
             </div>
-
-            <label className="settings-search">
-              <Search size={15} aria-hidden="true" />
-              <input type="search" placeholder="Cari menu" />
-            </label>
 
             <nav className="settings-nav" aria-label="Settings navigation">
               {activeNavigation.items.map((item) => {
@@ -288,7 +283,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
               <div className="workspace-meta" aria-label="Workspace status">
                 <span className="meta-pill">
                   <BadgeCheck size={14} aria-hidden="true" />
-                  Workspace siap
+                  Private beta
                 </span>
                 <span className={groqConfigured ? "meta-pill" : "meta-pill meta-pill-warning"}>
                   <Zap size={14} aria-hidden="true" />

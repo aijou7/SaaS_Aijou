@@ -8,6 +8,12 @@ import {
   importTextKnowledgeAction,
 } from "@/app/knowledge/actions";
 import { AppShell } from "@/components/app-shell";
+import {
+  knowledgeCategoryMaxChars,
+  knowledgeContentMaxChars,
+  knowledgeImportMaxBytes,
+  knowledgeTitleMaxChars,
+} from "@/lib/knowledge-limits";
 import { getSession } from "@/lib/session";
 import { getKnowledgeBasePage, knowledgeTemplates } from "@/server/knowledge/knowledge-base";
 
@@ -64,16 +70,28 @@ export default async function TrainingPage() {
             <form className="form-grid" action={createKnowledgeBaseAction}>
               <label>
                 Title
-                <input name="title" type="text" placeholder="FAQ harga instalasi WiFi" required />
+                <input
+                  name="title"
+                  type="text"
+                  maxLength={knowledgeTitleMaxChars}
+                  placeholder="FAQ harga instalasi WiFi"
+                  required
+                />
               </label>
               <label>
                 Category
-                <input name="category" type="text" placeholder="faq / product / closing / policy" />
+                <input
+                  name="category"
+                  type="text"
+                  maxLength={knowledgeCategoryMaxChars}
+                  placeholder="faq / product / closing / policy"
+                />
               </label>
               <label className="span-2">
                 Content
                 <textarea
                   name="content"
+                  maxLength={knowledgeContentMaxChars}
                   placeholder="Tulis jawaban yang boleh dipakai AI. Misal: harga mulai dari..., minta lokasi..., cara closing..."
                   required
                 />
@@ -94,20 +112,38 @@ export default async function TrainingPage() {
             <form className="form-grid" action={importTextKnowledgeAction}>
               <label>
                 Title
-                <input name="title" type="text" placeholder="Contoh closing chat bulan Juni" />
+                <input
+                  name="title"
+                  type="text"
+                  maxLength={knowledgeTitleMaxChars}
+                  placeholder="Contoh closing chat bulan Juni"
+                />
               </label>
               <label>
                 Category
-                <input name="category" type="text" defaultValue="imported-chat" />
+                <input
+                  name="category"
+                  type="text"
+                  maxLength={knowledgeCategoryMaxChars}
+                  defaultValue="imported-chat"
+                />
               </label>
               <label className="span-2">
                 Upload .txt
-                <input name="file" type="file" accept=".txt,text/plain" />
+                <input
+                  name="file"
+                  type="file"
+                  accept=".txt,.md,.csv,text/plain,text/markdown,text/csv"
+                />
+                <small className="muted">
+                  Maksimal {Math.round(knowledgeImportMaxBytes / 1024)} KB per file.
+                </small>
               </label>
               <label className="span-2">
                 Atau paste percakapan
                 <textarea
                   name="pastedText"
+                  maxLength={knowledgeContentMaxChars}
                   placeholder="Customer: Kak harga pasang WiFi berapa?\nAdmin: Boleh info lokasi dan jumlah titik dulu ya..."
                 />
               </label>

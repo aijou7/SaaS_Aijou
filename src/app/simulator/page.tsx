@@ -51,7 +51,7 @@ export default async function SimulatorPage() {
         <section className="grid" aria-label="Simulator summary">
           <div className="card">
             <Sparkles size={22} aria-hidden="true" />
-            <h2>Spend Bulan Ini</h2>
+            <h2>Revenue Bulan Ini</h2>
             <div className="metric">
               {new Intl.NumberFormat("id-ID", {
                 style: "currency",
@@ -59,7 +59,7 @@ export default async function SimulatorPage() {
                 maximumFractionDigits: 0,
               }).format(dashboard.totalThisMonth)}
             </div>
-            <p className="muted">Naik setelah transaksi confirmed.</p>
+            <p className="muted">Order income yang sudah confirmed.</p>
           </div>
           <div className="card">
             <MessageCircle size={22} aria-hidden="true" />

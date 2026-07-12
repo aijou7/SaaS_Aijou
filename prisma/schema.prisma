@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../generated/prisma-beta"
 }
 
 datasource db {
@@ -106,17 +106,38 @@ enum ActorType {
   SYSTEM
 }
 
+enum PaymentProvider {
+  XENDIT
+  MANUAL
+}
+
+enum PaymentSessionStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum BackgroundJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  passwordHash String
-  phoneNumber  String?
-  role         UserRole      @default(OWNER)
-  businesses   Business[]
-  transactions Transaction[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  name            String
+  email           String        @unique
+  passwordHash    String
+  phoneNumber     String?
+  role            UserRole      @default(OWNER)
+  isPlatformAdmin Boolean       @default(false)
+  businesses      Business[]
+  transactions    Transaction[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@map("users")
 }
@@ -131,6 +152,7 @@ model Business {
   operatingHours       String?
   mainServices         String?
   websiteUrl           String?
+  widgetKey            String                 @unique @default(cuid())
   address              String?
   onboardingCompleted  Boolean                @default(false)
   user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -149,11 +171,16 @@ model Business {
   leads                Lead[]
   proposalDrafts       ProposalDraft[]
   quickReplies         QuickReply[]
+  paymentSettings      PaymentSettings?
+  paymentSessions      PaymentSession[]
+  backgroundJobs       BackgroundJob[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
+  @@unique([userId])
+  @@index([websiteUrl])
   @@map("businesses")
 }
 
@@ -182,6 +209,10 @@ model WhatsAppConversation {
   ownerLastReadAt      DateTime?
   ownerNotes           String?
   resolvedAt           DateTime?
+  channel              String                @default("WHATSAPP")
+  sessionExpiresAt     DateTime?
+  lastCustomerMessageAt DateTime?
+  unreadCount          Int                   @default(0)
   business             Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
   contact              Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
   messages             WhatsAppMessage[]
@@ -194,6 +225,9 @@ model WhatsAppConversation {
 
   @@index([businessId, lastMessageAt])
   @@index([businessId, ownerLastReadAt])
+  @@index([businessId, status, lastMessageAt])
+  @@index([businessId, conversationType, lastMessageAt])
+  @@index([businessId, channel, sessionExpiresAt])
   @@map("whatsapp_conversations")
 }
 
@@ -208,6 +242,9 @@ model WhatsAppMessage {
   rawPayload        Json?
   intent            String?
   processingStatus  ProcessingStatus     @default(RECEIVED)
+  deliveryStatus    String               @default("STORED")
+  deliveryError     String?
+  deliveredAt       DateTime?
   conversation      WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   mediaFile         MediaFile?           @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
   aiLogs            AiLog[]
@@ -258,12 +295,15 @@ model Transaction {
   project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   items                TransactionItem[]
   receipt              Receipt?
+  paymentSessions      PaymentSession[]
   confirmationSessions ConfirmationSession[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
   @@index([businessId, transactionDate])
   @@index([businessId, status])
+  @@index([businessId, transactionType, status, transactionDate])
+  @@index([businessId, createdAt])
   @@map("transactions")
 }
 
@@ -323,6 +363,7 @@ model Receipt {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  @@index([reviewStatus, createdAt])
   @@map("receipts")
 }
 
@@ -411,6 +452,7 @@ model WhatsAppSettings {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@unique([phoneNumberId])
   @@map("whatsapp_settings")
 }
 
@@ -468,6 +510,9 @@ model ProposalDraft {
   disclaimer        String
   status            String   @default("DRAFT")
   generatedBy       String   @default("AI")
+  proposalNumber    String?
+  validUntil        DateTime?
+  version           Int      @default(1)
   business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   createdAt         DateTime @default(now())
@@ -475,7 +520,87 @@ model ProposalDraft {
 
   @@index([businessId, status, createdAt])
   @@index([leadId, createdAt])
+  @@unique([businessId, proposalNumber])
   @@map("proposal_drafts")
+}
+
+model PaymentSettings {
+  id                 String   @id @default(cuid())
+  businessId         String   @unique
+  provider           PaymentProvider @default(XENDIT)
+  secretKey          String?
+  webhookToken       String?
+  isActive           Boolean  @default(false)
+  testMode           Boolean  @default(true)
+  manualInstructions String?
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("payment_settings")
+}
+
+model PaymentSession {
+  id                String               @id @default(cuid())
+  businessId        String
+  transactionId     String
+  provider          PaymentProvider      @default(XENDIT)
+  referenceId       String               @unique
+  providerSessionId String?              @unique
+  paymentLinkUrl    String?
+  amount            Decimal              @db.Decimal(14, 2)
+  currency          String               @default("IDR")
+  status            PaymentSessionStatus @default(PENDING)
+  expiresAt         DateTime?
+  completedAt       DateTime?
+  rawPayload        Json?
+  lastError         String?
+  business          Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transaction       Transaction          @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([businessId, status, createdAt])
+  @@index([transactionId, createdAt])
+  @@map("payment_sessions")
+}
+
+model BetaInvite {
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  email        String?
+  businessName String?
+  createdById  String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  usedById     String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdById, createdAt])
+  @@index([expiresAt, usedAt])
+  @@map("beta_invites")
+}
+
+model BackgroundJob {
+  id          String              @id @default(cuid())
+  businessId  String
+  type        String
+  dedupeKey   String?             @unique
+  payload     Json
+  status      BackgroundJobStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+  runAfter    DateTime            @default(now())
+  lockedAt    DateTime?
+  lastError   String?
+  completedAt DateTime?
+  business    Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, runAfter])
+  @@index([businessId, type, createdAt])
+  @@map("background_jobs")
 }
 
 model ConfirmationSession {
@@ -523,6 +648,13 @@ model UsageLog {
   totalMessages   Int      @default(0)
   totalAiRequests Int      @default(0)
   estimatedCost   Decimal? @db.Decimal(14, 4)
+  requestId       String?  @unique
+  model           String?
+  inputTokens     Int?
+  outputTokens    Int?
+  latencyMs       Int?
+  status          String   @default("SUCCESS")
+  errorCode       String?
   business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
 

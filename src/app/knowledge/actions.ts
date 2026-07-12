@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { knowledgeImportMaxBytes } from "@/lib/knowledge-limits";
 import { getSession } from "@/lib/session";
 import {
   createKnowledgeTemplate,
@@ -24,7 +25,19 @@ export async function importTextKnowledgeAction(formData: FormData) {
   const pastedText = String(formData.get("pastedText") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim() || "Imported WhatsApp conversation";
   const category = String(formData.get("category") ?? "").trim() || "imported-chat";
-  const fileText = file instanceof File ? (await file.text()).trim() : "";
+  const hasFile = file instanceof File && file.size > 0;
+
+  if (hasFile && file.size > knowledgeImportMaxBytes) {
+    throw new Error(
+      `File terlalu besar. Maksimal ${Math.round(knowledgeImportMaxBytes / 1024)} KB per import; pecah file menjadi beberapa knowledge item.`,
+    );
+  }
+
+  if (hasFile && !isSupportedTextFile(file)) {
+    throw new Error("Format file belum didukung. Gunakan file .txt, .md, atau .csv.");
+  }
+
+  const fileText = hasFile ? (await file.text()).trim() : "";
   const content = [pastedText, fileText].filter(Boolean).join("\n\n--- imported file ---\n\n");
 
   if (!content) {
@@ -38,6 +51,17 @@ export async function importTextKnowledgeAction(formData: FormData) {
     isActive: true,
   });
   revalidateKnowledgePaths();
+}
+
+function isSupportedTextFile(file: File) {
+  const filename = file.name.toLowerCase();
+  return (
+    !file.type ||
+    file.type.startsWith("text/") ||
+    filename.endsWith(".txt") ||
+    filename.endsWith(".md") ||
+    filename.endsWith(".csv")
+  );
 }
 
 export async function updateKnowledgeBaseAction(formData: FormData) {

@@ -1,5 +1,6 @@
 import { CheckCircle2, ReceiptText, XCircle } from "lucide-react";
 import type { Route } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
@@ -10,14 +11,20 @@ import {
 import { formatAmountForInput, formatCurrencyIDR } from "@/server/finance/transactions";
 import { getReceiptReviewPage } from "@/server/receipts/receipt-flow";
 
-export default async function ReceiptsPage() {
+type ReceiptsPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const page = await getReceiptReviewPage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const pageNumber = Math.max(1, Number(getSingleParam(params.page) ?? 1) || 1);
+  const page = await getReceiptReviewPage(session.userId, { page: pageNumber });
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -68,7 +75,9 @@ export default async function ReceiptsPage() {
           <div className="card">
             <div className="section-header">
               <h2>Receipt Inbox</h2>
-              <span className="muted">{page.receipts.length} receipt tampil</span>
+              <span className="muted">
+                {page.receipts.length} dari {page.pagination.total} receipt tampil
+              </span>
             </div>
 
             {page.receipts.length === 0 ? (
@@ -108,6 +117,35 @@ export default async function ReceiptsPage() {
 
                     <div className="receipt-review-grid">
                       <div>
+                        <h3>Foto receipt</h3>
+                        {receipt.mediaFile.storagePath || receipt.mediaFile.fileUrl ? (
+                          <a
+                            href={`/api/receipts/${encodeURIComponent(receipt.id)}/media`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Buka foto receipt asli di tab baru"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/receipts/${encodeURIComponent(receipt.id)}/media`}
+                              alt={`Receipt ${receipt.transaction.merchantName || receipt.createdAt}`}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              style={{
+                                display: "block",
+                                maxHeight: 420,
+                                width: "100%",
+                                objectFit: "contain",
+                                borderRadius: 12,
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <p className="muted">
+                            Preview gambar tidak tersedia. Media lama atau file lokal hanya bisa
+                            dibuka dari storage server.
+                          </p>
+                        )}
                         <h3>OCR Raw Text</h3>
                         <pre className="ocr-box">
                           {receipt.rawOcrText || "Belum ada raw OCR text."}
@@ -143,6 +181,7 @@ export default async function ReceiptsPage() {
                             type="text"
                             defaultValue={receipt.transaction.merchantName}
                             placeholder="Toko Sinar Jaya"
+                            maxLength={120}
                           />
                         </label>
                         <label>
@@ -152,6 +191,7 @@ export default async function ReceiptsPage() {
                             list="receipt-category-options"
                             defaultValue={receipt.transaction.categoryName}
                             placeholder="Perlengkapan kantor"
+                            maxLength={100}
                           />
                         </label>
                         <label>
@@ -161,6 +201,7 @@ export default async function ReceiptsPage() {
                             list="receipt-project-options"
                             defaultValue={receipt.transaction.projectName}
                             placeholder="Kantor A"
+                            maxLength={120}
                           />
                         </label>
                         <label>
@@ -170,6 +211,7 @@ export default async function ReceiptsPage() {
                             type="text"
                             defaultValue={receipt.transaction.description}
                             placeholder="Nota belanja"
+                            maxLength={500}
                           />
                         </label>
                         <div className="form-actions span-2">
@@ -190,6 +232,24 @@ export default async function ReceiptsPage() {
                 ))}
               </div>
             )}
+
+            {page.pagination.pageCount > 1 ? (
+              <nav className="orders-pagination" aria-label="Pagination receipt">
+                {page.pagination.page > 1 ? (
+                  <Link className="ghost-button" href={`/receipts?page=${page.pagination.page - 1}`}>
+                    Sebelumnya
+                  </Link>
+                ) : <span />}
+                <span>
+                  Halaman {page.pagination.page} dari {page.pagination.pageCount}
+                </span>
+                {page.pagination.page < page.pagination.pageCount ? (
+                  <Link className="ghost-button" href={`/receipts?page=${page.pagination.page + 1}`}>
+                    Berikutnya
+                  </Link>
+                ) : <span />}
+              </nav>
+            ) : null}
           </div>
         </section>
     </AppShell>
@@ -202,4 +262,8 @@ function formatReceiptStatus(status: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getSingleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

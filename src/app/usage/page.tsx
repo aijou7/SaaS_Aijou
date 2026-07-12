@@ -1,100 +1,60 @@
-import { ChevronUp, RefreshCcw } from "lucide-react";
+import { Activity, Bot, CreditCard, MessageCircle, RadioTower, RefreshCcw } from "lucide-react";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
-import { getBusinessProfilePage } from "@/server/business/profile";
-
-const usageSections = [
-  {
-    title: "Custom Channel",
-    metric: "0",
-    helper: "Channels remaining of 0",
-    used: "0%",
-    progress: 0,
-  },
-  {
-    title: "Chat Credit",
-    metric: "100",
-    helper: "AI Credit remaining of 100",
-    used: "0%",
-    progress: 0,
-    footer: "0 AI Credit remaining",
-    action: "Top up",
-  },
-  {
-    title: "Contact (MAU)",
-    metric: "14",
-    helper: "MAU remaining of 20",
-    used: "30%",
-    progress: 30,
-  },
-  {
-    title: "Automation Runs",
-    metric: "250",
-    helper: "Runs remaining of 250",
-    used: "0%",
-    progress: 0,
-  },
-];
+import { getUsageSnapshot } from "@/server/observability/usage";
 
 export default async function UsagePage() {
   const session = await getSession();
+  if (!session) redirect("/login" as Route);
+  const usage = await getUsageSnapshot(session.userId);
+  if (!usage) redirect("/setup" as Route);
 
-  if (!session) {
-    redirect("/login" as Route);
-  }
-
-  const page = await getBusinessProfilePage(session.userId);
+  const sections = [
+    { title: "Channel aktif", metric: usage.channels, helper: "Web widget + WhatsApp", icon: RadioTower },
+    { title: "Pesan bulan ini", metric: usage.messages, helper: "Inbound dan outbound tersimpan", icon: MessageCircle },
+    { title: "Percakapan aktif", metric: usage.conversations, helper: "Conversation dengan aktivitas bulan ini", icon: Activity },
+    { title: "AI runs", metric: usage.aiRequests, helper: "Reply, lead summary, dan proposal", icon: Bot },
+    { title: "Automation jobs", metric: usage.automationRuns, helper: "Background workflow yang dijadwalkan", icon: RefreshCcw },
+    { title: "Payment sessions", metric: usage.paymentSessions, helper: "Hosted checkout yang dibuat", icon: CreditCard },
+  ];
 
   return (
-    <AppShell active="usage" businessName={page.business?.businessName}>
+    <AppShell active="usage" businessName={usage.businessName}>
       <section className="usage-page content-panel">
         <div className="usage-header">
           <div>
-            <h1>Usage</h1>
-            <p>Monitor quota usage across all active modules</p>
+            <p className="eyebrow">Live metrics</p>
+            <h1>Penggunaan workspace</h1>
+            <p>Angka di bawah dibaca langsung dari aktivitas workspace, bukan data contoh.</p>
           </div>
+          <span className="status">Private beta · tanpa hard limit</span>
         </div>
-
         <div className="usage-plan-card">
           <div className="usage-plan-header">
             <div>
-              <h2>Chat - Free</h2>
-              <p>Renews Jul 4, 2026</p>
+              <h2>Aijou Private Beta</h2>
+              <p>Periode baru mulai {new Date(usage.nextResetAt).toLocaleDateString("id-ID")}</p>
             </div>
-            <ChevronUp size={18} aria-hidden="true" />
           </div>
-
           <div className="usage-section-list">
-            {usageSections.map((section) => (
-              <div className="usage-section" key={section.title}>
-                <div className="usage-section-title">
-                  <h3>{section.title}</h3>
-                  <span>{section.used} used</span>
-                </div>
-                <div className="usage-metric">
-                  <span>{section.title}</span>
-                  <strong>{section.metric}</strong>
-                  <small>{section.helper}</small>
-                </div>
-                <div className="usage-progress">
-                  <span style={{ width: `${section.progress}%` }} />
-                </div>
-                <p className="usage-reset">
-                  <RefreshCcw size={13} aria-hidden="true" />
-                  Limit resets on the 1st of every month
-                </p>
-                {section.footer ? (
-                  <div className="usage-footer-row">
-                    <span>{section.footer}</span>
-                    <button className="ghost-button" type="button">
-                      {section.action}
-                    </button>
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <div className="usage-section" key={section.title}>
+                  <div className="usage-section-title">
+                    <h3>{section.title}</h3>
+                    <Icon size={18} aria-hidden="true" />
                   </div>
-                ) : null}
-              </div>
-            ))}
+                  <div className="usage-metric">
+                    <strong>{section.metric.toLocaleString("id-ID")}</strong>
+                    <small>{section.helper}</small>
+                  </div>
+                  <p className="usage-reset">Tidak ada quota kecil yang memotong kebutuhan chat tester.</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

@@ -11,6 +11,7 @@ type RateLimitResult = {
 };
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
+const maxBuckets = 10_000;
 
 export function getClientIp(request: NextRequest) {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -26,6 +27,7 @@ export function checkAbuseLimit(key: string, rules: RateLimitRule[]): RateLimitR
     const bucket = buckets.get(bucketKey);
 
     if (!bucket || bucket.resetAt <= now) {
+      ensureBucketCapacity(now);
       buckets.set(bucketKey, { count: 1, resetAt: now + rule.windowMs });
       continue;
     }
@@ -40,7 +42,7 @@ export function checkAbuseLimit(key: string, rules: RateLimitRule[]): RateLimitR
     }
   }
 
-  if (buckets.size > 5000) {
+  if (buckets.size > maxBuckets / 2) {
     pruneBuckets(now);
   }
 
@@ -48,6 +50,20 @@ export function checkAbuseLimit(key: string, rules: RateLimitRule[]): RateLimitR
     allowed: retryAfterSeconds === 0,
     retryAfterSeconds,
   };
+}
+
+function ensureBucketCapacity(now: number) {
+  if (buckets.size < maxBuckets) return;
+  pruneBuckets(now);
+  if (buckets.size < maxBuckets) return;
+
+  const toEvict = Math.ceil(maxBuckets * 0.1);
+  let removed = 0;
+  for (const key of buckets.keys()) {
+    buckets.delete(key);
+    removed += 1;
+    if (removed >= toEvict) break;
+  }
 }
 
 export const generousChatRules: RateLimitRule[] = [

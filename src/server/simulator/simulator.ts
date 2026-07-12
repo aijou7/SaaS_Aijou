@@ -1,4 +1,4 @@
-import { MessageType, ProcessingStatus, SenderType } from "@/generated/prisma/client";
+import { MessageType, ProcessingStatus, SenderType } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { extractExpenseFromTextAi } from "@/server/ai/expense-extractor";
 import { detectIntentFromText } from "@/server/ai/intent";

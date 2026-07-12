@@ -13,7 +13,8 @@ yarn-error.log*
 .env
 .env*.local
 
-/generated/prisma
+# Prisma clients are generated during local setup, CI, and production builds.
+/generated/
 
 # Local media downloads
 storage/

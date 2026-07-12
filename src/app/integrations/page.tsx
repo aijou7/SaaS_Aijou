@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
+import { getBusinessProfilePage } from "@/server/business/profile";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
 type IntegrationsPageProps = {
@@ -30,10 +31,16 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
 
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const selectedPlatform = getSingleParam(resolvedSearchParams.platform);
-  const page = await getWhatsAppSettingsPage(session.userId);
+  const [page, businessProfile] = await Promise.all([
+    getWhatsAppSettingsPage(session.userId),
+    getBusinessProfilePage(session.userId),
+  ]);
   const webhookUrl =
     page.settings?.webhookUrl ??
     `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/webhooks/whatsapp`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const widgetKey = businessProfile.business?.widgetKey ?? "";
+  const widgetSnippet = `<script src="${appUrl}/aijou-widget.js" data-workspace="${widgetKey}" defer></script>`;
 
   return (
     <AppShell active="integrations" businessName={page.business?.businessName}>
@@ -72,14 +79,15 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   </span>
                   <strong>{platform.label}</strong>
                   {platform.key === "whatsapp" && page.ready ? <small>Connected</small> : null}
-                  {platform.key !== "whatsapp" ? <small>Coming soon</small> : null}
+                  {platform.key === "live-chat" && businessProfile.business?.websiteUrl ? <small>Ready</small> : null}
+                  {platform.key !== "whatsapp" && platform.key !== "live-chat" ? <small>Coming soon</small> : null}
                 </Link>
               );
             })}
           </div>
         </div>
 
-        {selectedPlatform && selectedPlatform !== "whatsapp" ? (
+        {selectedPlatform && selectedPlatform !== "whatsapp" && selectedPlatform !== "live-chat" ? (
           <div className="platform-coming-soon">
             <div>
               <strong>{platforms.find((platform) => platform.key === selectedPlatform)?.label} belum aktif</strong>
@@ -89,6 +97,38 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               Connect WhatsApp
             </Link>
           </div>
+        ) : null}
+
+        {selectedPlatform === "live-chat" ? (
+          <section className="platform-setup-card">
+            <div className="feature-card-title">
+              <div>
+                <h2>Web Live Chat</h2>
+                <p className="muted">Sesi terenkripsi berlaku 24 jam dan otomatis masuk ke inbox serta lead pipeline.</p>
+              </div>
+              <span className={businessProfile.business?.websiteUrl ? "status" : "status status-warning"}>
+                {businessProfile.business?.websiteUrl ? "Ready" : "Set domain dulu"}
+              </span>
+            </div>
+            <div className="env-list">
+              <div className="env-row">
+                <code>Allowed origin</code>
+                <span>{businessProfile.business?.websiteUrl ?? "Belum diisi"}</span>
+              </div>
+              <div className="env-row">
+                <code>Workspace key</code>
+                <span>{widgetKey || "Belum tersedia"}</span>
+              </div>
+            </div>
+            <label className="span-2">
+              Embed sebelum penutup &lt;/body&gt;
+              <textarea value={widgetSnippet} readOnly rows={4} />
+            </label>
+            <div className="quick-actions">
+              <Link className="ghost-button" href="/business">Atur domain website</Link>
+              <Link className="primary-button" href="/simulator">Tes agent</Link>
+            </div>
+          </section>
         ) : null}
 
         {selectedPlatform === "whatsapp" ? (

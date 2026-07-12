@@ -3,12 +3,18 @@ import { CheckCircle2, MessageCircle, WalletCards } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { AijouLogo } from "@/components/aijou-logo";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ error?: string; passwordChanged?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getSession();
 
   if (session) {
     redirect("/dashboard");
   }
+
+  const params = await searchParams;
 
   return (
     <main className="page login-page">
@@ -43,6 +49,18 @@ export default async function LoginPage() {
             <h2>Lanjutkan percakapan yang penting.</h2>
             <p className="muted">Gunakan akun owner yang dibuat dari seed database lokal.</p>
           </div>
+          {params.passwordChanged === "1" ? (
+            <div className="settings-note" role="status">
+              <strong>Password berhasil diubah</strong>
+              <p>Semua sesi lama sudah dicabut. Silakan masuk dengan password baru.</p>
+            </div>
+          ) : null}
+          {params.error ? (
+            <div className="settings-note" role="alert">
+              <strong>Belum berhasil masuk</strong>
+              <p>{formatLoginError(params.error)}</p>
+            </div>
+          ) : null}
           <form className="login-form" action="/api/auth/login" method="post">
             <label>
               Email
@@ -58,4 +76,14 @@ export default async function LoginPage() {
       </div>
     </main>
   );
+}
+
+function formatLoginError(value: string) {
+  const messages: Record<string, string> = {
+    invalid_credentials: "Email atau password salah. Periksa kembali lalu coba lagi.",
+    invalid_request: "Permintaan login tidak valid. Muat ulang halaman lalu coba lagi.",
+    rate_limited: "Terlalu banyak percobaan login. Tunggu sebentar lalu coba lagi.",
+  };
+
+  return messages[value] ?? "Login belum berhasil. Silakan coba lagi.";
 }

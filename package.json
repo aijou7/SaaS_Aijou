@@ -3,12 +3,20 @@
   "version": "1.0.0",
   "description": "WhatsApp-first AI assistant MVP for expense tracking and receipt review.",
   "private": true,
+  "packageManager": "npm@11.11.0",
+  "engines": {
+    "node": ">=22 <25",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -29,9 +37,10 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@vercel/blob": "^2.6.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.18.0",
-    "next": "^16.2.9",
+    "next": "16.2.10",
     "pg": "^8.21.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -39,16 +48,25 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.9",
+    "eslint-config-next": "16.2.10",
     "postcss": "^8.5.15",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "next": {
+      ".": "16.2.10",
+      "postcss": "8.5.17"
+    },
+    "@prisma/dev": {
+      "@hono/node-server": "1.19.13"
+    }
   }
 }

@@ -1,142 +1,268 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { MessageType, SenderType } from "@/generated/prisma/client";
+import { MessageType, SenderType } from "@/generated/prisma-beta/client";
 import { checkAbuseLimit, generousChatRules, getClientIp } from "@/lib/abuse-guard";
 import { prisma } from "@/lib/prisma";
-import { ttlCache } from "@/lib/ttl-cache";
-import { simulateCustomerMessage } from "@/server/conversations/conversations";
+import {
+  readRequestBodyBuffer,
+  RequestBodyTooLargeError,
+} from "@/lib/request-security";
+import { simulateCustomerMessageForBusiness } from "@/server/conversations/conversations";
+import {
+  getWorkspaceKey,
+  normalizeWebOrigin,
+  resolveWidgetBusiness,
+  verifyWidgetSessionToken,
+  widgetSessionTtlMs,
+} from "@/server/web/widget-security";
 
-const allowedOrigins = new Set([
-  "https://aksaldev.my.id",
-  "https://www.aksaldev.my.id",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-]);
+const maxChatBodyBytes = 32 * 1024;
+
+type ChatBody = {
+  message?: unknown;
+  visitorName?: unknown;
+  sessionId?: unknown;
+  clientMessageId?: unknown;
+  chatToken?: unknown;
+  workspaceKey?: unknown;
+};
 
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
 export async function POST(request: NextRequest) {
-  const origin = request.headers.get("origin");
+  const origin = normalizeWebOrigin(request.headers.get("origin"));
+  if (!origin) return json(request, { error: "Origin website tidak valid." }, 403);
 
-  if (!origin || !allowedOrigins.has(origin)) {
-    return json(request, { error: "Origin website tidak diizinkan." }, 403);
+  const clientIp = getClientIp(request);
+  const preflightLimit = checkAbuseLimit(`web-chat-pre:ip:${clientIp}`, [
+    { max: 1_200, windowMs: 60_000 },
+    { max: 30_000, windowMs: 60 * 60_000 },
+  ]);
+  if (!preflightLimit.allowed) {
+    return json(request, { error: "Traffic chat terlalu tinggi. Coba lagi sebentar ya." }, 429, {
+      "Retry-After": String(preflightLimit.retryAfterSeconds),
+    });
   }
 
-  const body = await request.json().catch(() => null);
-  const message = typeof body?.message === "string" ? body.message.trim() : "";
-  const visitorName = typeof body?.visitorName === "string" ? body.visitorName.trim() : "";
-  const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
-  const clientMessageId = typeof body?.clientMessageId === "string" ? body.clientMessageId.trim() : "";
-
-  if (!message || message.length > 1200) {
-    return json(request, { error: "Pesan wajib diisi dan maksimal 1200 karakter." }, 400);
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.startsWith("application/json")) {
+    return json(request, { error: "Content-Type tidak didukung." }, 415);
   }
 
-  const business = await getWebsiteBusiness(origin);
-
-  if (!business) {
-    return json(
-      request,
-      { error: "Website belum dihubungkan ke workspace Aijou. Lengkapi Website / Social di Business Profile." },
-      503,
-    );
-  }
-
-  const visitorKey = getVisitorKey(origin, sessionId || visitorName || "anonymous");
-  const abuseKey = `web-chat:${origin}:${visitorKey}:${getClientIp(request)}`;
-  const abuseCheck = checkAbuseLimit(abuseKey, generousChatRules);
-
-  if (!abuseCheck.allowed) {
+  let body: ChatBody | null;
+  try {
+    const rawBody = await readRequestBodyBuffer(request, maxChatBodyBytes);
+    body = JSON.parse(rawBody.toString("utf8")) as ChatBody;
+  } catch (error) {
     return json(
       request,
       {
-        error: "Traffic chat terlalu tinggi untuk sesi ini. Coba lagi sebentar ya.",
-        retryAfterSeconds: abuseCheck.retryAfterSeconds,
+        error:
+          error instanceof RequestBodyTooLargeError
+            ? "Payload chat terlalu besar."
+            : "Payload chat tidak valid.",
       },
+      error instanceof RequestBodyTooLargeError ? 413 : 400,
+    );
+  }
+  const message = clean(body?.message, 1200);
+  if (!message) {
+    return json(request, { error: "Pesan wajib diisi dan maksimal 1200 karakter." }, 400);
+  }
+
+  const context = await resolveChatContext(request, origin, body);
+  if (!context) {
+    return json(request, { error: "Sesi chat tidak valid atau sudah lewat 24 jam." }, 401);
+  }
+
+  const ipCheck = checkAbuseLimit(`web-chat:ip:${clientIp}`, [
+    { max: 1_000, windowMs: 60_000 },
+    { max: 20_000, windowMs: 60 * 60_000 },
+  ]);
+  const sessionCheck = checkAbuseLimit(
+    `web-chat:session:${context.businessId}:${context.visitorKey}`,
+    generousChatRules,
+  );
+  const abuseCheck = !ipCheck.allowed ? ipCheck : sessionCheck;
+  if (!abuseCheck.allowed) {
+    return json(
+      request,
+      { error: "Traffic chat terlalu tinggi. Coba lagi sebentar ya." },
       429,
       { "Retry-After": String(abuseCheck.retryAfterSeconds) },
     );
   }
-  const providerMessageId = clientMessageId
-    ? `web-${getVisitorKey(origin, `${sessionId}:${clientMessageId}`)}`
-    : undefined;
 
-  const result = await simulateCustomerMessage(business.userId, {
-    phoneNumber: `web-${visitorKey}`,
-    displayName: visitorName.slice(0, 80) || "Pengunjung website",
+  const clientMessageId = clean(body?.clientMessageId, 160);
+  const result = await simulateCustomerMessageForBusiness(context.businessId, {
+    phoneNumber: `web-${context.visitorKey}`,
+    displayName: clean(body?.visitorName, 80) || "Pengunjung website",
     message,
     leadSource: "WEB_CHAT",
-    providerMessageId,
+    providerMessageId: clientMessageId
+      ? `web-${hash(`${context.businessId}:${context.visitorKey}:${clientMessageId}`)}`
+      : undefined,
   });
 
-  return json(request, {
-    conversationId: result.conversationId,
-    reply:
-      result.aiReply ??
-      "Pesanmu sudah diterima. Tim Aijou akan melanjutkan percakapan ini secepatnya.",
-    handoff: result.status === "HUMAN_NEEDED",
-    deduped: result.deduped ?? false,
-    lead: result.leadSummary
-      ? {
-          status: result.leadSummary.status,
-          qualificationScore: result.leadSummary.qualificationScore,
-          estimateNote: result.leadSummary.estimateNote,
-          nextStep: result.leadSummary.nextStep,
-          estimatedValueMin: result.leadSummary.estimatedValueMin?.toString() ?? null,
-          estimatedValueMax: result.leadSummary.estimatedValueMax?.toString() ?? null,
-        }
-      : null,
-  });
-}
-
-export async function GET(request: NextRequest) {
-  const origin = request.headers.get("origin");
-
-  if (!origin || !allowedOrigins.has(origin)) {
-    return json(request, { error: "Origin website tidak diizinkan." }, 403);
-  }
-
-  const sessionId = request.nextUrl.searchParams.get("sessionId")?.trim();
-  if (!sessionId) {
-    return json(request, { error: "Sesi chat tidak ditemukan." }, 400);
-  }
-
-  const business = await getWebsiteBusiness(origin);
-  if (!business) {
-    return json(request, { error: "Website belum dihubungkan ke workspace Aijou." }, 503);
-  }
-
-  const sinceValue = request.nextUrl.searchParams.get("since");
-  const since = sinceValue ? new Date(sinceValue) : new Date(Date.now() - 60_000);
-  const createdAfter = Number.isNaN(since.getTime()) ? new Date(Date.now() - 60_000) : since;
-  const phoneNumber = `web-${getVisitorKey(origin, sessionId)}`;
-  const conversation = await prisma.whatsAppConversation.findFirst({
-    where: { businessId: business.id, contact: { phoneNumber } },
-    select: {
-      status: true,
-      messages: {
-        where: {
-          senderType: SenderType.USER,
-          messageType: MessageType.TEXT,
-          createdAt: { gt: createdAfter },
-        },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, messageBody: true, createdAt: true },
-      },
+  await prisma.whatsAppConversation.updateMany({
+    where: { id: result.conversationId, businessId: context.businessId },
+    data: {
+      channel: "WEB_CHAT",
+      sessionExpiresAt: context.expiresAt,
+      lastCustomerMessageAt: new Date(),
     },
   });
 
   return json(request, {
-    handoff: conversation?.status === "HUMAN_NEEDED",
-    messages:
-      conversation?.messages.map((message) => ({
-        id: message.id,
-        text: message.messageBody ?? "",
-        createdAt: message.createdAt.toISOString(),
-      })) ?? [],
+    reply:
+      result.aiReply ??
+      "Pesanmu sudah diterima. Tim Aijou akan melanjutkan secepatnya.",
+    handoff: result.status === "HUMAN_NEEDED",
+    deduped: result.deduped ?? false,
   });
+}
+
+export async function GET(request: NextRequest) {
+  const origin = normalizeWebOrigin(request.headers.get("origin"));
+  if (!origin) return json(request, { error: "Origin website tidak valid." }, 403);
+
+  const clientIp = getClientIp(request);
+  const preflightLimit = checkAbuseLimit(`web-chat-poll-pre:ip:${clientIp}`, [
+    { max: 6_000, windowMs: 60_000 },
+    { max: 100_000, windowMs: 60 * 60_000 },
+  ]);
+  if (!preflightLimit.allowed) {
+    return json(request, { error: "Polling terlalu cepat." }, 429, {
+      "Retry-After": String(preflightLimit.retryAfterSeconds),
+    });
+  }
+
+  const context = await resolveChatContext(request, origin);
+  if (!context) {
+    return json(request, { error: "Sesi chat tidak valid atau sudah lewat 24 jam." }, 401);
+  }
+
+  const pollCheck = checkAbuseLimit(
+    `web-chat-poll:${context.businessId}:${context.visitorKey}:${clientIp}`,
+    [
+      { max: 600, windowMs: 60_000 },
+      { max: 10_000, windowMs: 60 * 60_000 },
+    ],
+  );
+  if (!pollCheck.allowed) {
+    return json(request, { error: "Polling terlalu cepat." }, 429, {
+      "Retry-After": String(pollCheck.retryAfterSeconds),
+    });
+  }
+
+  const since = clampSince(request.nextUrl.searchParams.get("since"));
+  const includeHistory = request.nextUrl.searchParams.get("history") === "1";
+  const conversation = await prisma.whatsAppConversation.findFirst({
+    where: {
+      businessId: context.businessId,
+      channel: "WEB_CHAT",
+      contact: { phoneNumber: `web-${context.visitorKey}` },
+    },
+    select: {
+      status: true,
+      messages: {
+        where: includeHistory
+          ? { messageType: MessageType.TEXT }
+          : {
+              messageType: MessageType.TEXT,
+              senderType: SenderType.USER,
+              createdAt: { gt: since },
+            },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: { id: true, senderType: true, messageBody: true, createdAt: true },
+      },
+    },
+  });
+  const chronological = [...(conversation?.messages ?? [])].reverse();
+
+  return json(request, {
+    handoff: conversation?.status === "HUMAN_NEEDED",
+    messages: chronological
+      .filter((item) => item.senderType === SenderType.USER && item.createdAt > since)
+      .map((item) => ({
+        id: item.id,
+        text: item.messageBody ?? "",
+        createdAt: item.createdAt.toISOString(),
+      })),
+    history: includeHistory
+      ? chronological.map((item) => ({
+          id: item.id,
+          role:
+            item.senderType === SenderType.CUSTOMER
+              ? "visitor"
+              : item.senderType === SenderType.SYSTEM
+                ? "system"
+                : "agent",
+          text: item.messageBody ?? "",
+          createdAt: item.createdAt.toISOString(),
+        }))
+      : [],
+    expiresAt: context.expiresAt.toISOString(),
+  });
+}
+
+async function resolveChatContext(
+  request: NextRequest,
+  origin: string,
+  body?: ChatBody | null,
+) {
+  const chatToken =
+    clean(body?.chatToken, 4096) ||
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ||
+    "";
+  const payload = chatToken ? verifyWidgetSessionToken(chatToken, origin) : null;
+  if (payload) {
+    return {
+      businessId: payload.businessId,
+      userId: payload.userId,
+      visitorKey: payload.visitorId,
+      expiresAt: new Date(payload.exp),
+    };
+  }
+
+  // Compatibility for the portfolio widget that predates signed sessions.
+  const sessionId =
+    clean(body?.sessionId, 160) || request.nextUrl.searchParams.get("sessionId")?.trim() || "";
+  if (!sessionId) return null;
+
+  const business = await resolveWidgetBusiness(
+    origin,
+    getWorkspaceKey(request.headers, request.nextUrl.searchParams, body?.workspaceKey),
+  );
+  if (!business) return null;
+
+  const bucket = Math.floor(Date.now() / widgetSessionTtlMs);
+  return {
+    businessId: business.id,
+    userId: business.userId,
+    visitorKey: hash(`${origin}:${sessionId}:${bucket}`),
+    expiresAt: new Date((bucket + 1) * widgetSessionTtlMs),
+  };
+}
+
+function clean(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function hash(value: string) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 32);
+}
+
+function clampSince(value: string | null) {
+  const minimum = Date.now() - widgetSessionTtlMs;
+  const parsed = value ? new Date(value).getTime() : Date.now() - 60_000;
+  const timestamp = Number.isFinite(parsed)
+    ? Math.min(Date.now(), Math.max(minimum, parsed))
+    : minimum;
+  return new Date(timestamp);
 }
 
 function json(
@@ -147,35 +273,18 @@ function json(
 ) {
   return NextResponse.json(body, {
     status,
-    headers: { ...corsHeaders(request), ...extraHeaders },
+    headers: { ...corsHeaders(request), "Cache-Control": "no-store", ...extraHeaders },
   });
 }
 
 function corsHeaders(request: NextRequest): Record<string, string> {
-  const origin = request.headers.get("origin");
-
-  if (!origin || !allowedOrigins.has(origin)) {
-    return { Vary: "Origin" };
-  }
-
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    Vary: "Origin",
-  };
-}
-
-async function getWebsiteBusiness(origin: string) {
-  const hostname = new URL(origin).hostname;
-  return ttlCache(`website-business:${hostname}`, 60_000, () =>
-    prisma.business.findFirst({
-      where: { websiteUrl: { contains: hostname } },
-      select: { id: true, userId: true },
-    }),
-  );
-}
-
-function getVisitorKey(origin: string, sessionKey: string) {
-  return createHash("sha256").update(`${origin}:${sessionKey}`).digest("hex").slice(0, 20);
+  const origin = normalizeWebOrigin(request.headers.get("origin"));
+  return origin
+    ? {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Aijou-Workspace",
+        Vary: "Origin",
+      }
+    : { Vary: "Origin" };
 }

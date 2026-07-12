@@ -1,4 +1,4 @@
-import { Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, Package, Pencil, Plus } from "lucide-react";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import {
@@ -68,7 +68,7 @@ export default async function ProductsPage() {
                         <input name="productId" type="hidden" value={product.id} />
                         <label>
                           Nama produk
-                          <input name="name" type="text" defaultValue={product.name} required />
+                          <input name="name" type="text" defaultValue={product.name} maxLength={120} required />
                         </label>
                         <label>
                           Harga mulai (Rp)
@@ -76,7 +76,7 @@ export default async function ProductsPage() {
                         </label>
                         <label className="span-2">
                           Deskripsi singkat
-                          <textarea name="description" defaultValue={product.description ?? ""} />
+                          <textarea name="description" defaultValue={product.description ?? ""} maxLength={1000} />
                         </label>
                         <label className="checkbox-label span-2">
                           <input name="isActive" type="checkbox" defaultChecked={product.isActive} />
@@ -86,7 +86,7 @@ export default async function ProductsPage() {
                       </form>
                       <form action={deleteProductAction}>
                         <input name="productId" type="hidden" value={product.id} />
-                        <button className="product-delete" type="submit"><Trash2 size={14} aria-hidden="true" /> Hapus produk</button>
+                        <button className="product-delete" type="submit"><Archive size={14} aria-hidden="true" /> Nonaktifkan produk</button>
                       </form>
                     </details>
                   </article>
@@ -106,7 +106,7 @@ export default async function ProductsPage() {
             <form className="form-grid" action={createProductAction}>
               <label>
                 Nama produk atau jasa
-                <input name="name" type="text" placeholder="Contoh: Paket Setup WiFi Kantor" required />
+                <input name="name" type="text" maxLength={120} placeholder="Contoh: Paket Setup WiFi Kantor" required />
               </label>
               <label>
                 Harga mulai (Rp)
@@ -114,7 +114,7 @@ export default async function ProductsPage() {
               </label>
               <label className="span-2">
                 Deskripsi singkat
-                <textarea name="description" placeholder="Jelaskan apa yang termasuk, batasan, atau kapan pelanggan perlu survei terlebih dahulu." />
+                <textarea name="description" maxLength={1000} placeholder="Jelaskan apa yang termasuk, batasan, atau kapan pelanggan perlu survei terlebih dahulu." />
               </label>
               <label className="checkbox-label span-2">
                 <input name="isActive" type="checkbox" defaultChecked />

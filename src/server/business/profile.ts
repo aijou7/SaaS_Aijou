@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { invalidateTtlCache } from "@/lib/ttl-cache";
 import { getWhatsAppReadinessForBusiness } from "@/server/whatsapp/settings";
+import { normalizeWebOrigin } from "@/server/web/widget-security";
 
 export type BusinessProfileInput = {
   businessName: string;
@@ -53,23 +55,33 @@ export async function updateBusinessProfile(userId: string, input: BusinessProfi
     throw new Error("Business belum dibuat. Jalankan seed database dulu.");
   }
 
-  const businessName = input.businessName.trim();
+  const businessName = input.businessName.trim().slice(0, 120);
 
   if (!businessName) {
     throw new Error("Nama bisnis wajib diisi.");
   }
 
+  const websiteValue = cleanOptional(input.websiteUrl, 2_048);
+  const websiteUrl = websiteValue ? normalizeWebOrigin(websiteValue) : null;
+
+  if (websiteValue && !websiteUrl) {
+    throw new Error("Website harus berupa URL HTTPS yang valid, contoh https://bisnis.com.");
+  }
+
+  invalidateTtlCache(`agent-runtime:${business.id}`);
+  invalidateTtlCache("widget-business:");
+
   return prisma.business.update({
     where: { id: business.id },
     data: {
       businessName,
-      businessType: cleanOptional(input.businessType),
-      whatsappNumber: cleanOptional(input.whatsappNumber),
-      serviceArea: cleanOptional(input.serviceArea),
-      operatingHours: cleanOptional(input.operatingHours),
-      mainServices: cleanOptional(input.mainServices),
-      websiteUrl: cleanOptional(input.websiteUrl),
-      address: cleanOptional(input.address),
+      businessType: cleanOptional(input.businessType, 120),
+      whatsappNumber: cleanOptional(input.whatsappNumber, 40),
+      serviceArea: cleanOptional(input.serviceArea, 500),
+      operatingHours: cleanOptional(input.operatingHours, 500),
+      mainServices: cleanOptional(input.mainServices, 5_000),
+      websiteUrl,
+      address: cleanOptional(input.address, 1_000),
     },
   });
 }
@@ -180,13 +192,14 @@ async function getBusinessForUser(userId: string) {
       operatingHours: true,
       mainServices: true,
       websiteUrl: true,
+      widgetKey: true,
       address: true,
       onboardingCompleted: true,
     },
   });
 }
 
-function cleanOptional(value?: string | null) {
-  const trimmed = value?.trim();
+function cleanOptional(value: string | null | undefined, maxLength: number) {
+  const trimmed = value?.trim().slice(0, maxLength);
   return trimmed ? trimmed : null;
 }

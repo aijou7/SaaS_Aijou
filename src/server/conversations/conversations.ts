@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { after } from "next/server";
 import {
   buildCustomerServiceReplyAi,
   inferCustomerIntent,
@@ -11,12 +13,16 @@ import {
   Prisma,
   ProcessingStatus,
   SenderType,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductContext } from "@/server/products/catalog";
-import { upsertLeadSummaryFromConversation } from "@/server/leads/leads";
+import {
+  enqueueLeadRefresh,
+  processPendingJobs,
+} from "@/server/jobs/background-jobs";
+import { sendWhatsAppTextMessage } from "@/server/whatsapp/client";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -25,12 +31,14 @@ type SimulateMessageInput = {
   conversationType?: ConversationType;
   leadSource?: string;
   providerMessageId?: string;
+  rawPayload?: Prisma.InputJsonValue;
 };
 
 type ConversationInboxFilters = {
   status?: string;
   q?: string;
   unread?: boolean;
+  page?: number;
 };
 
 export async function getConversationsInbox(userId: string, filters: ConversationInboxFilters = {}) {
@@ -47,16 +55,20 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         closed: 0,
         unread: 0,
       },
+      pagination: { page: 1, pageSize: 30, total: 0, pageCount: 1 },
     };
   }
 
   const where = buildConversationWhere(business.id, filters);
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = 30;
 
-  const [conversations, open, humanNeeded, customerService, closed] = await Promise.all([
+  const [conversations, total, open, humanNeeded, customerService, closed, unread] = await Promise.all([
     prisma.whatsAppConversation.findMany({
       where,
       orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
-      take: 50,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         conversationType: true,
@@ -65,6 +77,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         ownerLastReadAt: true,
         ownerNotes: true,
         resolvedAt: true,
+        unreadCount: true,
         contact: {
           select: {
             displayName: true,
@@ -74,7 +87,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         },
         messages: {
           orderBy: { createdAt: "desc" },
-          take: 20,
+          take: 1,
           select: {
             messageBody: true,
             senderType: true,
@@ -95,6 +108,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         },
       },
     }),
+    prisma.whatsAppConversation.count({ where }),
     prisma.whatsAppConversation.count({
       where: { businessId: business.id, status: ConversationStatus.OPEN },
     }),
@@ -107,11 +121,11 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
     prisma.whatsAppConversation.count({
       where: { businessId: business.id, status: ConversationStatus.CLOSED },
     }),
+    prisma.whatsAppConversation.aggregate({
+      where: { businessId: business.id },
+      _sum: { unreadCount: true },
+    }),
   ]);
-
-  const visibleConversations = filters.unread
-    ? conversations.filter((conversation) => getUnreadCount(conversation) > 0)
-    : conversations;
 
   return {
     business,
@@ -120,9 +134,15 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       humanNeeded,
       customerService,
       closed,
-      unread: conversations.reduce((sum, conversation) => sum + getUnreadCount(conversation), 0),
+      unread: unread._sum.unreadCount ?? 0,
     },
-    conversations: visibleConversations.map((conversation) => ({
+    pagination: {
+      page,
+      pageSize,
+      total,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    },
+    conversations: conversations.map((conversation) => ({
       id: conversation.id,
       conversationType: conversation.conversationType,
       status: conversation.status,
@@ -136,7 +156,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       messageCount: conversation._count.messages,
       lastMessage: conversation.messages[0]?.messageBody ?? "",
       lastSender: conversation.messages[0]?.senderType ?? null,
-      unreadCount: getUnreadCount(conversation),
+      unreadCount: conversation.unreadCount,
       lead: conversation.leads[0] ?? null,
     })),
   };
@@ -171,7 +191,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
         },
       },
       messages: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: 100,
         select: {
           id: true,
@@ -215,7 +235,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
 
   await prisma.whatsAppConversation.update({
     where: { id: conversation.id },
-    data: { ownerLastReadAt: new Date() },
+    data: { ownerLastReadAt: new Date(), unreadCount: 0 },
   });
 
   return {
@@ -229,7 +249,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
     contactName: conversation.contact?.displayName ?? conversation.contact?.phoneNumber ?? "Unknown",
     contactPhone: conversation.contact?.phoneNumber ?? "-",
     contactType: conversation.contact?.contactType ?? ContactType.UNKNOWN,
-    messages: conversation.messages.map((message) => ({
+    messages: [...conversation.messages].reverse().map((message) => ({
       id: message.id,
       senderType: message.senderType,
       messageType: message.messageType,
@@ -251,6 +271,28 @@ export async function getConversationDetail(userId: string, conversationId?: str
 
 export async function simulateCustomerMessage(userId: string, input: SimulateMessageInput) {
   const business = await requireBusinessForUser(userId);
+  return simulateCustomerMessageForResolvedBusiness(business, input);
+}
+
+export async function simulateCustomerMessageForBusiness(
+  businessId: string,
+  input: SimulateMessageInput,
+) {
+  const business = await requireBusinessById(businessId);
+  return simulateCustomerMessageForResolvedBusiness(business, input);
+}
+
+async function simulateCustomerMessageForResolvedBusiness(
+  business: { id: string; businessName: string },
+  input: SimulateMessageInput,
+) {
+  const providerMessageId = input.providerMessageId ?? `sim-${crypto.randomUUID()}`;
+  const duplicateResult = input.providerMessageId
+    ? await findDuplicateCustomerMessageResult(business.id, providerMessageId)
+    : null;
+
+  if (duplicateResult) return duplicateResult;
+
   const contact = await upsertContact({
     businessId: business.id,
     phoneNumber: input.phoneNumber,
@@ -262,54 +304,36 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     contactId: contact.id,
     conversationType: input.conversationType ?? ConversationType.CUSTOMER_SERVICE,
     status: ConversationStatus.OPEN,
+    channel: input.leadSource === "WHATSAPP" ? "WHATSAPP" : "WEB_CHAT",
   });
 
-  const providerMessageId = input.providerMessageId ?? `sim-${crypto.randomUUID()}`;
-  const duplicateMessage = input.providerMessageId
-    ? await prisma.whatsAppMessage.findUnique({
-        where: { providerMessageId },
-        select: {
-          id: true,
-          conversationId: true,
-          createdAt: true,
-          conversation: { select: { status: true } },
-        },
-      })
-    : null;
-
-  if (duplicateMessage) {
-    const latestAiReply = await prisma.whatsAppMessage.findFirst({
-      where: {
-        conversationId: duplicateMessage.conversationId,
-        senderType: SenderType.AI,
+  const customerMessage = await prisma.whatsAppMessage
+    .create({
+      data: {
+        conversationId: conversation.id,
+        providerMessageId,
+        senderType: SenderType.CUSTOMER,
         messageType: MessageType.TEXT,
-        createdAt: { gte: duplicateMessage.createdAt },
+        messageBody: input.message,
+        rawPayload: input.rawPayload,
+        intent: inferCustomerIntent(input.message),
+        processingStatus: ProcessingStatus.PROCESSED,
+        deliveryStatus: "STORED",
       },
-      orderBy: { createdAt: "desc" },
-      select: { messageBody: true },
+    })
+    .catch(async (error: unknown) => {
+      if (!input.providerMessageId || !isUniqueConstraintError(error)) throw error;
+      return null;
     });
 
-    return {
-      conversationId: duplicateMessage.conversationId,
-      customerMessageId: duplicateMessage.id,
-      aiReply: latestAiReply?.messageBody ?? null,
-      status: duplicateMessage.conversation.status,
-      leadSummary: null,
-      deduped: true,
-    };
-  }
-
-  const customerMessage = await prisma.whatsAppMessage.create({
-    data: {
-      conversationId: conversation.id,
+  if (!customerMessage) {
+    const racedDuplicate = await findDuplicateCustomerMessageResult(
+      business.id,
       providerMessageId,
-      senderType: SenderType.CUSTOMER,
-      messageType: MessageType.TEXT,
-      messageBody: input.message,
-      intent: inferCustomerIntent(input.message),
-      processingStatus: ProcessingStatus.PROCESSED,
-    },
-  });
+    );
+    if (racedDuplicate) return racedDuplicate;
+    throw new Error("Provider message duplicate belum dapat dipulihkan.");
+  }
 
   const handoffRequested = isHandoffRequest(input.message);
   const currentConversation = await prisma.whatsAppConversation.findUnique({
@@ -318,7 +342,14 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
   });
 
   let aiReply: string | null = null;
+  let aiMessageId: string | null = null;
   let nextStatus = currentConversation?.status ?? conversation.status;
+  if (
+    nextStatus === ConversationStatus.PENDING_CONFIRMATION ||
+    nextStatus === ConversationStatus.CLOSED
+  ) {
+    nextStatus = ConversationStatus.OPEN;
+  }
   const settings = await getAgentRuntimeSettings(business.id);
 
   if (!settings.isActive) {
@@ -333,7 +364,7 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
       prisma.whatsAppMessage.findMany({
         where: { conversationId: conversation.id, messageType: MessageType.TEXT },
         orderBy: { createdAt: "desc" },
-        take: 12,
+        take: 40,
         select: { senderType: true, messageBody: true },
       }),
     ]);
@@ -349,17 +380,25 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
   }
 
   if (aiReply) {
+    const isWhatsApp = input.leadSource === "WHATSAPP";
     const aiMessage = await prisma.whatsAppMessage.create({
       data: {
         conversationId: conversation.id,
-        providerMessageId: `sim-ai-${crypto.randomUUID()}`,
+        providerMessageId: internalOutboundId("ai", providerMessageId),
         senderType: SenderType.AI,
         messageType: MessageType.TEXT,
         messageBody: aiReply,
         intent: "customer_service_reply",
         processingStatus: ProcessingStatus.PROCESSED,
+        deliveryStatus: isWhatsApp ? "PENDING" : "STORED",
+        rawPayload: toJsonValue({
+          channel: isWhatsApp ? "WHATSAPP" : "WEB_CHAT",
+          direction: "OUTBOUND",
+          inReplyToProviderMessageId: providerMessageId,
+        }),
       },
     });
+    aiMessageId = aiMessage.id;
 
     await prisma.aiLog.create({
       data: {
@@ -382,19 +421,28 @@ export async function simulateCustomerMessage(userId: string, input: SimulateMes
     data: {
       status: nextStatus,
       lastMessageAt: new Date(),
+      lastCustomerMessageAt: new Date(),
+      unreadCount: { increment: 1 },
     },
   });
 
-  const leadSummary = await upsertLeadSummaryFromConversation(conversation.id, {
+  await enqueueLeadRefresh({
+    businessId: business.id,
+    conversationId: conversation.id,
     source: input.leadSource,
+  });
+  after(async () => {
+    await processPendingJobs(2);
   });
 
   return {
     conversationId: conversation.id,
     customerMessageId: customerMessage.id,
+    aiMessageId,
     aiReply,
     status: nextStatus,
-    leadSummary,
+    leadSummary: null,
+    deduped: false,
   };
 }
 
@@ -491,41 +539,356 @@ export async function updateConversationOwnerNotes(
 
 export async function sendOwnerConversationReply(userId: string, conversationId: string, message: string) {
   const business = await requireBusinessForUser(userId);
-  const trimmed = message.trim();
+  return sendConversationOwnerMessage({
+    businessId: business.id,
+    conversationId,
+    message,
+    intent: "owner_reply",
+    providerMessagePrefix: "owner",
+  });
+}
+
+export async function sendConversationOwnerMessage(params: {
+  businessId: string;
+  conversationId: string;
+  message: string;
+  intent: string;
+  providerMessagePrefix?: string;
+  idempotencyKey?: string;
+}) {
+  const trimmed = params.message.trim();
 
   if (!trimmed) {
     throw new Error("Message tidak boleh kosong.");
   }
 
   const conversation = await prisma.whatsAppConversation.findFirst({
-    where: { id: conversationId, businessId: business.id },
-    select: { id: true },
+    where: { id: params.conversationId, businessId: params.businessId },
+    select: {
+      id: true,
+      contact: { select: { phoneNumber: true } },
+      messages: {
+        where: { rawPayload: { not: Prisma.DbNull } },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        select: { rawPayload: true },
+      },
+    },
   });
 
   if (!conversation) {
     throw new Error("Conversation tidak ditemukan.");
   }
 
-  await prisma.whatsAppMessage.create({
-    data: {
-      conversationId,
-      providerMessageId: `owner-${crypto.randomUUID()}`,
-      senderType: SenderType.USER,
-      messageType: MessageType.TEXT,
-      messageBody: trimmed,
-      intent: "owner_reply",
-      processingStatus: ProcessingStatus.PROCESSED,
-    },
+  const isWhatsAppConversation = conversation.messages.some((item) =>
+    isWhatsAppInboundPayload(item.rawPayload),
+  );
+  const internalProviderMessageId = params.idempotencyKey
+    ? internalOutboundId(params.providerMessagePrefix ?? "owner", params.idempotencyKey)
+    : `${params.providerMessagePrefix ?? "owner"}-${crypto.randomUUID()}`;
+  const outboundPayload = toJsonValue({
+    channel: isWhatsAppConversation ? "WHATSAPP" : "WEB_CHAT",
+    direction: "OUTBOUND",
+    idempotencyKey: params.idempotencyKey ?? null,
   });
+  let outgoingMessage = params.idempotencyKey
+    ? await findIdempotentOutgoingMessage(
+        params.conversationId,
+        internalProviderMessageId,
+        params.idempotencyKey,
+      )
+    : null;
+
+  if (outgoingMessage && outgoingMessage.messageBody !== trimmed) {
+    throw new Error("Idempotency key sudah dipakai untuk isi pesan berbeda.");
+  }
+
+  if (!outgoingMessage) {
+    try {
+      outgoingMessage = await prisma.whatsAppMessage.create({
+        data: {
+          conversationId: params.conversationId,
+          providerMessageId: internalProviderMessageId,
+          senderType: SenderType.USER,
+          messageType: MessageType.TEXT,
+          messageBody: trimmed,
+          intent: params.intent,
+          processingStatus: isWhatsAppConversation
+            ? ProcessingStatus.RECEIVED
+            : ProcessingStatus.PROCESSED,
+          deliveryStatus: isWhatsAppConversation ? "PENDING" : "STORED",
+          rawPayload: outboundPayload,
+        },
+        select: {
+          id: true,
+          messageBody: true,
+        },
+      });
+    } catch (error) {
+      if (!params.idempotencyKey || !isUniqueConstraintError(error)) throw error;
+      outgoingMessage = await findIdempotentOutgoingMessage(
+        params.conversationId,
+        internalProviderMessageId,
+        params.idempotencyKey,
+      );
+      if (!outgoingMessage) throw error;
+      if (outgoingMessage.messageBody !== trimmed) {
+        throw new Error("Idempotency key sudah dipakai untuk isi pesan berbeda.");
+      }
+    }
+  }
 
   await prisma.whatsAppConversation.update({
-    where: { id: conversationId },
+    where: { id: params.conversationId },
     data: {
       status: ConversationStatus.HUMAN_NEEDED,
       lastMessageAt: new Date(),
       ownerLastReadAt: new Date(),
     },
   });
+
+  if (!isWhatsAppConversation) {
+    return {
+      channel: "WEB_CHAT" as const,
+      accepted: true,
+      delivered: true,
+      messageId: outgoingMessage.id,
+      providerMessageId: internalProviderMessageId,
+      deliveryStatus: "STORED",
+    };
+  }
+
+  const recipient = conversation.contact?.phoneNumber?.trim();
+  if (!recipient) {
+    await prisma.whatsAppMessage.update({
+      where: { id: outgoingMessage.id },
+      data: {
+        deliveryStatus: "FAILED",
+        deliveryError: "whatsapp_recipient_missing",
+        processingStatus: ProcessingStatus.FAILED,
+      },
+    });
+    throw new Error("Pesan tersimpan, tetapi nomor WhatsApp penerima tidak tersedia.");
+  }
+
+  const delivery = await deliverStoredWhatsAppTextMessage({
+    businessId: params.businessId,
+    messageId: outgoingMessage.id,
+    to: recipient,
+  });
+  if (!delivery.accepted) {
+    throw new Error(
+      `Pesan tersimpan, tetapi belum diterima WhatsApp (${delivery.reason ?? delivery.deliveryStatus}).`,
+    );
+  }
+
+  return {
+    channel: "WHATSAPP" as const,
+    accepted: true,
+    delivered: delivery.delivered,
+    messageId: outgoingMessage.id,
+    providerMessageId: delivery.providerMessageId,
+    deliveryStatus: delivery.deliveryStatus,
+  };
+}
+
+export async function sendAutomatedWhatsAppReply(params: {
+  businessId: string;
+  conversationId: string;
+  to: string;
+  body: string;
+  intent: string;
+  sourceProviderMessageId: string;
+}) {
+  const body = params.body.trim();
+  if (!body) throw new Error("Balasan WhatsApp tidak boleh kosong.");
+
+  const conversation = await prisma.whatsAppConversation.findFirst({
+    where: { id: params.conversationId, businessId: params.businessId },
+    select: { id: true },
+  });
+  if (!conversation) throw new Error("Conversation tidak ditemukan.");
+
+  // One automated reply per inbound provider message. The intent must not be
+  // part of the key because webhook retries are classified as duplicates.
+  const idempotencyKey = `auto:${params.sourceProviderMessageId}`;
+  const internalProviderMessageId = internalOutboundId("auto", idempotencyKey);
+  let message = await findIdempotentOutgoingMessage(
+    params.conversationId,
+    internalProviderMessageId,
+    idempotencyKey,
+  );
+
+  if (message && message.messageBody !== body) {
+    throw new Error("Balasan otomatis untuk pesan ini sudah memiliki isi berbeda.");
+  }
+
+  if (!message) {
+    try {
+      message = await prisma.whatsAppMessage.create({
+        data: {
+          conversationId: params.conversationId,
+          providerMessageId: internalProviderMessageId,
+          senderType: SenderType.AI,
+          messageType: MessageType.TEXT,
+          messageBody: body,
+          intent: params.intent,
+          processingStatus: ProcessingStatus.RECEIVED,
+          deliveryStatus: "PENDING",
+          rawPayload: toJsonValue({
+            channel: "WHATSAPP",
+            direction: "OUTBOUND",
+            idempotencyKey,
+            inReplyToProviderMessageId: params.sourceProviderMessageId,
+          }),
+        },
+        select: { id: true, messageBody: true },
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      message = await findIdempotentOutgoingMessage(
+        params.conversationId,
+        internalProviderMessageId,
+        idempotencyKey,
+      );
+      if (!message) throw error;
+    }
+  }
+
+  const delivery = await deliverStoredWhatsAppTextMessage({
+    businessId: params.businessId,
+    messageId: message.id,
+    to: params.to,
+  });
+
+  return {
+    ...delivery,
+    messageId: message.id,
+  };
+}
+
+export async function deliverStoredWhatsAppTextMessage(params: {
+  businessId: string;
+  messageId: string;
+  to: string;
+}) {
+  const message = await prisma.whatsAppMessage.findFirst({
+    where: {
+      id: params.messageId,
+      conversation: { businessId: params.businessId },
+    },
+    select: {
+      id: true,
+      providerMessageId: true,
+      messageBody: true,
+      rawPayload: true,
+      deliveryStatus: true,
+    },
+  });
+
+  if (!message?.messageBody) {
+    throw new Error("Pesan outbound WhatsApp tidak ditemukan.");
+  }
+
+  if (["ACCEPTED", "DELIVERED", "READ"].includes(message.deliveryStatus)) {
+    return {
+      accepted: true as const,
+      delivered: message.deliveryStatus === "DELIVERED" || message.deliveryStatus === "READ",
+      deliveryStatus: message.deliveryStatus,
+      providerMessageId: message.providerMessageId,
+      reason: null,
+    };
+  }
+
+  const claim = await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: message.id,
+      deliveryStatus: "PENDING",
+      conversation: { businessId: params.businessId },
+    },
+    data: {
+      deliveryStatus: "SENDING",
+      deliveryError: null,
+      processingStatus: ProcessingStatus.RECEIVED,
+    },
+  });
+
+  if (claim.count === 0) {
+    const current = await prisma.whatsAppMessage.findUnique({
+      where: { id: message.id },
+      select: { deliveryStatus: true, providerMessageId: true, deliveryError: true },
+    });
+    const accepted =
+      ["ACCEPTED", "DELIVERED", "READ"].includes(current?.deliveryStatus ?? "");
+    return {
+      accepted,
+      delivered: current?.deliveryStatus === "DELIVERED" || current?.deliveryStatus === "READ",
+      deliveryStatus: current?.deliveryStatus ?? "UNKNOWN",
+      providerMessageId: current?.providerMessageId ?? message.providerMessageId,
+      reason: accepted ? null : current?.deliveryError ?? "whatsapp_delivery_already_claimed",
+    };
+  }
+
+  let delivery: Awaited<ReturnType<typeof sendWhatsAppTextMessage>>;
+  try {
+    delivery = await sendWhatsAppTextMessage({
+      businessId: params.businessId,
+      body: message.messageBody,
+      to: params.to,
+    });
+  } catch {
+    delivery = {
+      sent: false as const,
+      reason: "whatsapp_delivery_exception",
+      providerMessageId: null,
+    };
+  }
+
+  const reason = delivery.sent ? null : delivery.reason;
+  const responseStatus = "status" in delivery ? delivery.status ?? null : null;
+  const uncertain =
+    !delivery.sent &&
+    (reason === "whatsapp_request_timeout" ||
+      reason === "whatsapp_network_error" ||
+      reason === "whatsapp_delivery_exception" ||
+      reason === "whatsapp_provider_message_id_missing" ||
+      (typeof responseStatus === "number" && responseStatus >= 500));
+  const deliveryStatus = delivery.sent ? "ACCEPTED" : uncertain ? "UNKNOWN" : "FAILED";
+  const previousPayload = jsonObject(message.rawPayload);
+  const deliveryPayload = toJsonValue({
+    ...previousPayload,
+    delivery: {
+      accepted: delivery.sent,
+      delivered: false,
+      providerMessageId: delivery.providerMessageId,
+      reason,
+      status: responseStatus,
+      response: "body" in delivery ? delivery.body ?? null : null,
+    },
+  });
+
+  await prisma.whatsAppMessage.update({
+    where: { id: message.id },
+    data: {
+      providerMessageId: delivery.sent
+        ? delivery.providerMessageId
+        : message.providerMessageId,
+      processingStatus: delivery.sent ? ProcessingStatus.PROCESSED : ProcessingStatus.FAILED,
+      deliveryStatus,
+      deliveryError: reason,
+      rawPayload: deliveryPayload,
+    },
+  });
+
+  return {
+    accepted: delivery.sent,
+    delivered: false,
+    deliveryStatus,
+    providerMessageId: delivery.sent
+      ? delivery.providerMessageId
+      : message.providerMessageId,
+    reason,
+  };
 }
 
 export function formatConversationStatus(status: string) {
@@ -549,6 +912,12 @@ function buildConversationWhere(businessId: string, filters: ConversationInboxFi
 
   if (filters.status && isConversationStatus(filters.status)) {
     where.status = filters.status;
+  } else {
+    where.status = { not: ConversationStatus.CLOSED };
+  }
+
+  if (filters.unread) {
+    where.unreadCount = { gt: 0 };
   }
 
   const q = filters.q?.trim();
@@ -596,20 +965,6 @@ function isConversationStatus(value: string): value is ConversationStatus {
   return Object.values(ConversationStatus).includes(value as ConversationStatus);
 }
 
-function getUnreadCount(conversation: {
-  ownerLastReadAt: Date | null;
-  messages: Array<{
-    senderType: SenderType;
-    createdAt: Date;
-  }>;
-}) {
-  return conversation.messages.filter(
-    (message) =>
-      message.senderType === SenderType.CUSTOMER &&
-      (!conversation.ownerLastReadAt || message.createdAt > conversation.ownerLastReadAt),
-  ).length;
-}
-
 async function upsertContact(params: {
   businessId: string;
   phoneNumber: string;
@@ -641,6 +996,7 @@ async function upsertConversation(params: {
   contactId: string;
   conversationType: ConversationType;
   status: ConversationStatus;
+  channel: "WHATSAPP" | "WEB_CHAT";
 }) {
   return prisma.whatsAppConversation.upsert({
     where: {
@@ -648,6 +1004,7 @@ async function upsertConversation(params: {
     },
     update: {
       conversationType: params.conversationType,
+      channel: params.channel,
       lastMessageAt: new Date(),
     },
     create: {
@@ -656,6 +1013,7 @@ async function upsertConversation(params: {
       contactId: params.contactId,
       conversationType: params.conversationType,
       status: params.status,
+      channel: params.channel,
       lastMessageAt: new Date(),
     },
   });
@@ -676,4 +1034,130 @@ async function requireBusinessForUser(userId: string) {
   }
 
   return business;
+}
+
+async function requireBusinessById(businessId: string) {
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: { id: true, businessName: true },
+  });
+
+  if (!business) {
+    throw new Error("Business tidak ditemukan.");
+  }
+
+  return business;
+}
+
+function isWhatsAppInboundPayload(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  if ("channel" in value && value.channel === "WHATSAPP") {
+    return true;
+  }
+
+  return "entry" in value && Array.isArray(value.entry);
+}
+
+function toJsonValue(value: unknown) {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+async function findDuplicateCustomerMessageResult(
+  businessId: string,
+  providerMessageId: string,
+) {
+  const duplicateMessage = await prisma.whatsAppMessage.findUnique({
+    where: { providerMessageId },
+    select: {
+      id: true,
+      conversationId: true,
+      createdAt: true,
+      conversation: { select: { businessId: true, status: true } },
+    },
+  });
+
+  if (!duplicateMessage) return null;
+  if (duplicateMessage.conversation.businessId !== businessId) {
+    throw new Error("Provider message ID sudah dipakai workspace lain.");
+  }
+
+  const linkedAiReply =
+    (await prisma.whatsAppMessage.findFirst({
+      where: {
+        conversationId: duplicateMessage.conversationId,
+        senderType: SenderType.AI,
+        messageType: MessageType.TEXT,
+        rawPayload: {
+          path: ["inReplyToProviderMessageId"],
+          equals: providerMessageId,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, messageBody: true },
+    })) ??
+    (await prisma.whatsAppMessage.findFirst({
+      where: {
+        conversationId: duplicateMessage.conversationId,
+        senderType: SenderType.AI,
+        messageType: MessageType.TEXT,
+        createdAt: { gte: duplicateMessage.createdAt },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, messageBody: true },
+    }));
+
+  return {
+    conversationId: duplicateMessage.conversationId,
+    customerMessageId: duplicateMessage.id,
+    aiMessageId: linkedAiReply?.id ?? null,
+    aiReply: linkedAiReply?.messageBody ?? null,
+    status: duplicateMessage.conversation.status,
+    leadSummary: null,
+    deduped: true,
+  };
+}
+
+async function findIdempotentOutgoingMessage(
+  conversationId: string,
+  internalProviderMessageId: string,
+  idempotencyKey: string,
+) {
+  return prisma.whatsAppMessage.findFirst({
+    where: {
+      conversationId,
+      OR: [
+        { providerMessageId: internalProviderMessageId },
+        {
+          rawPayload: {
+            path: ["idempotencyKey"],
+            equals: idempotencyKey,
+          },
+        },
+      ],
+    },
+    select: { id: true, messageBody: true },
+  });
+}
+
+function internalOutboundId(prefix: string, value: string) {
+  const digest = createHash("sha256").update(value).digest("hex").slice(0, 40);
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 24) || "out";
+  return `${safePrefix}-${digest}`;
+}
+
+function jsonObject(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002",
+  );
 }

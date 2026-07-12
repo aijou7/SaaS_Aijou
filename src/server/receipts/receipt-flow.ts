@@ -6,7 +6,7 @@ import {
   TransactionSource,
   TransactionStatus,
   TransactionType,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { extractReceiptFromMedia } from "@/server/receipts/ocr";
@@ -72,6 +72,7 @@ export async function createReceiptDraftFromImage(params: {
       },
       data: {
         storagePath: mediaDownload.storagePath,
+        fileUrl: mediaDownload.fileUrl,
         mimeType: mediaDownload.mimeType ?? mediaFile.mimeType,
         fileSize: mediaDownload.fileSize,
       },
@@ -80,7 +81,10 @@ export async function createReceiptDraftFromImage(params: {
 
   const extraction = await extractReceiptFromMedia({
     providerMediaId: mediaFile.providerMediaId ?? params.providerMediaId,
-    mimeType: mediaFile.mimeType,
+    mimeType: mediaDownload?.downloaded
+      ? mediaDownload.mimeType ?? mediaFile.mimeType
+      : mediaFile.mimeType,
+    imageData: mediaDownload?.downloaded ? mediaDownload.data : undefined,
   });
 
   const category = await upsertCategory(params.context.businessId, extraction.categoryName);
@@ -151,8 +155,13 @@ export async function createReceiptDraftFromImage(params: {
   };
 }
 
-export async function getReceiptReviewPage(userId: string) {
+export async function getReceiptReviewPage(
+  userId: string,
+  filters: { page?: number; pageSize?: number } = {},
+) {
   const business = await getBusinessForUser(userId);
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(50, Math.max(10, filters.pageSize ?? 20));
 
   if (!business) {
     return {
@@ -165,20 +174,21 @@ export async function getReceiptReviewPage(userId: string) {
         pending: 0,
         reviewed: 0,
       },
+      pagination: { page: 1, pageSize, total: 0, pageCount: 1 },
     };
   }
 
-  const [receipts, categories, projects, needsReview, pending, reviewed] = await Promise.all([
+  const receiptWhere: Prisma.ReceiptWhereInput = {
+    transaction: { businessId: business.id },
+  };
+  const [receipts, total, categories, projects, needsReview, pending, reviewed] = await Promise.all([
     prisma.receipt.findMany({
-      where: {
-        transaction: {
-          businessId: business.id,
-        },
-      },
+      where: receiptWhere,
       orderBy: {
         createdAt: "desc",
       },
-      take: 100,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         rawOcrText: true,
@@ -208,6 +218,7 @@ export async function getReceiptReviewPage(userId: string) {
         },
       },
     }),
+    prisma.receipt.count({ where: receiptWhere }),
     prisma.category.findMany({
       where: { businessId: business.id, type: CategoryType.EXPENSE },
       orderBy: { name: "asc" },
@@ -246,6 +257,12 @@ export async function getReceiptReviewPage(userId: string) {
       needsReview,
       pending,
       reviewed,
+    },
+    pagination: {
+      page,
+      pageSize,
+      total,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
     },
     receipts: receipts.map((receipt) => ({
       id: receipt.id,

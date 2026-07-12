@@ -1,12 +1,7 @@
-import {
-  ConversationStatus,
-  MessageType,
-  Prisma,
-  ProcessingStatus,
-  SenderType,
-} from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { callGroqJson } from "@/server/ai/groq";
+import { sendConversationOwnerMessage } from "@/server/conversations/conversations";
 
 type ProposalDraftAi = {
   title: string;
@@ -22,7 +17,7 @@ type ProposalDraftAi = {
   disclaimer: string;
 };
 
-const proposalStatuses = ["DRAFT", "REVIEWED", "SENT", "ACCEPTED", "REJECTED"] as const;
+const proposalStatuses = ["DRAFT", "REVIEWED", "SENT", "ACCEPTED", "REJECTED", "ARCHIVED"] as const;
 type ProposalStatus = (typeof proposalStatuses)[number];
 
 export async function generateProposalDraftFromLead(userId: string, leadId: string) {
@@ -133,6 +128,8 @@ export async function generateProposalDraftFromLead(userId: string, leadId: stri
       nextSteps: parsed.nextSteps,
       disclaimer: parsed.disclaimer,
       generatedBy: result.source === "groq" ? "AI" : "FALLBACK",
+      proposalNumber: createProposalNumber(lead.id),
+      validUntil: new Date(Date.now() + 14 * 24 * 60 * 60_000),
     },
   });
 
@@ -152,6 +149,62 @@ export async function generateProposalDraftFromLead(userId: string, leadId: stri
   return proposal;
 }
 
+export async function updateProposalDraftContent(
+  userId: string,
+  proposalId: string,
+  formData: FormData,
+) {
+  const business = await requireBusinessForUser(userId);
+  const existing = await prisma.proposalDraft.findFirst({
+    where: { id: proposalId, businessId: business.id },
+    select: { id: true, version: true },
+  });
+  if (!existing) throw new Error("Proposal draft tidak ditemukan.");
+
+  const title = cleanRequired(formData.get("title"), "Judul proposal", 200);
+  const projectSummary = cleanRequired(formData.get("projectSummary"), "Ringkasan project", 5_000);
+  const disclaimer = cleanRequired(formData.get("disclaimer"), "Disclaimer", 2_000);
+  const min = normalizeMoney(String(formData.get("estimatedValueMin") ?? ""));
+  const max = normalizeMoney(String(formData.get("estimatedValueMax") ?? ""));
+
+  return prisma.proposalDraft.update({
+    where: { id: existing.id },
+    data: {
+      title,
+      clientName: normalizeText(formData.get("clientName")),
+      projectSummary,
+      scopeOfWork: parseLineList(formData.get("scopeOfWork")),
+      assumptions: parseLineList(formData.get("assumptions")),
+      exclusions: parseLineList(formData.get("exclusions")),
+      estimatedValueMin: min,
+      estimatedValueMax: max,
+      timeline: normalizeText(formData.get("timeline")),
+      nextSteps: parseLineList(formData.get("nextSteps")),
+      disclaimer,
+      validUntil: parseOptionalDate(formData.get("validUntil")),
+      version: { increment: 1 },
+    },
+  });
+}
+
+export async function getProposalDraftForPrint(userId: string, proposalId: string) {
+  const business = await requireBusinessForUser(userId);
+  return prisma.proposalDraft.findFirst({
+    where: { id: proposalId, businessId: business.id },
+    include: {
+      business: {
+        select: {
+          businessName: true,
+          address: true,
+          whatsappNumber: true,
+          websiteUrl: true,
+        },
+      },
+      lead: { select: { customerPhone: true, location: true } },
+    },
+  });
+}
+
 export async function updateProposalDraftStatus(userId: string, proposalId: string, status: string) {
   const business = await requireBusinessForUser(userId);
   const parsedStatus = parseProposalStatus(status);
@@ -165,8 +218,9 @@ export async function updateProposalDraftStatus(userId: string, proposalId: stri
 export async function deleteProposalDraft(userId: string, proposalId: string) {
   const business = await requireBusinessForUser(userId);
 
-  return prisma.proposalDraft.delete({
+  return prisma.proposalDraft.update({
     where: { id: proposalId, businessId: business.id },
+    data: { status: "ARCHIVED" },
   });
 }
 
@@ -176,6 +230,7 @@ export async function sendProposalDraftFollowUp(userId: string, proposalId: stri
     where: { id: proposalId, businessId: business.id },
     select: {
       id: true,
+      version: true,
       title: true,
       clientName: true,
       projectSummary: true,
@@ -206,28 +261,18 @@ export async function sendProposalDraftFollowUp(userId: string, proposalId: stri
     projectSummary: proposal.projectSummary,
     title: proposal.title,
   });
-  const now = new Date();
-
-  await prisma.whatsAppMessage.create({
-    data: {
-      conversationId: proposal.lead.conversationId,
-      providerMessageId: `proposal-follow-up-${crypto.randomUUID()}`,
-      senderType: SenderType.USER,
-      messageType: MessageType.TEXT,
-      messageBody: message,
-      intent: "proposal_follow_up",
-      processingStatus: ProcessingStatus.PROCESSED,
-    },
+  const delivery = await sendConversationOwnerMessage({
+    businessId: business.id,
+    conversationId: proposal.lead.conversationId,
+    message,
+    intent: "proposal_follow_up",
+    providerMessagePrefix: "proposal-follow-up",
+    idempotencyKey: `proposal-follow-up:${proposal.id}:v${proposal.version}`,
   });
 
-  await prisma.whatsAppConversation.update({
-    where: { id: proposal.lead.conversationId },
-    data: {
-      status: ConversationStatus.HUMAN_NEEDED,
-      lastMessageAt: now,
-      ownerLastReadAt: now,
-    },
-  });
+  if (!delivery.accepted) {
+    throw new Error("Proposal belum diterima channel tujuan dan tidak ditandai SENT.");
+  }
 
   return prisma.proposalDraft.update({
     where: { id: proposal.id },
@@ -269,7 +314,13 @@ export async function getProposalDraftsForLead(userId: string, leadId: string) {
   }));
 }
 
-export async function getProposalDraftsPage(userId: string) {
+type ProposalPageFilters = {
+  page?: number;
+  query?: string;
+  status?: string;
+};
+
+export async function getProposalDraftsPage(userId: string, filters: ProposalPageFilters = {}) {
   const business = await getBusinessForUser(userId);
 
   if (!business) {
@@ -277,14 +328,39 @@ export async function getProposalDraftsPage(userId: string) {
       business: null,
       proposals: [],
       summary: { total: 0, draft: 0 },
+      pagination: { page: 1, pageSize: 10, total: 0, pageCount: 1 },
     };
   }
 
-  const [proposals, draft] = await Promise.all([
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = 10;
+  const query = filters.query?.trim().slice(0, 120) ?? "";
+  const status = proposalStatuses.includes(filters.status as ProposalStatus)
+    ? (filters.status as ProposalStatus)
+    : undefined;
+  const where: Prisma.ProposalDraftWhereInput = {
+    businessId: business.id,
+    status: status ?? { not: "ARCHIVED" },
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" } },
+            { clientName: { contains: query, mode: "insensitive" } },
+            { projectSummary: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+  const activeWhere: Prisma.ProposalDraftWhereInput = {
+    businessId: business.id,
+    status: { not: "ARCHIVED" },
+  };
+  const [proposals, total, activeTotal, draft] = await Promise.all([
     prisma.proposalDraft.findMany({
-      where: { businessId: business.id },
+      where,
       orderBy: { createdAt: "desc" },
-      take: 50,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         leadId: true,
@@ -301,6 +377,9 @@ export async function getProposalDraftsPage(userId: string) {
         disclaimer: true,
         status: true,
         generatedBy: true,
+        proposalNumber: true,
+        validUntil: true,
+        version: true,
         createdAt: true,
         lead: {
           select: {
@@ -311,6 +390,8 @@ export async function getProposalDraftsPage(userId: string) {
         },
       },
     }),
+    prisma.proposalDraft.count({ where }),
+    prisma.proposalDraft.count({ where: activeWhere }),
     prisma.proposalDraft.count({ where: { businessId: business.id, status: "DRAFT" } }),
   ]);
 
@@ -321,8 +402,15 @@ export async function getProposalDraftsPage(userId: string) {
       estimatedValueMin: proposal.estimatedValueMin?.toString() ?? null,
       estimatedValueMax: proposal.estimatedValueMax?.toString() ?? null,
       createdAt: proposal.createdAt.toISOString().slice(0, 10),
+      validUntil: proposal.validUntil?.toISOString().slice(0, 10) ?? null,
     })),
-    summary: { total: proposals.length, draft },
+    summary: { total: activeTotal, draft },
+    pagination: {
+      page,
+      pageSize,
+      total,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    },
   };
 }
 
@@ -441,6 +529,34 @@ function normalizeStringArray(value: unknown, fallback: string[]) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function cleanRequired(value: FormDataEntryValue | null, label: string, max: number) {
+  const cleaned = String(value ?? "").trim().slice(0, max);
+  if (!cleaned) throw new Error(`${label} wajib diisi.`);
+  return cleaned;
+}
+
+function parseLineList(value: FormDataEntryValue | null) {
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map((item) => item.replace(/^\s*[-*\d.)]+\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 50)
+    .map((item) => item.slice(0, 1_000));
+}
+
+function parseOptionalDate(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const date = new Date(`${text}T23:59:59.000Z`);
+  if (Number.isNaN(date.getTime())) throw new Error("Tanggal berlaku proposal tidak valid.");
+  return date;
+}
+
+function createProposalNumber(leadId: string) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return `AJ-${date}-${leadId.slice(-6).toUpperCase()}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
 }
 
 function normalizeMoney(value: unknown) {

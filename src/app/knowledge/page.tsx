@@ -1,5 +1,6 @@
 import { BookOpen, Plus } from "lucide-react";
 import type { Route } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   createKnowledgeBaseAction,
@@ -9,17 +10,29 @@ import {
   updateKnowledgeBaseAction,
 } from "@/app/knowledge/actions";
 import { AppShell } from "@/components/app-shell";
+import {
+  knowledgeCategoryMaxChars,
+  knowledgeContentMaxChars,
+  knowledgeTitleMaxChars,
+} from "@/lib/knowledge-limits";
 import { getSession } from "@/lib/session";
 import { getKnowledgeBasePage, knowledgeTemplates } from "@/server/knowledge/knowledge-base";
 
-export default async function KnowledgePage() {
+type KnowledgePageProps = {
+  searchParams?: Promise<{ page?: string; q?: string }>;
+};
+
+export default async function KnowledgePage({ searchParams }: KnowledgePageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const page = await getKnowledgeBasePage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const pageNumber = Math.max(1, Number(params.page ?? 1) || 1);
+  const query = params.q?.trim() ?? "";
+  const page = await getKnowledgeBasePage(session.userId, { page: pageNumber, q: query });
 
   return (
     <AppShell active="knowledge" businessName={page.business?.businessName}>
@@ -37,7 +50,7 @@ export default async function KnowledgePage() {
           <div className="card">
             <BookOpen size={22} aria-hidden="true" />
             <h2>Total Entries</h2>
-            <div className="metric">{page.entries.length}</div>
+            <div className="metric">{page.pagination.total}</div>
             <p className="muted">Semua knowledge item.</p>
           </div>
           <div className="card">
@@ -59,16 +72,28 @@ export default async function KnowledgePage() {
             <form className="form-grid" action={createKnowledgeBaseAction}>
               <label>
                 Title
-                <input name="title" type="text" placeholder="Layanan instalasi jaringan" required />
+                <input
+                  name="title"
+                  type="text"
+                  maxLength={knowledgeTitleMaxChars}
+                  placeholder="Layanan instalasi jaringan"
+                  required
+                />
               </label>
               <label>
                 Category
-                <input name="category" type="text" placeholder="services / faq / pricing" />
+                <input
+                  name="category"
+                  type="text"
+                  maxLength={knowledgeCategoryMaxChars}
+                  placeholder="services / faq / pricing"
+                />
               </label>
               <label className="span-2">
                 Content
                 <textarea
                   name="content"
+                  maxLength={knowledgeContentMaxChars}
                   placeholder="Jelaskan layanan, batasan, informasi harga estimasi, atau FAQ..."
                   required
                 />
@@ -119,8 +144,12 @@ export default async function KnowledgePage() {
           <div className="card">
             <div className="section-header">
               <h2>Knowledge Entries</h2>
-              <span className="muted">{page.entries.length} items</span>
+              <span className="muted">{page.pagination.total} items</span>
             </div>
+            <form className="chat-archive-filter" action="/knowledge" method="get">
+              <input name="q" type="search" defaultValue={query} placeholder="Cari title, category, atau isi" />
+              <button className="ghost-button" type="submit">Cari</button>
+            </form>
             {page.entries.length === 0 ? (
               <p className="muted">Belum ada knowledge. Tambahkan layanan atau FAQ dulu.</p>
             ) : (
@@ -142,15 +171,31 @@ export default async function KnowledgePage() {
                       <input name="entryId" type="hidden" value={entry.id} />
                       <label>
                         Title
-                        <input name="title" type="text" defaultValue={entry.title} required />
+                        <input
+                          name="title"
+                          type="text"
+                          maxLength={knowledgeTitleMaxChars}
+                          defaultValue={entry.title}
+                          required
+                        />
                       </label>
                       <label>
                         Category
-                        <input name="category" type="text" defaultValue={entry.category ?? ""} />
+                        <input
+                          name="category"
+                          type="text"
+                          maxLength={knowledgeCategoryMaxChars}
+                          defaultValue={entry.category ?? ""}
+                        />
                       </label>
                       <label className="span-2">
                         Content
-                        <textarea name="content" defaultValue={entry.content} required />
+                        <textarea
+                          name="content"
+                          maxLength={knowledgeContentMaxChars}
+                          defaultValue={entry.content}
+                          required
+                        />
                       </label>
                       <label className="checkbox-label span-2">
                         <input name="isActive" type="checkbox" defaultChecked={entry.isActive} />
@@ -165,15 +210,39 @@ export default async function KnowledgePage() {
                     <form action={deleteKnowledgeBaseAction}>
                       <input name="entryId" type="hidden" value={entry.id} />
                       <button className="danger-button" type="submit">
-                        Delete
+                        Nonaktifkan
                       </button>
                     </form>
                   </details>
                 ))}
               </div>
             )}
+            {page.pagination.pageCount > 1 ? (
+              <div className="orders-pagination">
+                <span>Halaman {page.pagination.page} dari {page.pagination.pageCount}</span>
+                <div className="orders-header-actions">
+                  {page.pagination.page > 1 ? (
+                    <Link className="ghost-button" href={knowledgePageUrl(query, page.pagination.page - 1)}>
+                      Sebelumnya
+                    </Link>
+                  ) : null}
+                  {page.pagination.page < page.pagination.pageCount ? (
+                    <Link className="ghost-button" href={knowledgePageUrl(query, page.pagination.page + 1)}>
+                      Berikutnya
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
     </AppShell>
   );
+}
+
+function knowledgePageUrl(query: string, page: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  params.set("page", String(page));
+  return `/knowledge?${params.toString()}`;
 }

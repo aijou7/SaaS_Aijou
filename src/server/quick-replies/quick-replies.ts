@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 
@@ -44,7 +45,7 @@ type QuickReplyInput = {
   sortOrder?: number;
 };
 
-export async function getQuickRepliesPage(userId: string) {
+export async function getQuickRepliesPage(userId: string, filters: { q?: string } = {}) {
   const business = await getBusinessForUser(userId);
 
   if (!business) {
@@ -56,10 +57,24 @@ export async function getQuickRepliesPage(userId: string) {
   }
 
   await ensureDefaultQuickReplies(business.id);
+  const q = filters.q?.trim().slice(0, 120);
+  const where: Prisma.QuickReplyWhereInput = {
+    businessId: business.id,
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { content: { contains: q, mode: "insensitive" } },
+            { shortcut: { contains: q, mode: "insensitive" } },
+            { category: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
 
-  const [quickReplies, active, privateCount] = await Promise.all([
+  const [quickReplies, total, active, privateCount] = await Promise.all([
     prisma.quickReply.findMany({
-      where: { businessId: business.id },
+      where,
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -74,6 +89,7 @@ export async function getQuickRepliesPage(userId: string) {
         updatedAt: true,
       },
     }),
+    prisma.quickReply.count({ where: { businessId: business.id } }),
     prisma.quickReply.count({ where: { businessId: business.id, isActive: true } }),
     prisma.quickReply.count({ where: { businessId: business.id, isPrivate: true } }),
   ]);
@@ -86,7 +102,7 @@ export async function getQuickRepliesPage(userId: string) {
       updatedAt: reply.updatedAt.toISOString().slice(0, 10),
     })),
     summary: {
-      total: quickReplies.length,
+      total,
       active,
       private: privateCount,
     },
@@ -106,7 +122,6 @@ export async function getActiveQuickRepliesForUser(userId: string) {
     prisma.quickReply.findMany({
       where: { businessId: business.id, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      take: 8,
       select: {
         id: true,
         name: true,
@@ -146,8 +161,9 @@ export async function deleteQuickReply(userId: string, quickReplyId: string) {
   const business = await requireBusinessForUser(userId);
   invalidateTtlCache(`quick-replies-active:${business.id}`);
 
-  return prisma.quickReply.delete({
+  return prisma.quickReply.update({
     where: { id: quickReplyId, businessId: business.id },
+    data: { isActive: false },
   });
 }
 

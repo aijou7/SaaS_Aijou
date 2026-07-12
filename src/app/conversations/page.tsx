@@ -4,18 +4,13 @@ import {
   Bell,
   Bot,
   CheckCircle,
-  CheckCircle2,
   GitBranch,
-  ListChecks,
   Mail,
   Megaphone,
   MessageCircle,
   Music2,
-  Plus,
   RadioTower,
-  Search,
   ShieldCheck,
-  SlidersHorizontal,
   Zap,
 } from "lucide-react";
 import type { Route } from "next";
@@ -31,7 +26,7 @@ import {
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
-import { ConversationStatus } from "@/generated/prisma/client";
+import { ConversationStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
 import {
@@ -46,7 +41,6 @@ type ChatView =
   | "chat"
   | "analytics"
   | "conversations"
-  | "broadcasts"
   | "ai-agents"
   | "platforms"
   | "flow"
@@ -74,13 +68,12 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const status = getSearchParam(resolvedSearchParams, "status");
   const q = getSearchParam(resolvedSearchParams, "q");
   const unread = getSearchParam(resolvedSearchParams, "unread") === "1";
+  const pageNumber = Math.max(1, Number(getSearchParam(resolvedSearchParams, "page") ?? 1) || 1);
   const currentView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
 
-  const inbox = await getConversationsInbox(session.userId, { status, q, unread });
-  const selectedConversation = conversationId
-    ? await getConversationDetail(session.userId, conversationId)
-    : null;
-  const [agentPage, quickReplies, whatsAppPage] = await Promise.all([
+  const [inbox, selectedConversation, agentPage, quickReplies, whatsAppPage] = await Promise.all([
+    getConversationsInbox(session.userId, { status, q, unread, page: pageNumber }),
+    conversationId ? getConversationDetail(session.userId, conversationId) : Promise.resolve(null),
     getAgentSettingsPage(session.userId),
     getActiveQuickRepliesForUser(session.userId),
     getWhatsAppSettingsPage(session.userId),
@@ -128,29 +121,27 @@ function ChatInboxView({
   return (
     <section className="chat-page">
       <aside className="chat-inbox">
-        <div className="chat-inbox-toolbar">
-          <select defaultValue="" aria-label="Agent filter">
-            <option value="">All Agents</option>
-            <option value="ai">AI Agent</option>
-            <option value="owner">Owner</option>
-          </select>
-          <Search size={18} aria-hidden="true" />
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          <Plus size={18} aria-hidden="true" />
-          <ListChecks size={18} aria-hidden="true" />
-          <MessageCircle size={18} aria-hidden="true" />
-        </div>
-
         <form className="chat-filter-form" action="/conversations" method="get">
-          <input name="q" type="search" defaultValue={q ?? ""} placeholder="Search conversations" />
-          <select name="status" defaultValue={status ?? ""}>
-            <option value="">All status</option>
-            {Object.values(ConversationStatus).map((option) => (
-              <option key={option} value={option}>
-                {formatConversationStatus(option)}
-              </option>
-            ))}
-          </select>
+          <input
+            name="q"
+            type="search"
+            defaultValue={q ?? ""}
+            placeholder="Cari percakapan"
+            maxLength={160}
+            aria-label="Cari percakapan"
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 4 }}>
+            <select name="status" defaultValue={status ?? ""} aria-label="Status percakapan">
+              <option value="">All status</option>
+              {Object.values(ConversationStatus).map((option) => (
+                <option key={option} value={option}>
+                  {formatConversationStatus(option)}
+                </option>
+              ))}
+            </select>
+            <button className="ghost-button" type="submit" aria-label="Terapkan filter">Cari</button>
+          </div>
+          {unread ? <input name="unread" type="hidden" value="1" /> : null}
         </form>
 
         <div className="chat-tabs">
@@ -163,12 +154,30 @@ function ChatInboxView({
           <Link className={status === "CLOSED" ? "active" : ""} href="/conversations?status=CLOSED">
             Closed <span>{inbox.summary.closed}</span>
           </Link>
-          <span className="tab-check">
-            <CheckCircle2 size={18} aria-hidden="true" />
-          </span>
         </div>
 
-        <ConversationTicketList inbox={inbox} selectedConversationId={selectedConversation?.id} />
+        <ConversationTicketList
+          inbox={inbox}
+          q={q}
+          selectedConversationId={selectedConversation?.id}
+          status={status}
+          unread={unread}
+        />
+        {inbox.pagination.pageCount > 1 ? (
+          <div className="orders-pagination chat-pagination">
+            {inbox.pagination.page > 1 ? (
+              <Link href={buildInboxPageUrl({ q, status, unread, page: inbox.pagination.page - 1 })}>
+                Sebelumnya
+              </Link>
+            ) : <span />}
+            <small>{inbox.pagination.page}/{inbox.pagination.pageCount}</small>
+            {inbox.pagination.page < inbox.pagination.pageCount ? (
+              <Link href={buildInboxPageUrl({ q, status, unread, page: inbox.pagination.page + 1 })}>
+                Berikutnya
+              </Link>
+            ) : <span />}
+          </div>
+        ) : null}
       </aside>
 
       <main className="chat-stage">
@@ -184,10 +193,16 @@ function ChatInboxView({
 
 function ConversationTicketList({
   inbox,
+  q,
   selectedConversationId,
+  status,
+  unread,
 }: {
   inbox: ConversationInbox;
+  q?: string;
   selectedConversationId?: string;
+  status?: string;
+  unread?: boolean;
 }) {
   return (
     <div className="chat-ticket-list">
@@ -200,7 +215,13 @@ function ConversationTicketList({
         inbox.conversations.map((conversation) => (
           <Link
             className={selectedConversationId === conversation.id ? "chat-ticket active" : "chat-ticket"}
-            href={`/conversations?conversationId=${conversation.id}`}
+            href={buildInboxPageUrl({
+              conversationId: conversation.id,
+              q,
+              status,
+              unread,
+              page: inbox.pagination.page,
+            })}
             key={conversation.id}
           >
             <div className="ticket-heading">
@@ -356,15 +377,28 @@ function ConversationDetailPanel({
       </div>
 
       <div className="quick-reply-strip" aria-label="Quick replies">
-        {quickReplies.map((reply) => (
-          <form action={sendOwnerReplyAction} key={reply.id}>
+        {quickReplies.length > 0 ? (
+          <form action={sendOwnerReplyAction} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input name="conversationId" type="hidden" value={selectedConversation.id} />
-            <input name="message" type="hidden" value={reply.content} />
+            <select
+              name="message"
+              defaultValue=""
+              required
+              aria-label="Pilih quick reply"
+              style={{ maxWidth: "min(100%, 480px)" }}
+            >
+              <option value="" disabled>Pilih template balasan</option>
+              {quickReplies.map((reply) => (
+                <option key={reply.id} value={reply.content}>
+                  {reply.shortcut ?? reply.name} — {reply.content.slice(0, 80)}
+                </option>
+              ))}
+            </select>
             <button className="small-outline-button" type="submit">
-              {reply.shortcut ?? reply.name}
+              Kirim template
             </button>
           </form>
-        ))}
+        ) : null}
         <Link className="small-outline-button" href="/quick-replies">
           Kelola template
         </Link>
@@ -410,8 +444,9 @@ function ChatFeaturePanel({
       </div>
 
       {view === "analytics" ? <AnalyticsPanel inbox={inbox} /> : null}
-      {view === "conversations" ? <ConversationsPanel inbox={inbox} /> : null}
-      {view === "broadcasts" ? <BroadcastsPanel searchParams={searchParams} /> : null}
+      {view === "conversations" ? (
+        <ConversationsPanel inbox={inbox} searchParams={searchParams} />
+      ) : null}
       {view === "ai-agents" ? <AIAgentsPanel agentPage={agentPage} inbox={inbox} /> : null}
       {view === "platforms" ? (
         <PlatformsPanel searchParams={searchParams} whatsAppPage={whatsAppPage} />
@@ -461,7 +496,16 @@ function AnalyticsPanel({ inbox }: { inbox: ConversationInbox }) {
   );
 }
 
-function ConversationsPanel({ inbox }: { inbox: ConversationInbox }) {
+function ConversationsPanel({
+  inbox,
+  searchParams,
+}: {
+  inbox: ConversationInbox;
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const q = getSearchParam(searchParams, "q");
+  const status = getSearchParam(searchParams, "status");
+
   return (
     <div className="chat-feature-card">
       <div className="feature-card-title">
@@ -470,8 +514,14 @@ function ConversationsPanel({ inbox }: { inbox: ConversationInbox }) {
       </div>
       <form className="chat-archive-filter" action="/conversations" method="get">
         <input name="view" type="hidden" value="conversations" />
-        <input name="q" type="search" placeholder="Search contact or message" />
-        <select name="status" defaultValue="">
+        <input
+          name="q"
+          type="search"
+          defaultValue={q ?? ""}
+          placeholder="Search contact or message"
+          maxLength={160}
+        />
+        <select name="status" defaultValue={status ?? ""}>
           <option value="">All status</option>
           {Object.values(ConversationStatus).map((option) => (
             <option key={option} value={option}>
@@ -485,7 +535,16 @@ function ConversationsPanel({ inbox }: { inbox: ConversationInbox }) {
       </form>
       <div className="archive-table">
         {inbox.conversations.map((conversation) => (
-          <Link className="archive-row" href={`/conversations?conversationId=${conversation.id}`} key={conversation.id}>
+          <Link
+            className="archive-row"
+            href={buildInboxPageUrl({
+              conversationId: conversation.id,
+              q,
+              status,
+              page: inbox.pagination.page,
+            })}
+            key={conversation.id}
+          >
             <span>
               <strong>{conversation.contactName}</strong>
               <small>{conversation.contactPhone}</small>
@@ -498,56 +557,35 @@ function ConversationsPanel({ inbox }: { inbox: ConversationInbox }) {
           </Link>
         ))}
       </div>
-    </div>
-  );
-}
-
-function BroadcastsPanel({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const campaignName = getSearchParam(searchParams, "campaignName") ?? "Follow-up campaign";
-  const audience = getSearchParam(searchParams, "audience") ?? "all";
-  const message =
-    getSearchParam(searchParams, "message") ??
-    "Halo {{name}}, kami follow up kebutuhan IT support kemarin. Masih bisa kami bantu?";
-
-  return (
-    <div className="chat-feature-grid">
-      <div className="chat-feature-card">
-        <h2>Create broadcast draft</h2>
-        <form className="form-grid" action="/conversations" method="get">
-          <input name="view" type="hidden" value="broadcasts" />
-          <label>
-            Campaign name
-            <input name="campaignName" type="text" defaultValue={campaignName} />
-          </label>
-          <label>
-            Audience
-            <select name="audience" defaultValue={audience}>
-              <option value="all">All contacts</option>
-              <option value="open">Open conversations</option>
-              <option value="human">Needs human follow-up</option>
-              <option value="closed">Closed customers</option>
-            </select>
-          </label>
-          <label className="span-2">
-            Message template
-            <textarea name="message" defaultValue={message} />
-          </label>
-          <button className="primary-button span-2" type="submit">
-            Generate preview
-          </button>
-        </form>
-      </div>
-
-      <div className="chat-feature-card broadcast-preview">
-        <h2>Preview</h2>
-        <span className="status">{campaignName}</span>
-        <p>{message.replace("{{name}}", "Aksal")}</p>
-        <small>Audience: {audience}. Sending integration will use the connected platform.</small>
-      </div>
+      {inbox.pagination.pageCount > 1 ? (
+        <nav className="orders-pagination" aria-label="Pagination conversation archive">
+          {inbox.pagination.page > 1 ? (
+            <Link
+              href={buildInboxPageUrl({
+                q,
+                status,
+                view: "conversations",
+                page: inbox.pagination.page - 1,
+              })}
+            >
+              Sebelumnya
+            </Link>
+          ) : <span />}
+          <small>{inbox.pagination.page}/{inbox.pagination.pageCount}</small>
+          {inbox.pagination.page < inbox.pagination.pageCount ? (
+            <Link
+              href={buildInboxPageUrl({
+                q,
+                status,
+                view: "conversations",
+                page: inbox.pagination.page + 1,
+              })}
+            >
+              Berikutnya
+            </Link>
+          ) : <span />}
+        </nav>
+      ) : null}
     </div>
   );
 }
@@ -1006,10 +1044,6 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
     title: "Conversations",
     description: "Archive view for searching, filtering, and reopening customer conversations.",
   },
-  broadcasts: {
-    title: "Broadcasts",
-    description: "Draft reusable outbound messages before connecting the final sender.",
-  },
   "ai-agents": {
     title: "AI Agents",
     description: "Control the agent that replies to incoming customer messages.",
@@ -1027,6 +1061,24 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
     description: "Tune chat messages, quick replies, and operational shortcuts.",
   },
 };
+
+function buildInboxPageUrl(params: {
+  conversationId?: string;
+  q?: string;
+  status?: string;
+  unread?: boolean;
+  view?: "conversations";
+  page: number;
+}) {
+  const search = new URLSearchParams();
+  if (params.conversationId) search.set("conversationId", params.conversationId);
+  if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.unread) search.set("unread", "1");
+  if (params.view) search.set("view", params.view);
+  search.set("page", String(params.page));
+  return `/conversations?${search.toString()}`;
+}
 
 function getSearchParam(
   searchParams: Record<string, string | string[] | undefined>,
@@ -1046,7 +1098,6 @@ function normalizeChatView(value?: string): ChatView {
     "chat",
     "analytics",
     "conversations",
-    "broadcasts",
     "ai-agents",
     "platforms",
     "flow",

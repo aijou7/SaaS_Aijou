@@ -1,16 +1,19 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { checkAbuseLimit, generousBriefRules, getClientIp } from "@/lib/abuse-guard";
-import { prisma } from "@/lib/prisma";
-import { ttlCache } from "@/lib/ttl-cache";
-import { simulateCustomerMessage } from "@/server/conversations/conversations";
+import {
+  readRequestBodyBuffer,
+  RequestBodyTooLargeError,
+} from "@/lib/request-security";
+import { simulateCustomerMessageForBusiness } from "@/server/conversations/conversations";
+import {
+  getWorkspaceKey,
+  normalizeWebOrigin,
+  resolveWidgetBusiness,
+  verifyWidgetSessionToken,
+} from "@/server/web/widget-security";
 
-const allowedOrigins = new Set([
-  "https://aksaldev.my.id",
-  "https://www.aksaldev.my.id",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-]);
+const maxBriefBodyBytes = 64 * 1024;
 
 type BriefBody = {
   name?: unknown;
@@ -25,6 +28,8 @@ type BriefBody = {
   message?: unknown;
   sessionId?: unknown;
   clientMessageId?: unknown;
+  chatToken?: unknown;
+  workspaceKey?: unknown;
 };
 
 export async function OPTIONS(request: NextRequest) {
@@ -32,13 +37,44 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const origin = request.headers.get("origin");
+  const origin = normalizeWebOrigin(request.headers.get("origin"));
 
-  if (!origin || !allowedOrigins.has(origin)) {
+  if (!origin) {
     return json(request, { error: "Origin website tidak diizinkan." }, 403);
   }
 
-  const body = (await request.json().catch(() => null)) as BriefBody | null;
+  const clientIp = getClientIp(request);
+  const preflightLimit = checkAbuseLimit(`web-brief-pre:ip:${clientIp}`, [
+    { max: 600, windowMs: 10 * 60_000 },
+    { max: 4_000, windowMs: 60 * 60_000 },
+  ]);
+  if (!preflightLimit.allowed) {
+    return json(request, { error: "Traffic brief terlalu tinggi. Coba lagi sebentar ya." }, 429, {
+      "Retry-After": String(preflightLimit.retryAfterSeconds),
+    });
+  }
+
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.startsWith("application/json")) {
+    return json(request, { error: "Content-Type tidak didukung." }, 415);
+  }
+
+  let body: BriefBody | null;
+  try {
+    const rawBody = await readRequestBodyBuffer(request, maxBriefBodyBytes);
+    body = JSON.parse(rawBody.toString("utf8")) as BriefBody;
+  } catch (error) {
+    return json(
+      request,
+      {
+        error:
+          error instanceof RequestBodyTooLargeError
+            ? "Payload brief terlalu besar."
+            : "Payload brief tidak valid.",
+      },
+      error instanceof RequestBodyTooLargeError ? 413 : 400,
+    );
+  }
   const name = clean(body?.name, 80);
   const phone = clean(body?.phone, 40);
   const email = clean(body?.email, 120);
@@ -51,12 +87,22 @@ export async function POST(request: NextRequest) {
   const message = clean(body?.message, 1200);
   const sessionId = clean(body?.sessionId, 160);
   const clientMessageId = clean(body?.clientMessageId, 160);
+  const chatToken =
+    clean(body?.chatToken, 4096) ||
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ||
+    "";
 
   if (!projectGoal && !message && !serviceInterest) {
     return json(request, { error: "Brief minimal perlu kebutuhan project atau service interest." }, 400);
   }
 
-  const business = await getWebsiteBusiness(origin);
+  const tokenPayload = chatToken ? verifyWidgetSessionToken(chatToken, origin) : null;
+  const business = tokenPayload
+    ? { id: tokenPayload.businessId, userId: tokenPayload.userId }
+    : await resolveWidgetBusiness(
+        origin,
+        getWorkspaceKey(request.headers, request.nextUrl.searchParams, body?.workspaceKey),
+      );
 
   if (!business) {
     return json(
@@ -66,9 +112,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const visitorKey = getVisitorKey(origin, sessionId || email || phone || name || "brief");
-  const abuseKey = `web-brief:${origin}:${visitorKey}:${getClientIp(request)}`;
-  const abuseCheck = checkAbuseLimit(abuseKey, generousBriefRules);
+  const visitorKey =
+    tokenPayload?.visitorId ??
+    getVisitorKey(origin, sessionId || clientMessageId || randomUUID());
+  const ipCheck = checkAbuseLimit(`web-brief:ip:${clientIp}`, [
+    { max: 300, windowMs: 10 * 60_000 },
+    { max: 2_000, windowMs: 60 * 60_000 },
+  ]);
+  const sessionCheck = checkAbuseLimit(
+    `web-brief:${business.id}:${visitorKey}`,
+    generousBriefRules,
+  );
+  const abuseCheck = !ipCheck.allowed ? ipCheck : sessionCheck;
 
   if (!abuseCheck.allowed) {
     return json(
@@ -81,7 +136,7 @@ export async function POST(request: NextRequest) {
       { "Retry-After": String(abuseCheck.retryAfterSeconds) },
     );
   }
-  const phoneNumber = phone ? `brief-${phone.replace(/[^\d+]/g, "").slice(0, 32)}` : `web-brief-${visitorKey}`;
+  const phoneNumber = `web-brief-${visitorKey}`;
   const synthesizedMessage = [
     "Project brief dari website Aijou:",
     name ? `Nama: ${name}` : null,
@@ -98,32 +153,25 @@ export async function POST(request: NextRequest) {
     .filter(Boolean)
     .join("\n");
 
-  const result = await simulateCustomerMessage(business.userId, {
+  const result = await simulateCustomerMessageForBusiness(business.id, {
     phoneNumber,
     displayName: name || company || "Brief website",
     message: synthesizedMessage,
     leadSource: "BRIEF",
     providerMessageId: clientMessageId
-      ? `brief-${getVisitorKey(origin, `${sessionId}:${clientMessageId}`)}`
+      ? `brief-${getVisitorKey(
+          origin,
+          `${business.id}:${visitorKey}:${clientMessageId}`,
+        )}`
       : undefined,
   });
 
   return json(request, {
     ok: true,
-    conversationId: result.conversationId,
     reply:
       result.aiReply ??
       "Brief sudah masuk ke workspace Aijou. Tim kami akan review dan follow up.",
-    lead: result.leadSummary
-      ? {
-          status: result.leadSummary.status,
-          qualificationScore: result.leadSummary.qualificationScore,
-          estimateNote: result.leadSummary.estimateNote,
-          nextStep: result.leadSummary.nextStep,
-          estimatedValueMin: result.leadSummary.estimatedValueMin?.toString() ?? null,
-          estimatedValueMax: result.leadSummary.estimatedValueMax?.toString() ?? null,
-        }
-      : null,
+    deduped: result.deduped ?? false,
   });
 }
 
@@ -139,33 +187,23 @@ function json(
 ) {
   return NextResponse.json(body, {
     status,
-    headers: { ...corsHeaders(request), ...extraHeaders },
+    headers: { ...corsHeaders(request), "Cache-Control": "no-store", ...extraHeaders },
   });
 }
 
 function corsHeaders(request: NextRequest): Record<string, string> {
-  const origin = request.headers.get("origin");
+  const origin = normalizeWebOrigin(request.headers.get("origin"));
 
-  if (!origin || !allowedOrigins.has(origin)) {
+  if (!origin) {
     return { Vary: "Origin" };
   }
 
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Aijou-Workspace",
     Vary: "Origin",
   };
-}
-
-async function getWebsiteBusiness(origin: string) {
-  const hostname = new URL(origin).hostname;
-  return ttlCache(`website-business:${hostname}`, 60_000, () =>
-    prisma.business.findFirst({
-      where: { websiteUrl: { contains: hostname } },
-      select: { id: true, userId: true },
-    }),
-  );
 }
 
 function getVisitorKey(origin: string, sessionKey: string) {

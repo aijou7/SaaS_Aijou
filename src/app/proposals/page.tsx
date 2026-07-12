@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   deleteProposalDraftAction,
   sendProposalFollowUpAction,
+  updateProposalDraftContentAction,
   updateProposalDraftStatusAction,
 } from "@/app/proposals/actions";
 import { AppShell } from "@/components/app-shell";
@@ -13,14 +14,22 @@ import { getProposalDraftsPage } from "@/server/proposals/proposal-drafts";
 
 const proposalStatuses = ["DRAFT", "REVIEWED", "SENT", "ACCEPTED", "REJECTED"];
 
-export default async function ProposalsPage() {
+type ProposalsPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function ProposalsPage({ searchParams }: ProposalsPageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const page = await getProposalDraftsPage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const query = getSingleParam(params.q)?.trim() ?? "";
+  const status = getSingleParam(params.status)?.trim() ?? "";
+  const pageNumber = Math.max(1, Number(getSingleParam(params.page) ?? 1) || 1);
+  const page = await getProposalDraftsPage(session.userId, { page: pageNumber, query, status });
 
   return (
     <AppShell active="proposals" businessName={page.business?.businessName}>
@@ -60,6 +69,18 @@ export default async function ProposalsPage() {
             </Link>
           </div>
 
+          <form className="chat-archive-filter" action="/proposals" method="get">
+            <input name="q" defaultValue={query} maxLength={120} placeholder="Cari judul, klien, atau project" />
+            <select name="status" defaultValue={status} aria-label="Filter status proposal">
+              <option value="">Semua proposal aktif</option>
+              {proposalStatuses.map((item) => (
+                <option key={item} value={item}>{formatStatus(item)}</option>
+              ))}
+              <option value="ARCHIVED">Archived</option>
+            </select>
+            <button className="ghost-button" type="submit">Filter</button>
+          </form>
+
           {page.proposals.length === 0 ? (
             <div className="empty-state">
               <strong>Belum ada proposal draft</strong>
@@ -79,6 +100,7 @@ export default async function ProposalsPage() {
                         {proposal.clientName ?? "Unknown client"} · {proposal.status} ·{" "}
                         {proposal.generatedBy} · Created {proposal.createdAt}
                       </small>
+                      <small>{proposal.proposalNumber ?? "No number"} · Revision {proposal.version}</small>
                       <span className="muted conversation-preview">{proposal.projectSummary}</span>
                     </span>
                     <span className={proposal.status === "ACCEPTED" ? "status" : "status status-warning"}>
@@ -127,18 +149,69 @@ export default async function ProposalsPage() {
                         >
                           Open conversation
                         </Link>
+                        <Link
+                          className="ghost-button"
+                          href={`/proposals/${proposal.id}/print`}
+                          target="_blank"
+                        >
+                          Preview / Print PDF
+                        </Link>
                         <Link className="ghost-button" href="/leads">
                           Open lead pipeline
                         </Link>
                         <form action={deleteProposalDraftAction}>
                           <input name="proposalId" type="hidden" value={proposal.id} />
                           <button className="small-danger-button" type="submit">
-                            Delete draft
+                            Arsipkan draft
                           </button>
                         </form>
                       </div>
                     </div>
                   </div>
+
+                  <details className="proposal-editor">
+                    <summary>Edit isi proposal</summary>
+                    <form className="form-grid" action={updateProposalDraftContentAction}>
+                      <input name="proposalId" type="hidden" value={proposal.id} />
+                      <label>
+                        Judul
+                        <input name="title" defaultValue={proposal.title} maxLength={200} required />
+                      </label>
+                      <label>
+                        Nama klien
+                        <input name="clientName" defaultValue={proposal.clientName ?? ""} maxLength={200} />
+                      </label>
+                      <label className="span-2">
+                        Ringkasan project
+                        <textarea name="projectSummary" defaultValue={proposal.projectSummary} rows={5} required />
+                      </label>
+                      <label>
+                        Estimasi minimum
+                        <input name="estimatedValueMin" type="number" min="0" defaultValue={proposal.estimatedValueMin ?? ""} />
+                      </label>
+                      <label>
+                        Estimasi maksimum
+                        <input name="estimatedValueMax" type="number" min="0" defaultValue={proposal.estimatedValueMax ?? ""} />
+                      </label>
+                      <label>
+                        Timeline
+                        <input name="timeline" defaultValue={proposal.timeline ?? ""} maxLength={500} />
+                      </label>
+                      <label>
+                        Berlaku sampai
+                        <input name="validUntil" type="date" defaultValue={proposal.validUntil ?? ""} />
+                      </label>
+                      <ProposalTextarea name="scopeOfWork" title="Scope of work" items={proposal.scopeOfWork} />
+                      <ProposalTextarea name="assumptions" title="Assumptions" items={proposal.assumptions} />
+                      <ProposalTextarea name="exclusions" title="Exclusions" items={proposal.exclusions} />
+                      <ProposalTextarea name="nextSteps" title="Next steps" items={proposal.nextSteps} />
+                      <label className="span-2">
+                        Disclaimer
+                        <textarea name="disclaimer" defaultValue={proposal.disclaimer} rows={4} required />
+                      </label>
+                      <button className="primary-button span-2" type="submit">Simpan revisi</button>
+                    </form>
+                  </details>
 
                   <div className="ai-log-grid">
                     <ProposalList title="Scope of work" items={proposal.scopeOfWork} />
@@ -150,9 +223,29 @@ export default async function ProposalsPage() {
               ))}
             </div>
           )}
+          {page.pagination.pageCount > 1 ? (
+            <nav className="orders-pagination" aria-label="Pagination proposals">
+              {page.pagination.page > 1 ? (
+                <Link className="ghost-button" href={proposalPageUrl(query, status, page.pagination.page - 1)}>Sebelumnya</Link>
+              ) : <span />}
+              <span>Halaman {page.pagination.page} dari {page.pagination.pageCount}</span>
+              {page.pagination.page < page.pagination.pageCount ? (
+                <Link className="ghost-button" href={proposalPageUrl(query, status, page.pagination.page + 1)}>Berikutnya</Link>
+              ) : <span />}
+            </nav>
+          ) : null}
         </div>
       </section>
     </AppShell>
+  );
+}
+
+function ProposalTextarea({ name, title, items }: { name: string; title: string; items: string[] }) {
+  return (
+    <label>
+      {title} (satu baris per poin)
+      <textarea name={name} defaultValue={items.join("\n")} rows={7} />
+    </label>
   );
 }
 
@@ -205,4 +298,17 @@ function formatStatus(status: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getSingleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function proposalPageUrl(query: string, status: string, page: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (status) params.set("status", status);
+  if (page > 1) params.set("page", String(page));
+  const value = params.toString();
+  return value ? `/proposals?${value}` : "/proposals";
 }

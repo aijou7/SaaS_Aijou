@@ -144,11 +144,11 @@ export default async function DashboardPage() {
               <strong>{dashboard.confirmedCount}</strong>
               <span>Paid records</span>
             </Link>
-            <Link className="queue-item" href="/conversations">
+            <Link className="queue-item" href="/conversations?status=HUMAN_NEEDED">
               <strong>{dashboard.humanNeededCount}</strong>
               <span>Butuh bantuan tim</span>
             </Link>
-            <Link className="queue-item" href="/conversations">
+            <Link className="queue-item" href="/conversations?unread=1">
               <strong>{dashboard.unreadConversationCount}</strong>
               <span>Unread chat</span>
             </Link>

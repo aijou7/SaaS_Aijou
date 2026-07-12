@@ -5,18 +5,26 @@ import { redirect } from "next/navigation";
 import { updateLeadAction } from "@/app/leads/actions";
 import { generateProposalDraftAction } from "@/app/proposals/actions";
 import { AppShell } from "@/components/app-shell";
-import { LeadStatus } from "@/generated/prisma/client";
+import { LeadStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getLeadsPage } from "@/server/leads/leads";
 
-export default async function LeadsPage() {
+type LeadsPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function LeadsPage({ searchParams }: LeadsPageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const page = await getLeadsPage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const query = getSingleParam(params.q)?.trim() ?? "";
+  const status = getSingleParam(params.status)?.trim() ?? "";
+  const pageNumber = Math.max(1, Number(getSingleParam(params.page) ?? 1) || 1);
+  const page = await getLeadsPage(session.userId, { page: pageNumber, query, status });
 
   return (
     <AppShell active="leads" businessName={page.business?.businessName}>
@@ -91,8 +99,8 @@ export default async function LeadsPage() {
           <div className="card">
             <div className="section-header">
               <div>
-                <h2>Pipeline</h2>
-                <p className="muted">Drag belum ada, tapi status pipeline sudah bisa dipakai.</p>
+                <h2>Pipeline pada halaman ini</h2>
+                <p className="muted">Ringkasan visual untuk hasil filter yang sedang tampil.</p>
               </div>
             </div>
             <div className="pipeline-grid">
@@ -131,8 +139,18 @@ export default async function LeadsPage() {
           <div className="card">
             <div className="section-header">
               <h2>Leads</h2>
-              <span className="muted">{page.leads.length} leads</span>
+              <span className="muted">{page.leads.length} dari {page.pagination.total} leads</span>
             </div>
+            <form className="chat-archive-filter" action="/leads" method="get">
+              <input name="q" defaultValue={query} maxLength={120} placeholder="Cari nama, nomor, atau kebutuhan" />
+              <select name="status" defaultValue={status} aria-label="Filter status lead">
+                <option value="">Semua status</option>
+                {Object.values(LeadStatus).map((item) => (
+                  <option key={item} value={item}>{formatLeadStatus(item)}</option>
+                ))}
+              </select>
+              <button className="ghost-button" type="submit">Filter</button>
+            </form>
             {page.leads.length === 0 ? (
               <p className="muted">Belum ada lead. Coba kirim customer chat dari Simulator.</p>
             ) : (
@@ -228,6 +246,17 @@ export default async function LeadsPage() {
                 ))}
               </div>
             )}
+            {page.pagination.pageCount > 1 ? (
+              <nav className="orders-pagination" aria-label="Pagination leads">
+                {page.pagination.page > 1 ? (
+                  <Link className="ghost-button" href={leadPageUrl(query, status, page.pagination.page - 1)}>Sebelumnya</Link>
+                ) : <span />}
+                <span>Halaman {page.pagination.page} dari {page.pagination.pageCount}</span>
+                {page.pagination.page < page.pagination.pageCount ? (
+                  <Link className="ghost-button" href={leadPageUrl(query, status, page.pagination.page + 1)}>Berikutnya</Link>
+                ) : <span />}
+              </nav>
+            ) : null}
           </div>
         </section>
     </AppShell>
@@ -273,4 +302,17 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getSingleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function leadPageUrl(query: string, status: string, page: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (status) params.set("status", status);
+  if (page > 1) params.set("page", String(page));
+  const value = params.toString();
+  return value ? `/leads?${value}` : "/leads";
 }

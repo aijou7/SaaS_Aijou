@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { noStoreHeaders } from "@/lib/request-security";
 import { getReceiptReviewPage } from "@/server/receipts/receipt-flow";
 
 export async function GET() {
@@ -11,5 +12,5 @@ export async function GET() {
 
   const receipts = await getReceiptReviewPage(session.userId);
 
-  return NextResponse.json(receipts);
+  return NextResponse.json(receipts, { headers: noStoreHeaders });
 }

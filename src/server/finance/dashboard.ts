@@ -2,9 +2,9 @@ import {
   ConversationStatus,
   ConversationType,
   LeadStatus,
-  SenderType,
   TransactionStatus,
-} from "@/generated/prisma/client";
+  TransactionType,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 
 export async function getFinanceDashboardSnapshot(userId: string) {
@@ -46,7 +46,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     customerConversationCount,
     pendingTransactionCount,
     newLeadCount,
-    conversationsForUnread,
+    unreadConversationCount,
     hotLeadCount,
     dueFollowUpCount,
     latestAiActions,
@@ -55,6 +55,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     prisma.transaction.aggregate({
       where: {
         businessId: business.id,
+        transactionType: TransactionType.INCOME,
         status: TransactionStatus.CONFIRMED,
         transactionDate: {
           gte: startOfMonth,
@@ -73,6 +74,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     prisma.transaction.count({
       where: {
         businessId: business.id,
+        transactionType: TransactionType.INCOME,
         status: TransactionStatus.CONFIRMED,
       },
     }),
@@ -100,19 +102,11 @@ export async function getFinanceDashboardSnapshot(userId: string) {
         status: LeadStatus.NEW,
       },
     }),
-    prisma.whatsAppConversation.findMany({
+    prisma.whatsAppConversation.count({
       where: {
         businessId: business.id,
         conversationType: ConversationType.CUSTOMER_SERVICE,
-      },
-      select: {
-        ownerLastReadAt: true,
-        messages: {
-          where: { senderType: SenderType.CUSTOMER },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { createdAt: true },
-        },
+        unreadCount: { gt: 0 },
       },
     }),
     prisma.lead.count({
@@ -146,6 +140,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     prisma.transaction.findMany({
       where: {
         businessId: business.id,
+        transactionType: TransactionType.INCOME,
       },
       orderBy: {
         createdAt: "desc",
@@ -181,13 +176,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     customerConversationCount,
     pendingTransactionCount,
     newLeadCount,
-    unreadConversationCount: conversationsForUnread.filter((conversation) => {
-      const lastCustomerMessageAt = conversation.messages[0]?.createdAt;
-      return Boolean(
-        lastCustomerMessageAt &&
-          (!conversation.ownerLastReadAt || lastCustomerMessageAt > conversation.ownerLastReadAt),
-      );
-    }).length,
+    unreadConversationCount,
     hotLeadCount,
     dueFollowUpCount,
     latestAiActions: latestAiActions.map((action) => ({

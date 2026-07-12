@@ -34,14 +34,36 @@ export async function getAgentSettingsPage(userId: string) {
 }
 
 export async function getAgentRuntimeSettings(businessId: string) {
-  return ttlCache(`agent-runtime:${businessId}`, 30_000, () => ensureAgentSettings(businessId));
+  return ttlCache(`agent-runtime:${businessId}`, 30_000, async () => {
+    const [settings, business] = await Promise.all([
+      ensureAgentSettings(businessId),
+      prisma.business.findUnique({
+        where: { id: businessId },
+        select: {
+          businessName: true,
+          businessType: true,
+          mainServices: true,
+          serviceArea: true,
+          operatingHours: true,
+          address: true,
+          websiteUrl: true,
+        },
+      }),
+    ]);
+
+    return {
+      ...settings,
+      businessDescription: joinContext(
+        settings.businessDescription,
+        buildProfileDescription(business),
+      ),
+    };
+  });
 }
 
 export async function updateAgentSettings(userId: string, input: AgentSettingsInput) {
   const business = await requireBusinessForUser(userId);
-  invalidateTtlCache(`agent-runtime:${business.id}`);
-
-  return prisma.agentSettings.upsert({
+  const settings = await prisma.agentSettings.upsert({
     where: { businessId: business.id },
     update: input,
     create: {
@@ -49,6 +71,8 @@ export async function updateAgentSettings(userId: string, input: AgentSettingsIn
       ...input,
     },
   });
+  invalidateTtlCache(`agent-runtime:${business.id}`);
+  return settings;
 }
 
 export function parseAgentSettingsFormData(formData: FormData): AgentSettingsInput {
@@ -57,16 +81,28 @@ export function parseAgentSettingsFormData(formData: FormData): AgentSettingsInp
   if (!agentName) {
     throw new Error("Agent name wajib diisi.");
   }
+  if (agentName.length > 80) {
+    throw new Error("Agent name maksimal 80 karakter.");
+  }
+
+  const languageValue = String(formData.get("language") ?? "id").trim();
+  const language = languageValue === "en" ? "en" : "id";
 
   return {
     agentName,
-    tone: String(formData.get("tone") ?? "friendly").trim() || "friendly",
-    language: String(formData.get("language") ?? "id").trim() || "id",
-    openingMessage: cleanOptional(String(formData.get("openingMessage") ?? "")),
-    closingMessage: cleanOptional(String(formData.get("closingMessage") ?? "")),
-    businessDescription: cleanOptional(String(formData.get("businessDescription") ?? "")),
-    handoffRules: cleanOptional(String(formData.get("handoffRules") ?? "")),
-    systemInstruction: cleanOptional(String(formData.get("systemInstruction") ?? "")),
+    tone: cleanRequired(String(formData.get("tone") ?? "friendly"), 200, "friendly"),
+    language,
+    openingMessage: cleanOptional(String(formData.get("openingMessage") ?? ""), 1_000),
+    closingMessage: cleanOptional(String(formData.get("closingMessage") ?? ""), 1_000),
+    businessDescription: cleanOptional(
+      String(formData.get("businessDescription") ?? ""),
+      4_000,
+    ),
+    handoffRules: cleanOptional(String(formData.get("handoffRules") ?? ""), 4_000),
+    systemInstruction: cleanOptional(
+      String(formData.get("systemInstruction") ?? ""),
+      8_000,
+    ),
     isActive: formData.get("isActive") === "on",
   };
 }
@@ -91,7 +127,7 @@ async function ensureAgentSettings(businessId: string) {
     return existing;
   }
 
-  return prisma.agentSettings.create({
+  const created = await prisma.agentSettings.create({
     data: {
       businessId,
       ...defaultAgentSettings(),
@@ -108,6 +144,8 @@ async function ensureAgentSettings(businessId: string) {
       isActive: true,
     },
   });
+
+  return created;
 }
 
 async function getBusinessForUser(userId: string) {
@@ -144,7 +182,39 @@ function defaultAgentSettings(): AgentRuntimeSettings {
   };
 }
 
-function cleanOptional(value: string) {
-  const cleaned = value.trim();
+function cleanOptional(value: string, maxLength: number) {
+  const cleaned = value.trim().slice(0, maxLength);
   return cleaned ? cleaned : null;
+}
+
+function cleanRequired(value: string, maxLength: number, fallback: string) {
+  return value.trim().slice(0, maxLength) || fallback;
+}
+
+function joinContext(...parts: Array<string | null | undefined>) {
+  const value = parts.filter(Boolean).join("\n").trim();
+  return value ? value.slice(0, 8_000) : null;
+}
+
+function buildProfileDescription(
+  business: {
+    businessName: string;
+    businessType: string | null;
+    mainServices: string | null;
+    serviceArea: string | null;
+    operatingHours: string | null;
+    address: string | null;
+    websiteUrl: string | null;
+  } | null,
+) {
+  if (!business) return null;
+  return [
+    `Business: ${business.businessName}`,
+    business.businessType ? `Type: ${business.businessType}` : null,
+    business.mainServices ? `Services: ${business.mainServices}` : null,
+    business.serviceArea ? `Service area: ${business.serviceArea}` : null,
+    business.operatingHours ? `Operating hours: ${business.operatingHours}` : null,
+    business.address ? `Address: ${business.address}` : null,
+    business.websiteUrl ? `Website: ${business.websiteUrl}` : null,
+  ].filter(Boolean).join("\n");
 }

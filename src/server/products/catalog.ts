@@ -44,7 +44,7 @@ async function getActiveProductContextFresh(businessId: string) {
   const products = await prisma.product.findMany({
     where: { businessId, isActive: true },
     orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }],
-    take: 20,
+    take: 50,
     select: { name: true, description: true, price: true, currency: true },
   });
 
@@ -63,7 +63,8 @@ async function getActiveProductContextFresh(businessId: string) {
         .filter(Boolean)
         .join(" — ");
     })
-    .join("\n");
+    .join("\n")
+    .slice(0, 16_000);
 }
 
 export async function createProduct(userId: string, input: ProductInput) {
@@ -102,7 +103,10 @@ export async function deleteProduct(userId: string, productId: string) {
   await ensureProductBelongsToBusiness(productId, business.id);
   invalidateTtlCache(`product-context:${business.id}`);
 
-  await prisma.product.delete({ where: { id: productId } });
+  await prisma.product.update({
+    where: { id: productId },
+    data: { isActive: false },
+  });
 }
 
 export function parseProductFormData(formData: FormData): ProductInput {
@@ -113,13 +117,22 @@ export function parseProductFormData(formData: FormData): ProductInput {
     throw new Error("Nama produk wajib diisi.");
   }
 
+  if (name.length > 120) {
+    throw new Error("Nama produk maksimal 120 karakter.");
+  }
+
+  const description = String(formData.get("description") ?? "").trim();
+  if (description.length > 1_000) {
+    throw new Error("Deskripsi produk maksimal 1000 karakter.");
+  }
+
   if (!Number.isFinite(price) || price <= 0) {
     throw new Error("Harga produk harus lebih dari 0.");
   }
 
   return {
     name,
-    description: String(formData.get("description") ?? ""),
+    description,
     price,
     isActive: formData.get("isActive") === "on",
   };

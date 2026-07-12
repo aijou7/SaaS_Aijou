@@ -54,7 +54,7 @@ export default async function AgentSettingsPage() {
             <form className="form-grid" action={updateAgentSettingsAction}>
               <label>
                 Agent Name
-                <input name="agentName" type="text" defaultValue={page.settings.agentName} required />
+                <input name="agentName" type="text" defaultValue={page.settings.agentName} maxLength={80} required />
               </label>
               <label>
                 Language
@@ -65,7 +65,7 @@ export default async function AgentSettingsPage() {
               </label>
               <label>
                 Tone
-                <input name="tone" type="text" defaultValue={page.settings.tone} />
+                <input name="tone" type="text" defaultValue={page.settings.tone} maxLength={200} />
               </label>
               <label className="checkbox-label">
                 <input name="isActive" type="checkbox" defaultChecked={page.settings.isActive} />
@@ -76,25 +76,27 @@ export default async function AgentSettingsPage() {
                 <textarea
                   name="businessDescription"
                   defaultValue={page.settings.businessDescription ?? ""}
+                  maxLength={4000}
                 />
               </label>
               <label className="span-2">
                 Opening Message
-                <textarea name="openingMessage" defaultValue={page.settings.openingMessage ?? ""} />
+                <textarea name="openingMessage" defaultValue={page.settings.openingMessage ?? ""} maxLength={1000} />
               </label>
               <label className="span-2">
                 Closing Message
-                <textarea name="closingMessage" defaultValue={page.settings.closingMessage ?? ""} />
+                <textarea name="closingMessage" defaultValue={page.settings.closingMessage ?? ""} maxLength={1000} />
               </label>
               <label className="span-2">
                 Handoff Rules
-                <textarea name="handoffRules" defaultValue={page.settings.handoffRules ?? ""} />
+                <textarea name="handoffRules" defaultValue={page.settings.handoffRules ?? ""} maxLength={4000} />
               </label>
               <label className="span-2">
                 System Instruction
                 <textarea
                   name="systemInstruction"
                   defaultValue={page.settings.systemInstruction ?? ""}
+                  maxLength={8000}
                 />
               </label>
               <button className="primary-button span-2" type="submit">

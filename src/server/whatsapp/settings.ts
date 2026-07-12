@@ -1,6 +1,6 @@
+import { timingSafeEqual } from "node:crypto";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
-
-const DEFAULT_VERIFY_TOKEN = "aijou_verify_2026";
 
 export type WhatsAppSettingsInput = {
   phoneNumberId?: string | null;
@@ -22,17 +22,21 @@ export async function getWhatsAppSettingsPage(userId: string) {
     };
   }
 
-  const settings = await ensureWhatsAppSettings(business.id);
+  const stored = await ensureWhatsAppSettings(business.id);
+  const settings = decryptStoredSettings(stored);
   const ready = isSettingsReady(settings);
 
   return {
     business,
     settings: {
-      ...settings,
+      phoneNumberId: settings.phoneNumberId,
+      webhookUrl: settings.webhookUrl,
+      isActive: settings.isActive,
+      lastConnectedAt: settings.lastConnectedAt?.toISOString() ?? null,
       accessTokenMasked: maskSecret(settings.accessToken),
       verifyTokenMasked: maskSecret(settings.verifyToken),
       appSecretMasked: maskSecret(settings.appSecret),
-      lastConnectedAt: settings.lastConnectedAt?.toISOString() ?? null,
+      verifyTokenSet: Boolean(settings.verifyToken),
     },
     ready,
   };
@@ -40,12 +44,28 @@ export async function getWhatsAppSettingsPage(userId: string) {
 
 export async function updateWhatsAppSettings(userId: string, input: WhatsAppSettingsInput) {
   const business = await requireBusinessForUser(userId);
-  const existing = await ensureWhatsAppSettings(business.id);
+  const stored = await ensureWhatsAppSettings(business.id);
+  const existing = decryptStoredSettings(stored);
 
-  const nextAccessToken = mergeSecret(existing.accessToken, input.accessToken);
-  const nextVerifyToken = mergeSecret(existing.verifyToken, input.verifyToken);
-  const nextAppSecret = mergeSecret(existing.appSecret, input.appSecret);
+  const nextAccessToken = mergeSecret(existing.accessToken, input.accessToken, "access token");
+  const nextVerifyToken = mergeSecret(existing.verifyToken, input.verifyToken, "verify token");
+  const nextAppSecret = mergeSecret(existing.appSecret, input.appSecret, "app secret");
   const nextPhoneNumberId = cleanOptional(input.phoneNumberId);
+  const nextWebhookUrl = cleanOptional(input.webhookUrl);
+
+  if (nextPhoneNumberId && !/^\d{5,32}$/.test(nextPhoneNumberId)) {
+    throw new Error("Phone Number ID harus berupa angka yang valid.");
+  }
+
+  if (nextWebhookUrl) validateWebhookUrl(nextWebhookUrl);
+
+  if (nextVerifyToken && nextVerifyToken.length < 16) {
+    throw new Error("Verify token minimal 16 karakter agar tidak mudah ditebak.");
+  }
+
+  if (nextAppSecret && nextAppSecret.length < 16) {
+    throw new Error("App secret tidak valid.");
+  }
 
   const ready = Boolean(nextAccessToken && nextVerifyToken && nextAppSecret && nextPhoneNumberId);
 
@@ -53,10 +73,10 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
     where: { businessId: business.id },
     data: {
       phoneNumberId: nextPhoneNumberId,
-      accessToken: nextAccessToken,
-      verifyToken: nextVerifyToken,
-      appSecret: nextAppSecret,
-      webhookUrl: cleanOptional(input.webhookUrl),
+      accessToken: encryptSecret(nextAccessToken, secretContext(business.id, "accessToken")),
+      verifyToken: encryptSecret(nextVerifyToken, secretContext(business.id, "verifyToken")),
+      appSecret: encryptSecret(nextAppSecret, secretContext(business.id, "appSecret")),
+      webhookUrl: nextWebhookUrl,
       isActive: Boolean(input.isActive && ready),
       lastConnectedAt: input.isActive && ready ? new Date() : existing.lastConnectedAt,
     },
@@ -64,9 +84,10 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
 }
 
 export async function getWhatsAppCredentialsForBusiness(businessId: string) {
-  const settings = await prisma.whatsAppSettings.findUnique({
+  const stored = await prisma.whatsAppSettings.findUnique({
     where: { businessId },
     select: {
+      businessId: true,
       phoneNumberId: true,
       accessToken: true,
       verifyToken: true,
@@ -75,79 +96,105 @@ export async function getWhatsAppCredentialsForBusiness(businessId: string) {
     },
   });
 
-  if (settings?.isActive && settings.accessToken && settings.phoneNumberId) {
-    return settings;
+  if (stored) {
+    const settings = decryptStoredSettings(await protectStoredSettings(stored));
+    if (settings.isActive && settings.accessToken && settings.phoneNumberId) {
+      return settings;
+    }
   }
 
-  return getEnvCredentials();
+  return emptyCredentials();
 }
 
 export async function isAnyVerifyTokenValid(token: string) {
-  const envVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN || DEFAULT_VERIFY_TOKEN;
+  const envVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN?.trim();
+  if (envVerifyToken && safeEqual(token, envVerifyToken)) return true;
 
-  if (token === envVerifyToken) {
-    return true;
-  }
-
-  const count = await prisma.whatsAppSettings.count({
-    where: {
-      isActive: true,
-      verifyToken: token,
-    },
-  });
-
-  return count > 0;
-}
-
-export async function getActiveWhatsAppAppSecrets() {
   const settings = await prisma.whatsAppSettings.findMany({
-    where: {
-      isActive: true,
-      appSecret: {
-        not: null,
-      },
+    where: { isActive: true, verifyToken: { not: null } },
+    select: {
+      businessId: true,
+      accessToken: true,
+      verifyToken: true,
+      appSecret: true,
     },
-    select: { appSecret: true },
   });
-  const secrets = settings.flatMap((setting) => (setting.appSecret ? [setting.appSecret] : []));
 
-  if (process.env.WHATSAPP_APP_SECRET) {
-    secrets.push(process.env.WHATSAPP_APP_SECRET);
-  }
+  const protectedSettings = await Promise.all(settings.map(protectStoredSettings));
 
-  return [...new Set(secrets)];
+  return protectedSettings.some((setting) => {
+    const verifyToken = decryptSecret(
+      setting.verifyToken,
+      secretContext(setting.businessId, "verifyToken"),
+    );
+    return Boolean(verifyToken && safeEqual(token, verifyToken));
+  });
 }
 
-export async function findWhatsAppSettingsByIdentifier(identifiers: string[]) {
-  if (identifiers.length === 0) {
+export async function getWhatsAppAppSecretForPhoneNumberId(phoneNumberId: string) {
+  const matches = await prisma.whatsAppSettings.findMany({
+    where: { isActive: true, phoneNumberId },
+    take: 2,
+    select: {
+      businessId: true,
+      accessToken: true,
+      verifyToken: true,
+      appSecret: true,
+    },
+  });
+
+  if (matches.length > 1) {
     return null;
   }
 
-  return prisma.whatsAppSettings.findFirst({
+  if (matches.length === 1) {
+    const settings = await protectStoredSettings(matches[0]);
+    return decryptSecret(
+      settings.appSecret,
+      secretContext(settings.businessId, "appSecret"),
+    );
+  }
+
+  if (
+    process.env.WHATSAPP_PHONE_NUMBER_ID === phoneNumberId &&
+    process.env.WHATSAPP_APP_SECRET
+  ) {
+    return process.env.WHATSAPP_APP_SECRET;
+  }
+
+  return null;
+}
+
+export async function findWhatsAppSettingsByIdentifier(identifiers: string[]) {
+  if (identifiers.length === 0) return null;
+
+  const matches = await prisma.whatsAppSettings.findMany({
     where: {
       isActive: true,
-      phoneNumberId: {
-        in: identifiers,
-      },
+      phoneNumberId: { in: identifiers },
     },
+    take: 2,
     select: {
       businessId: true,
       phoneNumberId: true,
     },
   });
+
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export async function getWhatsAppReadinessForBusiness(businessId: string) {
-  const settings = await ensureWhatsAppSettings(businessId);
+  const stored = await ensureWhatsAppSettings(businessId);
+  const settings = decryptStoredSettings(stored);
 
   return {
     ready: isSettingsReady(settings),
-    source: settings.isActive ? "dashboard" : "env",
+    source: settings.isActive ? "dashboard" : "not_configured",
     checks: {
-      accessToken: Boolean(settings.accessToken || process.env.WHATSAPP_ACCESS_TOKEN),
-      verifyToken: Boolean(settings.verifyToken || process.env.WHATSAPP_VERIFY_TOKEN),
-      phoneNumberId: Boolean(settings.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID),
-      appSecret: Boolean(settings.appSecret || process.env.WHATSAPP_APP_SECRET),
+      accessToken: Boolean(settings.accessToken),
+      verifyToken: Boolean(settings.verifyToken),
+      phoneNumberId: Boolean(settings.phoneNumberId),
+      appSecret: Boolean(settings.appSecret),
     },
   };
 }
@@ -164,23 +211,16 @@ export function parseWhatsAppSettingsFormData(formData: FormData): WhatsAppSetti
 }
 
 async function ensureWhatsAppSettings(businessId: string) {
-  return prisma.whatsAppSettings.upsert({
+  const stored = await prisma.whatsAppSettings.upsert({
     where: { businessId },
     update: {},
     create: {
       businessId,
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || null,
-      accessToken: process.env.WHATSAPP_ACCESS_TOKEN || null,
-      verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || null,
-      appSecret: process.env.WHATSAPP_APP_SECRET || null,
-      isActive: Boolean(
-        process.env.WHATSAPP_ACCESS_TOKEN &&
-          process.env.WHATSAPP_VERIFY_TOKEN &&
-          process.env.WHATSAPP_PHONE_NUMBER_ID &&
-          process.env.WHATSAPP_APP_SECRET,
-      ),
+      isActive: false,
     },
   });
+
+  return protectStoredSettings(stored);
 }
 
 async function getBusinessForUser(userId: string) {
@@ -200,18 +240,36 @@ async function requireBusinessForUser(userId: string) {
   return business;
 }
 
-function getEnvCredentials() {
+function decryptStoredSettings<T extends {
+  businessId: string;
+  accessToken: string | null;
+  verifyToken: string | null;
+  appSecret: string | null;
+}>(settings: T) {
   return {
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || null,
-    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || null,
-    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || null,
-    appSecret: process.env.WHATSAPP_APP_SECRET || null,
-    isActive: Boolean(
-      process.env.WHATSAPP_ACCESS_TOKEN &&
-        process.env.WHATSAPP_VERIFY_TOKEN &&
-        process.env.WHATSAPP_PHONE_NUMBER_ID &&
-        process.env.WHATSAPP_APP_SECRET,
+    ...settings,
+    accessToken: decryptSecret(
+      settings.accessToken,
+      secretContext(settings.businessId, "accessToken"),
     ),
+    verifyToken: decryptSecret(
+      settings.verifyToken,
+      secretContext(settings.businessId, "verifyToken"),
+    ),
+    appSecret: decryptSecret(
+      settings.appSecret,
+      secretContext(settings.businessId, "appSecret"),
+    ),
+  };
+}
+
+function emptyCredentials() {
+  return {
+    phoneNumberId: null,
+    accessToken: null,
+    verifyToken: null,
+    appSecret: null,
+    isActive: false,
   };
 }
 
@@ -231,13 +289,10 @@ function isSettingsReady(settings: {
   );
 }
 
-function mergeSecret(existing: string | null, incoming?: string | null) {
+function mergeSecret(existing: string | null, incoming: string | null | undefined, label: string) {
   const cleaned = cleanOptional(incoming);
-
-  if (!cleaned) {
-    return existing;
-  }
-
+  if (!cleaned) return existing;
+  if (cleaned.length > 4_096) throw new Error(`${label} terlalu panjang.`);
   return cleaned;
 }
 
@@ -246,14 +301,72 @@ function cleanOptional(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+async function protectStoredSettings<T extends {
+  businessId: string;
+  accessToken: string | null;
+  verifyToken: string | null;
+  appSecret: string | null;
+}>(settings: T) {
+  const accessToken = protectSecret(
+    settings.accessToken,
+    secretContext(settings.businessId, "accessToken"),
+  );
+  const verifyToken = protectSecret(
+    settings.verifyToken,
+    secretContext(settings.businessId, "verifyToken"),
+  );
+  const appSecret = protectSecret(
+    settings.appSecret,
+    secretContext(settings.businessId, "appSecret"),
+  );
+
+  if (
+    accessToken !== settings.accessToken ||
+    verifyToken !== settings.verifyToken ||
+    appSecret !== settings.appSecret
+  ) {
+    await prisma.whatsAppSettings.update({
+      where: { businessId: settings.businessId },
+      data: { accessToken, verifyToken, appSecret },
+    });
+  }
+
+  return { ...settings, accessToken, verifyToken, appSecret };
+}
+
+function protectSecret(value: string | null, context: string) {
+  if (!value || isEncryptedSecret(value)) return value;
+  return encryptSecret(value, context);
+}
+
 function maskSecret(value: string | null) {
-  if (!value) {
-    return "Not set";
+  if (!value) return "Not set";
+  if (value.length <= 4) return "Set";
+  return `••••${value.slice(-4)}`;
+}
+
+function secretContext(businessId: string, field: string) {
+  return `aijou:whatsapp:${businessId}:${field}`;
+}
+
+function safeEqual(left: string, right: string) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function validateWebhookUrl(value: string) {
+  if (value.length > 500) throw new Error("Webhook URL terlalu panjang.");
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Webhook URL tidak valid.");
   }
 
-  if (value.length <= 8) {
-    return "Set";
+  const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && isLocal)) {
+    throw new Error("Webhook URL production wajib menggunakan HTTPS.");
   }
-
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }

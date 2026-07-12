@@ -1,5 +1,6 @@
-import { Edit, MessageCircle, Plus, Search, Trash2, Zap } from "lucide-react";
+import { Archive, Edit, MessageCircle, Plus, Search, Zap } from "lucide-react";
 import type { Route } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   createQuickReplyAction,
@@ -10,14 +11,20 @@ import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
 import { getQuickRepliesPage } from "@/server/quick-replies/quick-replies";
 
-export default async function QuickRepliesPage() {
+type QuickRepliesPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function QuickRepliesPage({ searchParams }: QuickRepliesPageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const page = await getQuickRepliesPage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const q = getSingleParam(params.q)?.trim().slice(0, 120) ?? "";
+  const page = await getQuickRepliesPage(session.userId, { q });
 
   return (
     <AppShell active="quick-replies" businessName={page.business?.businessName ?? "Quick Replies"}>
@@ -30,12 +37,21 @@ export default async function QuickRepliesPage() {
               Template balasan owner supaya follow-up chat website lebih cepat dan konsisten.
             </p>
           </div>
-          <div className="content-actions">
+          <form className="content-actions" action="/quick-replies" method="get">
             <label className="toolbar-search">
-              <input type="search" placeholder="Search Quick Replies" />
+              <input
+                name="q"
+                type="search"
+                defaultValue={q}
+                placeholder="Search Quick Replies"
+                maxLength={120}
+                aria-label="Search quick replies"
+              />
               <Search size={16} aria-hidden="true" />
             </label>
-          </div>
+            <button className="ghost-button" type="submit">Cari</button>
+            {q ? <Link className="ghost-button" href="/quick-replies">Reset</Link> : null}
+          </form>
         </div>
 
         <section className="grid" aria-label="Quick reply summary">
@@ -82,14 +98,20 @@ export default async function QuickRepliesPage() {
             <div className="section-header">
               <div>
                 <h2>Templates</h2>
-                <p className="muted">{page.quickReplies.length} quick replies tersedia.</p>
+                <p className="muted">
+                  {page.quickReplies.length} {q ? "hasil pencarian" : "quick replies tersedia"}.
+                </p>
               </div>
             </div>
 
             {page.quickReplies.length === 0 ? (
               <div className="empty-state">
-                <strong>Belum ada quick reply</strong>
-                <p>Tambahkan template pertama supaya owner bisa balas cepat dari inbox.</p>
+                <strong>{q ? "Quick reply tidak ditemukan" : "Belum ada quick reply"}</strong>
+                <p>
+                  {q
+                    ? "Coba kata kunci lain atau reset pencarian."
+                    : "Tambahkan template pertama supaya owner bisa balas cepat dari inbox."}
+                </p>
               </div>
             ) : (
               <div className="transaction-list">
@@ -130,8 +152,8 @@ export default async function QuickRepliesPage() {
                     <form className="quick-actions" action={deleteQuickReplyAction}>
                       <input name="quickReplyId" type="hidden" value={reply.id} />
                       <button className="small-danger-button" type="submit">
-                        <Trash2 size={13} aria-hidden="true" />
-                        Delete
+                        <Archive size={13} aria-hidden="true" />
+                        Nonaktifkan
                       </button>
                     </form>
                   </details>
@@ -162,15 +184,15 @@ function QuickReplyFields({
     <>
       <label>
         Name
-        <input name="name" type="text" defaultValue={reply?.name ?? ""} placeholder="Minta lokasi" required />
+        <input name="name" type="text" defaultValue={reply?.name ?? ""} placeholder="Minta lokasi" maxLength={80} required />
       </label>
       <label>
         Shortcut
-        <input name="shortcut" type="text" defaultValue={reply?.shortcut ?? ""} placeholder="/lokasi" />
+        <input name="shortcut" type="text" defaultValue={reply?.shortcut ?? ""} placeholder="/lokasi" maxLength={80} />
       </label>
       <label>
         Category
-        <input name="category" type="text" defaultValue={reply?.category ?? ""} placeholder="Discovery" />
+        <input name="category" type="text" defaultValue={reply?.category ?? ""} placeholder="Discovery" maxLength={80} />
       </label>
       <label>
         Sort order
@@ -182,6 +204,7 @@ function QuickReplyFields({
           name="content"
           defaultValue={reply?.content ?? ""}
           placeholder="Siap, boleh share lokasi project dan area yang perlu dicover?"
+          maxLength={1000}
           required
         />
       </label>
@@ -195,4 +218,8 @@ function QuickReplyFields({
       </label>
     </>
   );
+}
+
+function getSingleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

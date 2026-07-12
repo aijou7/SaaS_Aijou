@@ -1,35 +1,51 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getActiveWhatsAppAppSecrets } from "@/server/whatsapp/settings";
 
 const signatureHeader = "x-hub-signature-256";
 
-export async function verifyWhatsAppSignature(params: {
-  body: string;
+export function verifyWhatsAppSignature(params: {
+  body: Buffer | string;
   signature: string | null;
+  appSecret: string | null;
 }) {
-  const appSecrets = await getActiveWhatsAppAppSecrets();
-
-  if (appSecrets.length === 0) {
-    return true;
-  }
-
-  if (!params.signature?.startsWith("sha256=")) {
+  if (!params.appSecret || !params.signature || !/^sha256=[a-f0-9]{64}$/i.test(params.signature)) {
     return false;
   }
 
-  const providedBuffer = Buffer.from(params.signature);
+  const providedDigest = Buffer.from(params.signature.slice("sha256=".length), "hex");
+  const expectedDigest = createHmac("sha256", params.appSecret).update(params.body).digest();
 
-  return appSecrets.some((appSecret) => {
-    const expected = `sha256=${createHmac("sha256", appSecret)
-      .update(params.body)
-      .digest("hex")}`;
-    const expectedBuffer = Buffer.from(expected);
+  return (
+    providedDigest.length === expectedDigest.length &&
+    timingSafeEqual(providedDigest, expectedDigest)
+  );
+}
 
-    return (
-      providedBuffer.length === expectedBuffer.length &&
-      timingSafeEqual(providedBuffer, expectedBuffer)
-    );
-  });
+export function getWhatsAppWebhookPhoneNumberId(payload: unknown) {
+  if (!isRecord(payload) || !Array.isArray(payload.entry)) return null;
+
+  const identifiers = new Set<string>();
+
+  for (const entry of payload.entry) {
+    if (!isRecord(entry) || !Array.isArray(entry.changes)) continue;
+
+    for (const change of entry.changes) {
+      if (!isRecord(change) || !isRecord(change.value)) continue;
+      const metadata = change.value.metadata;
+      if (!isRecord(metadata)) continue;
+
+      const identifier = metadata.phone_number_id;
+      if (typeof identifier !== "string" || !/^\d{5,32}$/.test(identifier)) continue;
+      identifiers.add(identifier);
+
+      if (identifiers.size > 1) return null;
+    }
+  }
+
+  return identifiers.size === 1 ? [...identifiers][0] : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 export { signatureHeader };

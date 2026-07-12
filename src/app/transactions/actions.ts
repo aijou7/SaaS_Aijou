@@ -17,6 +17,8 @@ export async function createTransactionAction(formData: FormData) {
   await createManualTransaction(session.userId, input);
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/payments");
+  redirect("/transactions?created=1");
 }
 
 export async function updateTransactionAction(formData: FormData) {

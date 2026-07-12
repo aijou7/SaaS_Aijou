@@ -1,177 +1,176 @@
-# WhatsApp AI Assistant MVP
+# Aijou AI Workspace
 
-Foundation app for the WhatsApp-first AI assistant MVP.
+Aijou adalah workspace AI untuk menangani percakapan customer dari website dan WhatsApp, membantu owner melakukan human takeover, mengelola lead, membuat proposal, mencatat transaksi, membaca receipt, dan membuat payment link.
+
+Status proyek saat ini adalah **private beta**. Widget website dapat dipakai tanpa menunggu verifikasi Meta; WhatsApp Cloud API baru aktif setelah credential dan webhook Meta siap.
+
+## Fitur utama
+
+- AI customer-service dengan agent name, tone, instruction, knowledge base, dan product context yang dapat dikustomisasi.
+- Widget chat lintas domain dengan exact-origin allowlist, workspace key, signed session, history saat refresh, dan reset konteks setelah sesi 24 jam berakhir.
+- Inbox gabungan untuk website dan WhatsApp, unread state, quick replies, owner reply, serta human takeover.
+- WhatsApp Cloud API inbound/outbound, webhook signature verification, delivery status, idempotency, media validation, dan owner-only finance commands.
+- Lead qualification, follow-up state, background lead refresh, proposal draft, editor, dan print view.
+- Orders/transaksi, katalog produk, CSV export, receipt review, serta OCR vision untuk JPEG, PNG, dan WebP.
+- Xendit payment sessions yang dikonfigurasi terpisah untuk setiap workspace.
+- Private beta invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
+
+Chat widget memulai identitas sesi baru setelah 24 jam. Percakapan lama tetap tersimpan di dashboard untuk histori owner; yang di-reset adalah session dan konteks pengunjung, bukan penghapusan record database.
 
 ## Stack
 
-- Next.js
+- Next.js 16 dan React 19
+- TypeScript
 - Prisma 7
 - PostgreSQL
-- TypeScript
+- Groq untuk text AI dan receipt vision
+- Vercel Blob untuk receipt media production
+- Vercel + Neon untuk deployment beta
 
-## Local Setup
+## Kebutuhan lokal
 
-1. Copy environment values:
+- Node.js 22
+- npm 10 atau lebih baru
+- Docker Desktop, atau PostgreSQL yang sudah berjalan
 
-```bash
-cp .env.example .env
+## Menjalankan secara lokal
+
+1. Install dependency:
+
+```powershell
+cd E:\Project\saas
+npm.cmd install
 ```
 
-2. Start PostgreSQL:
+2. Buat file environment lokal:
 
-```bash
+```powershell
+Copy-Item .env.example .env
+```
+
+3. Ganti minimal `AUTH_SECRET`, `WIDGET_SIGNING_SECRET`, dan `DATA_ENCRYPTION_KEY`. Secret acak dapat dibuat dengan Node:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Gunakan nilai berbeda untuk setiap secret. Jangan commit atau mengirim isi `.env` lewat chat.
+
+4. Jalankan PostgreSQL lokal:
+
+```powershell
 docker compose up -d
 ```
 
-3. Generate Prisma client:
+5. Generate Prisma client, jalankan migration, lalu buat workspace awal:
 
-```bash
-npm run prisma:generate
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate
+npm.cmd run seed
 ```
 
-4. Run database migration:
+6. Jalankan aplikasi:
 
-```bash
-npm run prisma:migrate
+```powershell
+npm.cmd run dev
 ```
 
-5. Seed the first owner and business:
+Buka [http://localhost:3000](http://localhost:3000).
 
-```bash
-npm run seed
+Folder `generated/` tidak disimpan di Git. Jalankan `npm run prisma:generate` setelah clone, setelah schema berubah, atau setelah pindah branch yang mengubah Prisma schema.
+
+## Environment
+
+Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
+
+- Database: `DATABASE_URL` dan opsi pool/timeout.
+- Security: `AUTH_SECRET`, `WIDGET_SIGNING_SECRET`, `DATA_ENCRYPTION_KEY`, dan `CRON_SECRET`.
+- Canonical URL: `NEXT_PUBLIC_APP_URL`.
+- Bootstrap: `SEED_OWNER_*`, `SEED_BUSINESS_NAME`, `SEED_ROTATE_OWNER_PASSWORD`, dan `SEED_REFRESH_DEMO_DATA`.
+- AI: `GROQ_API_KEY`, `GROQ_MODEL`, dan `GROQ_VISION_MODEL`.
+- Receipt storage: `BLOB_READ_WRITE_TOKEN` untuk production.
+- WhatsApp: token Meta, phone number ID, Graph API version, timeout, dan media limit.
+
+`DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte. Simpan backup aman atas key ini. Jangan menggantinya setelah credential terenkripsi tersimpan sebelum ada proses re-encryption.
+
+Xendit dikonfigurasi dari halaman `/payments` per workspace. Jangan menaruh credential tenant dalam shared environment variable.
+
+## Seed yang aman
+
+Seed dapat dijalankan ulang untuk mempromosikan owner lama menjadi platform admin tanpa mengubah password atau konfigurasi workspace.
+
+Default untuk database yang sudah memiliki owner/workspace:
+
+- Existing password dipertahankan.
+- Business profile, knowledge base, products, agent settings, dan WhatsApp settings dipertahankan.
+- `isPlatformAdmin` diaktifkan untuk email owner yang dipilih.
+
+Gunakan flag berikut hanya untuk tindakan yang memang disengaja:
+
+```env
+SEED_ROTATE_OWNER_PASSWORD="true"
+SEED_REFRESH_DEMO_DATA="true"
 ```
 
-6. Start the app:
+`SEED_ROTATE_OWNER_PASSWORD=true` membutuhkan `SEED_OWNER_PASSWORD` eksplisit. `SEED_REFRESH_DEMO_DATA=true` menimpa kembali data demo bawaan yang memiliki key/ID sama; jangan aktifkan pada workspace production yang sudah dikustomisasi.
 
-```bash
-npm run dev
+## AI dan receipt
+
+Tanpa `GROQ_API_KEY`, aplikasi memakai fallback rule-based untuk alur yang didukung. Dengan Groq aktif, customer reply dan extraction memakai model yang dikonfigurasi.
+
+OCR vision berjalan ketika media:
+
+- bertipe JPEG, PNG, atau WebP;
+- berukuran maksimal 3 MB untuk request vision; dan
+- `GROQ_API_KEY` tersedia.
+
+Media WhatsApp dapat diterima sampai batas `WHATSAPP_MAX_MEDIA_BYTES`. Di production, `BLOB_READ_WRITE_TOKEN` dibutuhkan agar file receipt tetap tersimpan setelah request selesai.
+
+## Website widget
+
+1. Isi exact HTTPS origin website di business profile, misalnya `https://example.com` tanpa path tambahan.
+2. Buka `/integrations` dan salin snippet yang sudah berisi app URL serta workspace key.
+3. Tempel snippet sebelum `</body>` pada website statis.
+4. Test kirim pesan, refresh browser, lalu balas dari `/conversations`.
+
+InfinityFree, Hostinger DNS, atau Cloudflare tidak menghalangi JavaScript widget selama file script bisa dimuat lewat HTTPS, origin yang didaftarkan tepat, dan Cloudflare tidak memodifikasi atau memblokir request API.
+
+## Webhook
+
+Endpoint production:
+
+```text
+GET/POST https://APP_DOMAIN/api/webhooks/whatsapp
+POST     https://APP_DOMAIN/api/webhooks/xendit
+GET      https://APP_DOMAIN/api/health
 ```
 
-Dashboard: http://localhost:3000
+WhatsApp credential dapat dimasukkan per workspace dari halaman integrations. Xendit credential dan callback token dimasukkan per workspace dari `/payments`.
 
-## Groq AI Setup
+## Quality checks
 
-The app can use Groq for:
-
-- expense extraction from WhatsApp text
-- customer-service AI replies
-
-Set these values in `.env`:
-
-```bash
-GROQ_API_KEY="your-groq-api-key"
-GROQ_MODEL="llama-3.1-8b-instant"
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run typecheck
+npm.cmd run lint
+npm.cmd test
+npm.cmd run audit:prod
+npm.cmd run build
 ```
 
-If `GROQ_API_KEY` is empty or Groq fails, the app falls back to the rule-based local logic so the demo keeps working.
+CI menjalankan generate, typecheck, lint, semua `tests/*.test.ts`, production dependency audit untuk severity high ke atas, dan production build.
 
-## WhatsApp Webhook Setup
+## Perintah berguna
 
-Required env values for real WhatsApp Cloud API traffic:
-
-```bash
-WHATSAPP_VERIFY_TOKEN="your-meta-webhook-verify-token"
-WHATSAPP_APP_SECRET="your-meta-app-secret"
-WHATSAPP_ACCESS_TOKEN="your-whatsapp-cloud-api-token"
-WHATSAPP_PHONE_NUMBER_ID="your-phone-number-id"
+```powershell
+npm.cmd run dev
+npm.cmd run check
+npm.cmd run prisma:migrate
+npm.cmd run prisma:deploy
+npm.cmd run prisma:studio
+npm.cmd run seed
 ```
 
-Behavior:
-
-- `GET /api/webhooks/whatsapp` verifies the Meta webhook challenge.
-- `POST /api/webhooks/whatsapp` verifies `x-hub-signature-256` when `WHATSAPP_APP_SECRET` is set.
-- Text replies are sent through the WhatsApp Cloud API when access token and phone number ID are configured.
-- Receipt images are downloaded to `storage/receipts/:businessId` when media credentials are configured.
-- If credentials are missing, the app still processes/stores the webhook and marks the external send/download as skipped.
-
-## Current Phase
-
-Phase 1 foundation is scaffolded:
-
-- Dashboard login and signed session cookie.
-- Prisma schema for the MVP data model.
-- WhatsApp webhook verification route.
-- Incoming message processor with intent detection placeholder.
-- Database storage path for WhatsApp contact, conversation, message log, and idempotency.
-
-Phase 2 text expense assistant is scaffolded:
-
-- Text expense extraction for Indonesian amount formats such as `150 ribu`, `150rb`, and `Rp150.000`.
-- Pending transaction creation from WhatsApp text.
-- Category and project upsert from extracted text.
-- Confirmation session with 30 minute expiry.
-- Confirm/cancel flow from WhatsApp replies such as `ya`, `simpan`, `batal`.
-- AI log records for finance actions.
-- Dashboard metrics and recent transactions read from the database.
-
-Phase 3 dashboard finance is scaffolded:
-
-- `/transactions` page with filters for status, category, project, date range, and search text.
-- Manual transaction creation from the dashboard.
-- Inline transaction edit and delete actions.
-- Monthly summary cards for confirmed, pending, and needs-review transactions.
-- CSV export at `/api/transactions/export`.
-- JSON transaction API at `/api/transactions` and `/api/transactions/:id`.
-
-Phase 4 receipt OCR/review is scaffolded:
-
-- WhatsApp image webhook creates a receipt draft linked to a media file.
-- WhatsApp media download stores receipt images under `storage/receipts/:businessId` when credentials are configured.
-- OCR adapter placeholder stores low-confidence extraction output for later provider integration.
-- Receipt drafts become `NEEDS_REVIEW` transactions.
-- `/receipts` page supports receipt correction, confirm, and reject.
-- Confirmed receipts update the linked transaction as `CONFIRMED`.
-- Receipt APIs are available at `/api/receipts` and `/api/receipts/:id/review`.
-
-Integration hardening included:
-
-- WhatsApp webhook signature verification.
-- WhatsApp text reply sender.
-- Local receipt media storage.
-
-Demo and human takeover loop:
-
-- `/simulator` can create finance-assistant and customer-service messages without Meta setup.
-- `/conversations` shows WhatsApp-style inbox and chat detail.
-- Owner can click Take over to set a conversation to `HUMAN_NEEDED`.
-- While `HUMAN_NEEDED`, the simulator stops AI auto-replies for that customer conversation.
-- Owner replies are stored in the conversation log as manual human messages.
-- When Groq is configured, simulator AI replies and expense extraction use Groq before falling back locally.
-
-Knowledge base and lead summary:
-
-- `/knowledge` manages active business knowledge for the AI customer-service agent.
-- Seed data includes IT consultant services, pricing guardrails, and handoff rules.
-- Customer-service replies use active knowledge base content as business context.
-- `/leads` shows auto-generated lead summaries from customer conversations.
-- Leads include customer, need summary, service interest, location, budget, urgency, status, and owner notes.
-
-Agent customization:
-
-- `/agent` controls agent name, language, tone, business description, handoff rules, system instruction, and active/inactive state.
-- Customer-service replies use agent settings plus active knowledge base content.
-- If the agent is inactive, new simulated customer chats move into `HUMAN_NEEDED` without AI auto-reply.
-
-AI observability:
-
-- `/ai-activity` shows recent AI logs, confidence scores, input, output, structured JSON, and related conversations.
-- Dashboard includes an Action Queue for pending transactions, receipt review, human-needed chats, and new leads.
-- Dashboard also shows latest AI actions for quick debugging.
-
-## Useful Commands
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-```
-
-## Free Testing Deployment
-
-Recommended stack for online testing:
-
-- Vercel for the Next.js app
-- Neon for PostgreSQL
-- GitHub push for automatic deploys
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for the exact steps, environment variables, migration command, and webhook URLs.
+Untuk deployment production, migration preflight, seed owner yang aman, smoke test, dan credential rotation, ikuti [DEPLOYMENT.md](./DEPLOYMENT.md).

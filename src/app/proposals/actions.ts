@@ -8,6 +8,7 @@ import {
   generateProposalDraftFromLead,
   sendProposalDraftFollowUp,
   updateProposalDraftStatus,
+  updateProposalDraftContent,
 } from "@/server/proposals/proposal-drafts";
 
 export async function generateProposalDraftAction(formData: FormData) {
@@ -31,6 +32,14 @@ export async function updateProposalDraftStatusAction(formData: FormData) {
 
   await updateProposalDraftStatus(session.userId, proposalId, status);
   revalidateProposalPages();
+}
+
+export async function updateProposalDraftContentAction(formData: FormData) {
+  const session = await getRequiredSession();
+  const proposalId = String(formData.get("proposalId") ?? "");
+  await updateProposalDraftContent(session.userId, proposalId, formData);
+  revalidateProposalPages();
+  redirect(`/proposals?updated=${encodeURIComponent(proposalId)}`);
 }
 
 export async function sendProposalFollowUpAction(formData: FormData) {

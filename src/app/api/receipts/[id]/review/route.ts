@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import {
+  noStoreHeaders,
+  readRequestBodyBuffer,
+  RequestBodyTooLargeError,
+  validateMutationRequest,
+} from "@/lib/request-security";
+import {
   confirmReceiptReview,
   rejectReceiptReview,
 } from "@/server/receipts/receipt-flow";
@@ -12,6 +18,8 @@ type ReceiptReviewRouteContext = {
 };
 
 export async function PATCH(request: NextRequest, context: ReceiptReviewRouteContext) {
+  const securityError = validateMutationRequest(request, "json");
+  if (securityError) return securityError;
   const session = await getSession();
 
   if (!session) {
@@ -19,10 +27,10 @@ export async function PATCH(request: NextRequest, context: ReceiptReviewRouteCon
   }
 
   const { id } = await context.params;
-  const body = (await request.json()) as Record<string, unknown>;
-  const action = typeof body.action === "string" ? body.action : "confirm";
-
   try {
+    const raw = await readRequestBodyBuffer(request, 64 * 1024);
+    const body = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+    const action = typeof body.action === "string" ? body.action : "confirm";
     if (action === "reject") {
       const result = await rejectReceiptReview(session.userId, id);
       return NextResponse.json(result);
@@ -45,9 +53,15 @@ export async function PATCH(request: NextRequest, context: ReceiptReviewRouteCon
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json(
+        { error: "Receipt review payload terlalu besar." },
+        { status: 413, headers: noStoreHeaders },
+      );
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to review receipt." },
-      { status: 400 },
+      { status: 400, headers: noStoreHeaders },
     );
   }
 }

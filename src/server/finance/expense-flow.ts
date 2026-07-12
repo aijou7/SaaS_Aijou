@@ -6,7 +6,7 @@ import {
   TransactionSource,
   TransactionStatus,
   TransactionType,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import type { ExpenseExtraction, IntentResult } from "@/server/ai/intent";
