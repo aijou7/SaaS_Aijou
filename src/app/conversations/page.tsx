@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Music2,
   RadioTower,
+  Send,
   ShieldCheck,
   Zap,
 } from "lucide-react";
@@ -71,17 +72,22 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const pageNumber = Math.max(1, Number(getSearchParam(resolvedSearchParams, "page") ?? 1) || 1);
   const currentView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
 
-  const [inbox, selectedConversation, agentPage, quickReplies, whatsAppPage] = await Promise.all([
-    getConversationsInbox(session.userId, { status, q, unread, page: pageNumber }),
-    conversationId ? getConversationDetail(session.userId, conversationId) : Promise.resolve(null),
-    getAgentSettingsPage(session.userId),
-    getActiveQuickRepliesForUser(session.userId),
-    getWhatsAppSettingsPage(session.userId),
-  ]);
+  const inboxPromise = getConversationsInbox(session.userId, {
+    status,
+    q,
+    unread,
+    page: pageNumber,
+  });
 
-  return (
-    <AppShell active="conversations" businessName={inbox.business?.businessName}>
-      {currentView === "chat" ? (
+  if (currentView === "chat") {
+    const [inbox, selectedConversation, quickReplies] = await Promise.all([
+      inboxPromise,
+      conversationId ? getConversationDetail(session.userId, conversationId) : Promise.resolve(null),
+      conversationId ? getActiveQuickRepliesForUser(session.userId) : Promise.resolve([]),
+    ]);
+
+    return (
+      <AppShell active="conversations" businessName={inbox.business?.businessName}>
         <ChatInboxView
           inbox={inbox}
           q={q}
@@ -90,15 +96,27 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           status={status}
           unread={unread}
         />
-      ) : (
-        <ChatFeaturePanel
-          agentPage={agentPage}
-          inbox={inbox}
-          searchParams={resolvedSearchParams}
-          view={currentView}
-          whatsAppPage={whatsAppPage}
-        />
-      )}
+      </AppShell>
+    );
+  }
+
+  const needsAgentSettings = ["ai-agents", "flow", "settings"].includes(currentView);
+  const needsWhatsAppSettings = ["platforms", "flow"].includes(currentView);
+  const [inbox, agentPage, whatsAppPage] = await Promise.all([
+    inboxPromise,
+    needsAgentSettings ? getAgentSettingsPage(session.userId) : Promise.resolve(null),
+    needsWhatsAppSettings ? getWhatsAppSettingsPage(session.userId) : Promise.resolve(null),
+  ]);
+
+  return (
+    <AppShell active="conversations" businessName={inbox.business?.businessName}>
+      <ChatFeaturePanel
+        agentPage={agentPage}
+        inbox={inbox}
+        searchParams={resolvedSearchParams}
+        view={currentView}
+        whatsAppPage={whatsAppPage}
+      />
     </AppShell>
   );
 }
@@ -231,7 +249,7 @@ function ConversationTicketList({
             <p>{conversation.lastMessage || "Conversation assigned..."}</p>
             <div className="ticket-meta">
               <span className="channel-dot" aria-hidden="true" />
-              <span>{conversation.lead?.source === "WEB_CHAT" ? "Web Chat" : conversation.lead?.source === "BRIEF" ? "Brief" : "Helpdesk WA"}</span>
+              <span>{formatChannelLabel(conversation.channel, conversation.lead?.source)}</span>
               <span
                 className={
                   conversation.status === "HUMAN_NEEDED"
@@ -268,7 +286,7 @@ function ConversationDetailPanel({
       <div className="chat-detail-header">
         <div>
           <h1>{selectedConversation.contactName}</h1>
-          <p>{selectedConversation.contactPhone}</p>
+          <p>{formatContactAddress(selectedConversation.channel, selectedConversation.contactPhone)}</p>
         </div>
         <span
           className={
@@ -406,7 +424,13 @@ function ConversationDetailPanel({
 
       <form className="reply-form" action={sendOwnerReplyAction}>
         <input name="conversationId" type="hidden" value={selectedConversation.id} />
-        <input name="message" type="text" placeholder="Balas sebagai owner..." required />
+        <input
+          name="message"
+          type="text"
+          maxLength={4096}
+          placeholder="Balas sebagai owner..."
+          required
+        />
         <button className="primary-button" type="submit">
           Send
         </button>
@@ -422,11 +446,11 @@ function ChatFeaturePanel({
   view,
   whatsAppPage,
 }: {
-  agentPage: AgentSettingsPageData;
+  agentPage: AgentSettingsPageData | null;
   inbox: ConversationInbox;
   searchParams: Record<string, string | string[] | undefined>;
   view: Exclude<ChatView, "chat">;
-  whatsAppPage: WhatsAppSettingsPageData;
+  whatsAppPage: WhatsAppSettingsPageData | null;
 }) {
   const meta = chatFeatureMeta[view];
 
@@ -447,12 +471,14 @@ function ChatFeaturePanel({
       {view === "conversations" ? (
         <ConversationsPanel inbox={inbox} searchParams={searchParams} />
       ) : null}
-      {view === "ai-agents" ? <AIAgentsPanel agentPage={agentPage} inbox={inbox} /> : null}
-      {view === "platforms" ? (
+      {view === "ai-agents" && agentPage ? <AIAgentsPanel agentPage={agentPage} inbox={inbox} /> : null}
+      {view === "platforms" && whatsAppPage ? (
         <PlatformsPanel searchParams={searchParams} whatsAppPage={whatsAppPage} />
       ) : null}
-      {view === "flow" ? <FlowPanel agentPage={agentPage} whatsAppPage={whatsAppPage} /> : null}
-      {view === "settings" ? <ChatSettingsPanel agentPage={agentPage} /> : null}
+      {view === "flow" && agentPage && whatsAppPage ? (
+        <FlowPanel agentPage={agentPage} whatsAppPage={whatsAppPage} />
+      ) : null}
+      {view === "settings" && agentPage ? <ChatSettingsPanel agentPage={agentPage} /> : null}
     </section>
   );
 }
@@ -547,7 +573,7 @@ function ConversationsPanel({
           >
             <span>
               <strong>{conversation.contactName}</strong>
-              <small>{conversation.contactPhone}</small>
+              <small>{formatContactAddress(conversation.channel, conversation.contactPhone)}</small>
             </span>
             <span>{conversation.lastMessage || "-"}</span>
             <span className={conversation.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
@@ -668,18 +694,28 @@ function PlatformsPanel({
     `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/webhooks/whatsapp`;
   const platforms = [
     {
+      key: "telegram",
+      label: "Telegram",
+      icon: Send,
+      className: "telegram",
+      enabled: true,
+      href: "/integrations?platform=telegram",
+    },
+    {
       key: "messenger",
       label: "Messenger",
       icon: MessageCircle,
       className: "messenger",
       enabled: false,
+      href: "/conversations?view=platforms&platform=messenger",
     },
     {
       key: "live-chat",
       label: "Web Live Chat",
       icon: MessageCircle,
       className: "live-chat",
-      enabled: false,
+      enabled: true,
+      href: "/integrations?platform=live-chat",
     },
     {
       key: "whatsapp",
@@ -687,6 +723,7 @@ function PlatformsPanel({
       icon: RadioTower,
       className: "whatsapp",
       enabled: true,
+      href: "/conversations?view=platforms&platform=whatsapp",
     },
     {
       key: "instagram",
@@ -694,6 +731,7 @@ function PlatformsPanel({
       icon: Megaphone,
       className: "instagram",
       enabled: false,
+      href: "/conversations?view=platforms&platform=instagram",
     },
     {
       key: "gmail",
@@ -701,6 +739,7 @@ function PlatformsPanel({
       icon: Mail,
       className: "gmail",
       enabled: false,
+      href: "/conversations?view=platforms&platform=gmail",
     },
     {
       key: "other-email",
@@ -708,6 +747,7 @@ function PlatformsPanel({
       icon: Mail,
       className: "email",
       enabled: false,
+      href: "/conversations?view=platforms&platform=other-email",
     },
     {
       key: "tiktok",
@@ -715,8 +755,10 @@ function PlatformsPanel({
       icon: Music2,
       className: "tiktok",
       enabled: false,
+      href: "/conversations?view=platforms&platform=tiktok",
     },
   ];
+  const selectedPlatformConfig = platforms.find((platform) => platform.key === selectedPlatform);
 
   return (
     <div className="platform-connect-shell">
@@ -735,14 +777,10 @@ function PlatformsPanel({
           {platforms.map((platform) => {
             const Icon = platform.icon;
             const isSelected = selectedPlatform === platform.key;
-            const href = platform.enabled
-              ? `/conversations?view=platforms&platform=${platform.key}`
-              : `/conversations?view=platforms&platform=${platform.key}`;
-
             return (
               <Link
                 className={isSelected ? "platform-card selected" : "platform-card"}
-                href={href}
+                href={platform.href}
                 key={platform.key}
               >
                 <span className={`platform-orb ${platform.className}`}>
@@ -750,6 +788,8 @@ function PlatformsPanel({
                 </span>
                 <strong>{platform.label}</strong>
                 {!platform.enabled ? <small>Coming soon</small> : null}
+                {platform.key === "telegram" ? <small>Kelola di Integrations</small> : null}
+                {platform.key === "live-chat" ? <small>Ready</small> : null}
                 {platform.key === "whatsapp" && whatsAppPage.ready ? <small>Connected</small> : null}
               </Link>
             );
@@ -759,13 +799,27 @@ function PlatformsPanel({
 
       {selectedPlatform && selectedPlatform !== "whatsapp" ? (
         <div className="platform-coming-soon">
-          <strong>{platforms.find((platform) => platform.key === selectedPlatform)?.label} belum aktif</strong>
+          <strong>
+            {selectedPlatformConfig?.enabled
+              ? `${selectedPlatformConfig.label} tersedia`
+              : `${selectedPlatformConfig?.label ?? "Channel"} belum aktif`}
+          </strong>
           <p>
-            Untuk MVP sekarang koneksi yang bisa dipakai dulu WhatsApp Business. Platform lain
-            sudah disiapkan sebagai slot inbox berikutnya.
+            {selectedPlatformConfig?.enabled
+              ? "Konfigurasi channel ini dikelola dari halaman Integrations agar inbox tetap ringan."
+              : "Channel ini tetap ada di roadmap dan belum menerima pesan pada versi beta sekarang."}
           </p>
-          <Link className="primary-button" href="/conversations?view=platforms&platform=whatsapp">
-            Connect WhatsApp Business
+          <Link
+            className="primary-button"
+            href={
+              selectedPlatformConfig?.enabled
+                ? selectedPlatformConfig.href
+                : "/integrations?platform=telegram"
+            }
+          >
+            {selectedPlatformConfig?.enabled
+              ? "Buka Integrations"
+              : "Connect Telegram"}
           </Link>
         </div>
       ) : null}
@@ -1050,7 +1104,7 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
   },
   platforms: {
     title: "Connected Platforms",
-    description: "Connect WhatsApp credentials from the dashboard.",
+    description: "Kelola Telegram, web live chat, dan WhatsApp dari satu workspace.",
   },
   flow: {
     title: "Flow",
@@ -1124,6 +1178,17 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function formatChannelLabel(channel: string, leadSource?: string | null) {
+  if (channel === "TELEGRAM") return "Telegram";
+  if (channel === "WEB_CHAT") return leadSource === "BRIEF" ? "Brief" : "Web Chat";
+  return "WhatsApp";
+}
+
+function formatContactAddress(channel: string, value: string) {
+  if (channel === "TELEGRAM") return "Telegram private chat";
+  return value;
 }
 
 function bubbleClassForSender(senderType: string) {

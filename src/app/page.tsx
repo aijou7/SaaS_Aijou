@@ -39,7 +39,7 @@ const features = [
   },
 ];
 
-const channels = ["WhatsApp", "Instagram", "Messenger", "Gmail", "Web Live Chat", "TikTok"];
+const channels = ["WhatsApp", "Telegram", "Web Live Chat", "Instagram", "Messenger", "Gmail", "TikTok"];
 
 const steps = [
   "Latih AI dengan profil bisnis, produk, dan chat lama.",

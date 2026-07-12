@@ -118,6 +118,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     title: "Integrasi",
     items: [
       { href: "/integrations", label: "Platform", icon: Building2, key: "integrations" },
+      { href: "/integrations?platform=telegram", label: "Telegram", icon: Send, key: "telegram" },
       { href: "/whatsapp", label: "WhatsApp", icon: Code2, key: "whatsapp" },
       { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
     ],
@@ -145,6 +146,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   receipts: "payments",
   reports: "reports",
   integrations: "integrations",
+  telegram: "integrations",
   whatsapp: "integrations",
   readiness: "integrations",
 };

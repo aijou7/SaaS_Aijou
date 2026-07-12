@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache } from "@/lib/ttl-cache";
 import { getWhatsAppReadinessForBusiness } from "@/server/whatsapp/settings";
+import { getTelegramReadinessForBusiness } from "@/server/telegram/settings";
 import { normalizeWebOrigin } from "@/server/web/widget-security";
 
 export type BusinessProfileInput = {
@@ -24,7 +25,7 @@ export async function getBusinessProfilePage(userId: string) {
     };
   }
 
-  const [activeKnowledgeCount, agentSettings, whatsAppReadiness] = await Promise.all([
+  const [activeKnowledgeCount, agentSettings, whatsAppReadiness, telegramReadiness] = await Promise.all([
     prisma.knowledgeBase.count({
       where: { businessId: business.id, isActive: true },
     }),
@@ -33,6 +34,7 @@ export async function getBusinessProfilePage(userId: string) {
       select: { isActive: true, agentName: true, handoffRules: true, systemInstruction: true },
     }),
     getWhatsAppReadinessForBusiness(business.id),
+    getTelegramReadinessForBusiness(business.id),
   ]);
 
   return {
@@ -44,6 +46,7 @@ export async function getBusinessProfilePage(userId: string) {
       handoffRules: agentSettings?.handoffRules ?? null,
       systemInstruction: agentSettings?.systemInstruction ?? null,
       whatsAppReady: whatsAppReadiness.ready,
+      telegramReady: telegramReadiness.ready,
     }),
   };
 }
@@ -121,6 +124,7 @@ function buildReadiness(
     handoffRules?: string | null;
     systemInstruction?: string | null;
     whatsAppReady?: boolean;
+    telegramReady?: boolean;
   },
 ) {
   const checks = [
@@ -161,11 +165,11 @@ function buildReadiness(
       href: "/ai-activity",
     },
     {
-      key: "whatsapp",
-      label: "WhatsApp config tersedia",
-      description: "Token, verify token, phone number ID, dan app secret siap dari dashboard.",
-      done: Boolean(params.whatsAppReady),
-      href: "/whatsapp",
+      key: "channel",
+      label: "Minimal satu channel siap",
+      description: "Aktifkan web live chat, Telegram, atau WhatsApp dari dashboard.",
+      done: Boolean(business?.websiteUrl || params.whatsAppReady || params.telegramReady),
+      href: "/integrations",
     },
   ];
 
@@ -177,6 +181,11 @@ function buildReadiness(
     total: checks.length,
     percent: Math.round((completed / checks.length) * 100),
     activeKnowledgeCount: params.activeKnowledgeCount,
+    channels: {
+      web: Boolean(business?.websiteUrl),
+      telegram: Boolean(params.telegramReady),
+      whatsapp: Boolean(params.whatsAppReady),
+    },
   };
 }
 

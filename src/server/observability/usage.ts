@@ -8,6 +8,7 @@ export async function getUsageSnapshot(userId: string) {
       businessName: true,
       websiteUrl: true,
       whatsAppSettings: { select: { isActive: true } },
+      telegramSettings: { select: { isActive: true } },
     },
   });
   if (!business) return null;
@@ -39,7 +40,10 @@ export async function getUsageSnapshot(userId: string) {
   return {
     businessName: business.businessName,
     nextResetAt: nextMonth.toISOString(),
-    channels: Number(Boolean(business.websiteUrl)) + Number(Boolean(business.whatsAppSettings?.isActive)),
+    channels:
+      Number(Boolean(business.websiteUrl)) +
+      Number(Boolean(business.whatsAppSettings?.isActive)) +
+      Number(Boolean(business.telegramSettings?.isActive)),
     messages,
     conversations,
     aiRequests,

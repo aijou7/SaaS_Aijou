@@ -216,6 +216,7 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
         won: 0,
         lost: 0,
         webChat: 0,
+        telegram: 0,
         brief: 0,
         hot: 0,
         dueFollowUp: 0,
@@ -245,7 +246,7 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
         }
       : {}),
   };
-  const [leads, total, newCount, followUp, qualified, won, lost, webChat, brief, hot, dueFollowUp] = await Promise.all([
+  const [leads, total, newCount, followUp, qualified, won, lost, webChat, telegram, brief, hot, dueFollowUp] = await Promise.all([
     prisma.lead.findMany({
       where: leadWhere,
       orderBy: { updatedAt: "desc" },
@@ -296,6 +297,7 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
     prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.WON } }),
     prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.LOST } }),
     prisma.lead.count({ where: { businessId: business.id, source: "WEB_CHAT" } }),
+    prisma.lead.count({ where: { businessId: business.id, source: "TELEGRAM" } }),
     prisma.lead.count({ where: { businessId: business.id, source: "BRIEF" } }),
     prisma.lead.count({ where: { businessId: business.id, qualificationScore: { gte: 70 } } }),
     prisma.lead.count({
@@ -309,7 +311,7 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
 
   return {
     business,
-    summary: { new: newCount, followUp, qualified, won, lost, webChat, brief, hot, dueFollowUp },
+    summary: { new: newCount, followUp, qualified, won, lost, webChat, telegram, brief, hot, dueFollowUp },
     pagination: {
       page,
       pageSize,

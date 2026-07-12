@@ -1,11 +1,10 @@
-import { AlertTriangle, BadgeCheck, CheckCircle2, RadioTower, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BadgeCheck, CheckCircle2, RadioTower, Send, ShieldCheck } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
 import { getBusinessProfilePage } from "@/server/business/profile";
-import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
 export default async function ReadinessPage() {
   const session = await getSession();
@@ -15,16 +14,15 @@ export default async function ReadinessPage() {
   }
 
   const page = await getBusinessProfilePage(session.userId);
-  const whatsApp = await getWhatsAppSettingsPage(session.userId);
 
   return (
     <AppShell active="readiness" businessName={page.business?.businessName}>
       <section className="hero compact-hero">
         <p className="eyebrow">Go live readiness</p>
-        <h1>Cek apa aja yang kurang sebelum WhatsApp real dipasang.</h1>
+        <h1>Cek apa aja yang kurang sebelum agent mulai menerima chat real.</h1>
         <p>
-          Halaman ini jadi panel pre-flight: Groq, WhatsApp webhook, business profile,
-          agent, dan knowledge base dicek dari satu tempat.
+          Halaman ini jadi panel pre-flight: Groq, business profile, agent, knowledge base,
+          Telegram, web chat, dan WhatsApp dicek dari satu tempat.
         </p>
       </section>
 
@@ -40,8 +38,14 @@ export default async function ReadinessPage() {
         <div className="card">
           <RadioTower size={22} aria-hidden="true" />
           <h2>WhatsApp</h2>
-          <div className="metric">{whatsApp.ready ? "Ready" : "Draft"}</div>
+          <div className="metric">{page.readiness.channels.whatsapp ? "Ready" : "Draft"}</div>
           <p className="muted">Config webhook Meta/WhatsApp Cloud API dari dashboard.</p>
+        </div>
+        <div className="card">
+          <Send size={22} aria-hidden="true" />
+          <h2>Telegram</h2>
+          <div className="metric">{page.readiness.channels.telegram ? "Ready" : "Draft"}</div>
+          <p className="muted">Bot token dan webhook dikelola langsung dari dashboard.</p>
         </div>
         <div className="card">
           <ShieldCheck size={22} aria-hidden="true" />
@@ -80,17 +84,16 @@ export default async function ReadinessPage() {
         </div>
 
         <div className="card">
-          <h2>WhatsApp dashboard settings</h2>
+          <h2>Status channel</h2>
           <div className="env-list">
             <EnvRow name="GROQ_API_KEY" ready={Boolean(process.env.GROQ_API_KEY)} />
-            <EnvRow name="Access token" ready={whatsApp.settings?.accessTokenMasked !== "Not set"} />
-            <EnvRow name="Verify token" ready={whatsApp.settings?.verifyTokenMasked !== "Not set"} />
-            <EnvRow name="Phone number ID" ready={Boolean(whatsApp.settings?.phoneNumberId)} />
-            <EnvRow name="App secret" ready={whatsApp.settings?.appSecretMasked !== "Not set"} />
+            <EnvRow name="Web Live Chat" ready={page.readiness.channels.web} />
+            <EnvRow name="Telegram" ready={page.readiness.channels.telegram} />
+            <EnvRow name="WhatsApp" ready={page.readiness.channels.whatsapp} />
           </div>
           <div className="quick-actions">
-            <Link className="primary-button" href="/whatsapp">
-              Open WhatsApp settings
+            <Link className="primary-button" href="/integrations">
+              Open integrations
             </Link>
           </div>
         </div>

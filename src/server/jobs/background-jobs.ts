@@ -4,6 +4,7 @@ import { upsertLeadSummaryFromConversation } from "@/server/leads/leads";
 
 const leadRefreshJob = "LEAD_REFRESH";
 const whatsAppWebhookJob = "WHATSAPP_WEBHOOK";
+const telegramWebhookJob = "TELEGRAM_WEBHOOK";
 const staleLockMs = 5 * 60_000;
 
 export async function enqueueLeadRefresh(params: {
@@ -68,6 +69,48 @@ export async function enqueueWhatsAppWebhook(params: {
     throw new Error("Queued WhatsApp webhook could not be recovered.");
   }
 
+  if (existing.status !== BackgroundJobStatus.FAILED) return existing;
+
+  await prisma.backgroundJob.updateMany({
+    where: { id: existing.id, status: BackgroundJobStatus.FAILED },
+    data: {
+      payload: params.payload,
+      status: BackgroundJobStatus.PENDING,
+      attempts: 0,
+      runAfter: new Date(),
+      lockedAt: null,
+      lastError: null,
+      completedAt: null,
+    },
+  });
+
+  return (await prisma.backgroundJob.findUnique({ where: { id: existing.id } })) ?? existing;
+}
+
+export async function enqueueTelegramWebhook(params: {
+  businessId: string;
+  payload: Prisma.InputJsonValue;
+  updateId: string;
+}) {
+  const dedupeKey = `telegram-webhook:${params.businessId}:${params.updateId}`;
+
+  try {
+    return await prisma.backgroundJob.create({
+      data: {
+        businessId: params.businessId,
+        type: telegramWebhookJob,
+        dedupeKey,
+        payload: params.payload,
+        status: BackgroundJobStatus.PENDING,
+        runAfter: new Date(),
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+  }
+
+  const existing = await prisma.backgroundJob.findUnique({ where: { dedupeKey } });
+  if (!existing) throw new Error("Queued Telegram webhook could not be recovered.");
   if (existing.status !== BackgroundJobStatus.FAILED) return existing;
 
   await prisma.backgroundJob.updateMany({
@@ -217,6 +260,13 @@ async function executeJob(type: string, payload: Prisma.JsonValue, businessId: s
     if (!jsonObject(payload)) throw new Error("Queued WhatsApp payload is invalid.");
     const { processQueuedWhatsAppWebhook } = await import("@/server/whatsapp/processor");
     await processQueuedWhatsAppWebhook(payload, businessId);
+    return;
+  }
+
+  if (type === telegramWebhookJob) {
+    if (!jsonObject(payload)) throw new Error("Queued Telegram payload is invalid.");
+    const { processQueuedTelegramWebhook } = await import("@/server/telegram/processor");
+    await processQueuedTelegramWebhook(payload, businessId);
     return;
   }
 

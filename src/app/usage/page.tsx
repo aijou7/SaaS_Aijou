@@ -12,7 +12,7 @@ export default async function UsagePage() {
   if (!usage) redirect("/setup" as Route);
 
   const sections = [
-    { title: "Channel aktif", metric: usage.channels, helper: "Web widget + WhatsApp", icon: RadioTower },
+    { title: "Channel aktif", metric: usage.channels, helper: "Web widget + WhatsApp + Telegram", icon: RadioTower },
     { title: "Pesan bulan ini", metric: usage.messages, helper: "Inbound dan outbound tersimpan", icon: MessageCircle },
     { title: "Percakapan aktif", metric: usage.conversations, helper: "Conversation dengan aktivitas bulan ini", icon: Activity },
     { title: "AI runs", metric: usage.aiRequests, helper: "Reply, lead summary, dan proposal", icon: Bot },

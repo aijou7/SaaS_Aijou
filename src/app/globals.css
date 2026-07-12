@@ -3552,6 +3552,10 @@ sup {
   background: #22c55e;
 }
 
+.platform-orb.telegram svg {
+  background: linear-gradient(135deg, #38bdf8, #168acd);
+}
+
 .platform-orb.instagram svg {
   background: radial-gradient(circle at 30% 100%, #facc15, #ec4899 45%, #7c3aed 80%);
 }
@@ -3585,6 +3589,75 @@ sup {
 .platform-coming-soon p {
   margin: 4px 0 0;
   color: var(--muted);
+}
+
+.telegram-connection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.telegram-connection-grid > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.telegram-connection-grid svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.telegram-connection-grid span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.telegram-connection-grid small,
+.telegram-action-row > small {
+  color: var(--muted);
+}
+
+.telegram-connection-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.telegram-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.telegram-action-row > small {
+  margin-left: auto;
+}
+
+.telegram-disconnect-button {
+  margin-top: 0;
+}
+
+.telegram-botfather-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.telegram-action-row button:disabled,
+.platform-setup-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
 }
 
 .platform-checklist {
@@ -4263,8 +4336,22 @@ sup {
 
   .platform-grid,
   .platform-checklist,
-  .platform-coming-soon {
+  .platform-coming-soon,
+  .telegram-connection-grid {
     grid-template-columns: 1fr;
+  }
+
+  .telegram-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .telegram-action-row button {
+    width: 100%;
+  }
+
+  .telegram-action-row > small {
+    margin-left: 0;
   }
 
   .platform-card {

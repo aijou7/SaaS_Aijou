@@ -176,6 +176,7 @@ model Business {
   backgroundJobs       BackgroundJob[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
+  telegramSettings     TelegramSettings?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
@@ -454,6 +455,26 @@ model WhatsAppSettings {
 
   @@unique([phoneNumberId])
   @@map("whatsapp_settings")
+}
+
+model TelegramSettings {
+  id              String    @id @default(cuid())
+  businessId      String    @unique
+  botToken        String?
+  botId           String?   @unique
+  botUsername     String?
+  webhookKey      String?
+  webhookKeyHash  String?   @unique
+  webhookSecret   String?
+  webhookUrl      String?
+  isActive        Boolean   @default(false)
+  lastConnectedAt DateTime?
+  lastError       String?
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("telegram_settings")
 }
 
 model Lead {

@@ -14,7 +14,7 @@ Dokumen ini memakai alur GitHub → Vercel untuk aplikasi Next.js dan Neon untuk
 
 ## 1. Credential hygiene
 
-Jangan paste database URL, API key, access token, callback token, atau encryption key ke chat, screenshot, issue, maupun commit.
+Jangan paste database URL, API key, bot token, access token, callback token, atau encryption key ke chat, screenshot, issue, maupun commit.
 
 Jika sebuah credential pernah terlihat di tempat tersebut, anggap sudah bocor dan rotate sebelum beta dibuka. Untuk Neon:
 
@@ -145,6 +145,25 @@ WHATSAPP_DEFAULT_COUNTRY_CODE="62"
 ```
 
 Pin Graph API version yang masih didukung oleh Meta. Jangan memakai custom Graph API base URL di production kecuali memang ada kebutuhan yang sudah direview.
+
+### Telegram Bot API
+
+Telegram dikonfigurasi per workspace dari `/integrations?platform=telegram`, bukan lewat shared Vercel environment variable:
+
+1. Buat bot melalui akun resmi `@BotFather` dan ambil bot token.
+2. Pastikan `NEXT_PUBLIC_APP_URL` menunjuk ke canonical HTTPS origin production dan `DATA_ENCRYPTION_KEY` sudah aktif.
+3. Paste token hanya ke field rahasia di dashboard, lalu pilih hubungkan. Server memanggil `getMe` untuk validasi dan `setWebhook` untuk registrasi otomatis.
+4. Webhook menggunakan path key acak dan secret header Telegram. Bot token tidak dimasukkan ke URL webhook, log, atau response aplikasi.
+
+`TELEGRAM_API_TIMEOUT_MS` boleh diatur sebagai timeout request provider bersama (default `10000`, minimum efektif 1 detik, maksimum 30 detik). Variabel ini bukan tempat menyimpan bot token.
+
+Endpoint yang diregistrasikan otomatis berbentuk:
+
+```text
+https://APP_DOMAIN/api/webhooks/telegram/OPAQUE_WEBHOOK_KEY
+```
+
+Scope beta adalah private DM teks. Update dari bot, group/channel, dan pesan nonteks diabaikan dengan aman. Memutus koneksi dari dashboard memanggil `deleteWebhook` dan menonaktifkan connector. Token tetap tersimpan terenkripsi serta hanya ditampilkan dalam bentuk masked agar reconnect tidak perlu paste ulang.
 
 ### Xendit
 
@@ -278,6 +297,12 @@ https://APP_DOMAIN/api/webhooks/whatsapp
 
 Set verify token yang sama dengan workspace. Subscribe message dan delivery-status fields yang dibutuhkan, lalu kirim test message dari nomor customer. Owner finance commands hanya diproses dari nomor owner yang tersimpan di account/workspace.
 
+### Telegram webhook
+
+Tidak perlu menyalin URL webhook secara manual ke BotFather. Buka `/integrations?platform=telegram`, masukkan bot token, lalu hubungkan. Aplikasi memvalidasi bot, membuat webhook key serta secret, dan mendaftarkan URL HTTPS secara otomatis.
+
+Sesudah tersambung, buka link username bot, tekan **Start**, dan kirim pesan teks lewat private DM. Satu bot hanya boleh terhubung ke satu workspace. Untuk memindahkannya, putuskan koneksi dari workspace lama terlebih dahulu agar webhook lama dihapus dengan benar.
+
 ### Background job cron
 
 `vercel.json` menjadwalkan recovery job setiap hari pukul `03:00 UTC` (`11:00` Singapore). Request harus membawa `Authorization: Bearer CRON_SECRET`.
@@ -310,6 +335,15 @@ Jangan membuka beta invite ke tester sebelum seluruh bagian penting di bawah lol
 - Inbound message hanya tersimpan sekali saat webhook dikirim ulang.
 - AI/owner outbound message mendapat provider message ID dan delivery state diperbarui.
 - Nomor customer tidak dapat menjalankan finance commands.
+
+### Telegram
+
+- Panel Telegram di `/integrations?platform=telegram` berhasil memvalidasi bot dan menampilkan username bot yang benar tanpa pernah menampilkan kembali token tersimpan.
+- `getWebhookInfo` tidak memiliki error terbaru dan pending update tidak terus bertambah.
+- Private text DM muncul tepat sekali di `/conversations` walaupun update webhook dikirim ulang.
+- AI dapat membalas, lalu human takeover menghentikan auto-reply dan owner dapat mengirim balasan manual.
+- Group message, channel update, pesan dari bot, dan media/nonteks tidak membuat percakapan atau error berulang.
+- Disconnect menghapus webhook Telegram dan menonaktifkan connector; pesan baru tidak lagi masuk ke workspace sementara token tetap terenkripsi serta masked untuk reconnect.
 
 ### Receipt dan AI
 
@@ -345,6 +379,7 @@ Jangan membuka beta invite ke tester sebelum seluruh bagian penting di bawah lol
 - **WIDGET_SIGNING_SECRET:** update lalu redeploy; widget session lama akan meminta session baru.
 - **DATA_ENCRYPTION_KEY:** jangan ganti langsung. Decrypt dan re-encrypt semua stored integration credential dengan key baru melalui migration/script khusus lebih dulu.
 - **Meta token/app secret:** update per workspace dan test signature serta outbound message.
+- **Telegram bot token:** gunakan `/revoke` melalui `@BotFather`, lalu disconnect dan hubungkan kembali bot dari `/integrations?platform=telegram` dengan token baru agar webhook serta credential terenkripsi ikut diperbarui.
 - **Xendit secret/callback token:** update per workspace dan kirim test callback.
 - **CRON_SECRET:** update Vercel environment dan pastikan cron berikutnya kembali HTTP 200.
 - **Seed password:** hapus dari local process dan jangan simpan di Vercel setelah bootstrap/rotation selesai.

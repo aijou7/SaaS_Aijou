@@ -83,6 +83,12 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
           </div>
           <div className="card">
             <ClipboardList size={22} aria-hidden="true" />
+            <h2>Telegram</h2>
+            <div className="metric">{page.summary.telegram}</div>
+            <p className="muted">Masuk dari bot Telegram.</p>
+          </div>
+          <div className="card">
+            <ClipboardList size={22} aria-hidden="true" />
             <h2>Brief</h2>
             <div className="metric">{page.summary.brief}</div>
             <p className="muted">Masuk dari form brief project.</p>

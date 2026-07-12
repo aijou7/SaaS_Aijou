@@ -11,6 +11,8 @@
   var state = loadState();
   var lastPollAt = new Date(Date.now() - 60000).toISOString();
   var pollingTimer = null;
+  var idlePollCount = 0;
+  var pollDelays = [4000, 5000, 7000, 10000];
   var syncPromise = null;
   var sessionPromise = null;
   var historyLoaded = false;
@@ -67,6 +69,17 @@
     if (event.key === "Escape") closePanel();
   });
   form.addEventListener("submit", sendMessage);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopPolling();
+    } else if (panel.classList.contains("open")) {
+      startPolling(true);
+    }
+  });
+  window.addEventListener("online", function () {
+    if (panel.classList.contains("open")) startPolling(true);
+  });
+  window.addEventListener("offline", stopPolling);
 
   function loadState() {
     try {
@@ -160,6 +173,8 @@
       if (data.reply) addBubble("agent", data.reply);
       delete state.pendingMessage;
       persistState();
+      idlePollCount = 0;
+      if (panel.classList.contains("open")) startPolling();
     }).catch(function (error) {
       optimisticBubble.remove();
       showError(error);
@@ -171,7 +186,7 @@
   }
 
   function syncHistory() {
-    if (!state.token) return Promise.resolve();
+    if (!state.token) return Promise.resolve(0);
     if (syncPromise) return syncPromise;
     var pollStartedAt = new Date().toISOString();
     var includeHistory = !historyLoaded;
@@ -182,6 +197,7 @@
       { headers: { "X-Aijou-Workspace": workspaceKey, "Authorization": "Bearer " + state.token } },
       12000
     ).then(readJson).then(function (data) {
+      var addedCount = 0;
       if (includeHistory) {
         historyLoaded = true;
         if (data.history && data.history.length) {
@@ -196,28 +212,53 @@
       (data.messages || []).forEach(function (item) {
         if (!messages.querySelector('[data-id="' + cssEscape(item.id) + '"]')) {
           addBubble("agent", item.text, item.id);
+          addedCount += 1;
         }
       });
       lastPollAt = pollStartedAt;
+      return addedCount;
     }).finally(function () {
       syncPromise = null;
     });
     return syncPromise;
   }
 
-  function startPolling() {
-    if (!panel.classList.contains("open")) return;
-    if (pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = setInterval(function () {
-      if (!document.hidden && panel.classList.contains("open")) {
-        ensureSession().then(syncHistory).catch(showError);
-      }
-    }, 5000);
+  function startPolling(syncNow) {
+    stopPolling();
+    if (!panel.classList.contains("open") || document.hidden || !navigator.onLine) return;
+    if (syncNow) idlePollCount = 0;
+    schedulePoll(syncNow ? 0 : currentPollDelay());
+  }
+
+  function schedulePoll(delay) {
+    pollingTimer = setTimeout(function () {
+      pollingTimer = null;
+      if (!panel.classList.contains("open") || document.hidden || !navigator.onLine) return;
+
+      ensureSession()
+        .then(syncHistory)
+        .then(function (addedCount) {
+          idlePollCount = addedCount > 0
+            ? 0
+            : Math.min(idlePollCount + 1, pollDelays.length - 1);
+          clearError();
+        })
+        .catch(showError)
+        .finally(function () {
+          if (panel.classList.contains("open") && !document.hidden && navigator.onLine) {
+            schedulePoll(currentPollDelay());
+          }
+        });
+    }, delay);
+  }
+
+  function currentPollDelay() {
+    return pollDelays[Math.min(idlePollCount, pollDelays.length - 1)];
   }
 
   function stopPolling() {
     if (!pollingTimer) return;
-    clearInterval(pollingTimer);
+    clearTimeout(pollingTimer);
     pollingTimer = null;
   }
 

@@ -23,6 +23,8 @@ import {
   processPendingJobs,
 } from "@/server/jobs/background-jobs";
 import { sendWhatsAppTextMessage } from "@/server/whatsapp/client";
+import { deliverStoredTelegramTextMessage } from "@/server/telegram/delivery";
+import { normalizeTelegramChatId } from "@/server/telegram/payload";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -40,6 +42,8 @@ type ConversationInboxFilters = {
   unread?: boolean;
   page?: number;
 };
+
+type ConversationChannel = "WHATSAPP" | "TELEGRAM" | "WEB_CHAT";
 
 export async function getConversationsInbox(userId: string, filters: ConversationInboxFilters = {}) {
   const business = await getBusinessForUser(userId);
@@ -72,6 +76,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       select: {
         id: true,
         conversationType: true,
+        channel: true,
         status: true,
         lastMessageAt: true,
         ownerLastReadAt: true,
@@ -145,6 +150,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
     conversations: conversations.map((conversation) => ({
       id: conversation.id,
       conversationType: conversation.conversationType,
+      channel: conversation.channel,
       status: conversation.status,
       lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
       ownerLastReadAt: conversation.ownerLastReadAt?.toISOString() ?? null,
@@ -178,6 +184,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
     select: {
       id: true,
       conversationType: true,
+      channel: true,
       status: true,
       lastMessageAt: true,
       ownerLastReadAt: true,
@@ -241,6 +248,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
   return {
     id: conversation.id,
     conversationType: conversation.conversationType,
+    channel: conversation.channel,
     status: conversation.status,
     lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
     ownerLastReadAt: conversation.ownerLastReadAt?.toISOString() ?? null,
@@ -304,7 +312,7 @@ async function simulateCustomerMessageForResolvedBusiness(
     contactId: contact.id,
     conversationType: input.conversationType ?? ConversationType.CUSTOMER_SERVICE,
     status: ConversationStatus.OPEN,
-    channel: input.leadSource === "WHATSAPP" ? "WHATSAPP" : "WEB_CHAT",
+    channel: conversationChannelFromSource(input.leadSource),
   });
 
   const customerMessage = await prisma.whatsAppMessage
@@ -380,7 +388,8 @@ async function simulateCustomerMessageForResolvedBusiness(
   }
 
   if (aiReply) {
-    const isWhatsApp = input.leadSource === "WHATSAPP";
+    const channel = conversationChannelFromSource(input.leadSource);
+    const isExternalChannel = channel !== "WEB_CHAT";
     const aiMessage = await prisma.whatsAppMessage.create({
       data: {
         conversationId: conversation.id,
@@ -390,9 +399,9 @@ async function simulateCustomerMessageForResolvedBusiness(
         messageBody: aiReply,
         intent: "customer_service_reply",
         processingStatus: ProcessingStatus.PROCESSED,
-        deliveryStatus: isWhatsApp ? "PENDING" : "STORED",
+        deliveryStatus: isExternalChannel ? "PENDING" : "STORED",
         rawPayload: toJsonValue({
-          channel: isWhatsApp ? "WHATSAPP" : "WEB_CHAT",
+          channel,
           direction: "OUTBOUND",
           inReplyToProviderMessageId: providerMessageId,
         }),
@@ -562,17 +571,16 @@ export async function sendConversationOwnerMessage(params: {
     throw new Error("Message tidak boleh kosong.");
   }
 
+  if (trimmed.length > 4_096) {
+    throw new Error("Message maksimal 4096 karakter agar bisa dikirim ke channel eksternal.");
+  }
+
   const conversation = await prisma.whatsAppConversation.findFirst({
     where: { id: params.conversationId, businessId: params.businessId },
     select: {
       id: true,
+      channel: true,
       contact: { select: { phoneNumber: true } },
-      messages: {
-        where: { rawPayload: { not: Prisma.DbNull } },
-        orderBy: { createdAt: "desc" },
-        take: 25,
-        select: { rawPayload: true },
-      },
     },
   });
 
@@ -580,14 +588,13 @@ export async function sendConversationOwnerMessage(params: {
     throw new Error("Conversation tidak ditemukan.");
   }
 
-  const isWhatsAppConversation = conversation.messages.some((item) =>
-    isWhatsAppInboundPayload(item.rawPayload),
-  );
+  const channel = normalizeConversationChannel(conversation.channel);
+  const isExternalChannel = channel !== "WEB_CHAT";
   const internalProviderMessageId = params.idempotencyKey
     ? internalOutboundId(params.providerMessagePrefix ?? "owner", params.idempotencyKey)
     : `${params.providerMessagePrefix ?? "owner"}-${crypto.randomUUID()}`;
   const outboundPayload = toJsonValue({
-    channel: isWhatsAppConversation ? "WHATSAPP" : "WEB_CHAT",
+    channel,
     direction: "OUTBOUND",
     idempotencyKey: params.idempotencyKey ?? null,
   });
@@ -613,10 +620,10 @@ export async function sendConversationOwnerMessage(params: {
           messageType: MessageType.TEXT,
           messageBody: trimmed,
           intent: params.intent,
-          processingStatus: isWhatsAppConversation
+          processingStatus: isExternalChannel
             ? ProcessingStatus.RECEIVED
             : ProcessingStatus.PROCESSED,
-          deliveryStatus: isWhatsAppConversation ? "PENDING" : "STORED",
+          deliveryStatus: isExternalChannel ? "PENDING" : "STORED",
           rawPayload: outboundPayload,
         },
         select: {
@@ -647,7 +654,7 @@ export async function sendConversationOwnerMessage(params: {
     },
   });
 
-  if (!isWhatsAppConversation) {
+  if (channel === "WEB_CHAT") {
     return {
       channel: "WEB_CHAT" as const,
       accepted: true,
@@ -658,17 +665,51 @@ export async function sendConversationOwnerMessage(params: {
     };
   }
 
-  const recipient = conversation.contact?.phoneNumber?.trim();
+  const recipient = conversation.contact?.phoneNumber?.trim() ?? "";
   if (!recipient) {
     await prisma.whatsAppMessage.update({
       where: { id: outgoingMessage.id },
       data: {
         deliveryStatus: "FAILED",
-        deliveryError: "whatsapp_recipient_missing",
+        deliveryError: `${channel.toLowerCase()}_recipient_missing`,
         processingStatus: ProcessingStatus.FAILED,
       },
     });
-    throw new Error("Pesan tersimpan, tetapi nomor WhatsApp penerima tidak tersedia.");
+    throw new Error("Pesan tersimpan, tetapi tujuan penerima tidak tersedia.");
+  }
+
+  if (channel === "TELEGRAM") {
+    const chatId = telegramChatIdFromContact(recipient);
+    if (!chatId) {
+      await prisma.whatsAppMessage.update({
+        where: { id: outgoingMessage.id },
+        data: {
+          deliveryStatus: "FAILED",
+          deliveryError: "telegram_chat_id_missing",
+          processingStatus: ProcessingStatus.FAILED,
+        },
+      });
+      throw new Error("Pesan tersimpan, tetapi Telegram chat ID tidak tersedia.");
+    }
+
+    const delivery = await deliverStoredTelegramTextMessage({
+      businessId: params.businessId,
+      messageId: outgoingMessage.id,
+      chatId,
+    });
+    if (!delivery.accepted) {
+      throw new Error(
+        `Pesan tersimpan, tetapi belum diterima Telegram (${delivery.reason ?? delivery.deliveryStatus}).`,
+      );
+    }
+    return {
+      channel: "TELEGRAM" as const,
+      accepted: true,
+      delivered: delivery.delivered,
+      messageId: outgoingMessage.id,
+      providerMessageId: delivery.providerMessageId,
+      deliveryStatus: delivery.deliveryStatus,
+    };
   }
 
   const delivery = await deliverStoredWhatsAppTextMessage({
@@ -996,7 +1037,7 @@ async function upsertConversation(params: {
   contactId: string;
   conversationType: ConversationType;
   status: ConversationStatus;
-  channel: "WHATSAPP" | "WEB_CHAT";
+  channel: ConversationChannel;
 }) {
   return prisma.whatsAppConversation.upsert({
     where: {
@@ -1049,16 +1090,20 @@ async function requireBusinessById(businessId: string) {
   return business;
 }
 
-function isWhatsAppInboundPayload(value: Prisma.JsonValue | null) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
+function conversationChannelFromSource(source?: string): ConversationChannel {
+  const normalized = source?.trim().toUpperCase();
+  if (normalized === "WHATSAPP") return "WHATSAPP";
+  if (normalized === "TELEGRAM") return "TELEGRAM";
+  return "WEB_CHAT";
+}
 
-  if ("channel" in value && value.channel === "WHATSAPP") {
-    return true;
-  }
+function normalizeConversationChannel(channel: string): ConversationChannel {
+  return conversationChannelFromSource(channel);
+}
 
-  return "entry" in value && Array.isArray(value.entry);
+function telegramChatIdFromContact(value: string) {
+  if (!value.toLowerCase().startsWith("telegram:")) return "";
+  return normalizeTelegramChatId(value.slice("telegram:".length));
 }
 
 function toJsonValue(value: unknown) {

@@ -8,32 +8,41 @@ export const runtime = "nodejs";
 export async function GET() {
   const startedAt = performance.now();
   let databaseReady = false;
+  let schemaReady = false;
 
   try {
-    databaseReady = await ttlCache("health:database", 5_000, async () => {
+    const readiness = await ttlCache("health:database-schema", 5_000, async () => {
       try {
-        await prisma.$queryRaw`SELECT 1`;
-        return true;
+        const rows = await prisma.$queryRaw<Array<{ schemaReady: boolean }>>`
+          SELECT to_regclass('public.telegram_settings') IS NOT NULL AS "schemaReady"
+        `;
+        return { database: true, schema: rows[0]?.schemaReady === true };
       } catch {
-        return false;
+        return { database: false, schema: false };
       }
     });
+    databaseReady = readiness.database;
+    schemaReady = readiness.schema;
   } catch {
     databaseReady = false;
+    schemaReady = false;
   }
 
+  const ready = databaseReady && schemaReady;
+
   const body = {
-    status: databaseReady ? "ok" : "degraded",
+    status: ready ? "ok" : "degraded",
     checks: {
       application: "ok",
       database: databaseReady ? "ok" : "unavailable",
+      schema: schemaReady ? "ok" : "migration_required",
     },
     responseTimeMs: Math.max(0, Math.round(performance.now() - startedAt)),
     timestamp: new Date().toISOString(),
   };
 
   return NextResponse.json(body, {
-    status: databaseReady ? 200 : 503,
+    status: ready ? 200 : 503,
     headers: {
       "Cache-Control": "no-store, max-age=0",
     },
