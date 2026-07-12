@@ -14,8 +14,18 @@ const buckets = new Map<string, { count: number; resetAt: number }>();
 const maxBuckets = 10_000;
 
 export function getClientIp(request: NextRequest) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "unknown";
+  return getClientIpFromHeaders(request.headers);
+}
+
+export function getClientIpFromHeaders(headers: Pick<Headers, "get">) {
+  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const direct = headers.get("x-real-ip")?.trim();
+  const candidate = forwarded || direct || "unknown";
+
+  // Avoid allowing an attacker-controlled forwarding header to create
+  // unbounded database keys. Vercel replaces this header in production, but
+  // bounding it is still useful for local proxies and alternate deployments.
+  return candidate.slice(0, 64) || "unknown";
 }
 
 export function checkAbuseLimit(key: string, rules: RateLimitRule[]): RateLimitResult {

@@ -4,6 +4,7 @@ import {
   processPendingJobs,
   pruneBackgroundJobs,
 } from "@/server/jobs/background-jobs";
+import { prunePublicSignupRateLimits } from "@/server/auth/public-signup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,13 +22,17 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const results = await processPendingJobs(10);
-  const pruned = await pruneBackgroundJobs();
+  const [pruned, prunedSignupLimits] = await Promise.all([
+    pruneBackgroundJobs(),
+    prunePublicSignupRateLimits(),
+  ]);
   return NextResponse.json(
     {
       processed: results.length,
       succeeded: results.filter((item) => item.ok).length,
       failed: results.filter((item) => !item.ok).length,
       pruned,
+      prunedSignupLimits,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

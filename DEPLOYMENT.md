@@ -91,6 +91,11 @@ DATA_ENCRYPTION_KEY="32_RANDOM_BYTES_AS_BASE64URL_OR_64_HEX"
 CRON_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
 
 NEXT_PUBLIC_APP_URL="https://app.example.com"
+
+# Opsional: default pendaftaran publik adalah aktif. Gunakan false sebagai kill switch.
+PUBLIC_SIGNUP_ENABLED="true"
+# Opsional: jika kosong, AUTH_SECRET dipakai untuk HMAC rate-limit signup.
+SIGNUP_GUARD_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
 ```
 
 Buat nilai acak terpisah dengan Node, jangan memakai output yang sama untuk semua key:
@@ -106,6 +111,8 @@ Ketentuan penting:
 - `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte.
 - `CRON_SECRET` harus sama dengan secret yang dipakai Vercel Cron untuk bearer authorization.
 - `NEXT_PUBLIC_APP_URL` harus canonical HTTPS origin tanpa trailing path. Setelah custom domain berubah, update nilai ini lalu redeploy.
+- `PUBLIC_SIGNUP_ENABLED=false` mengembalikan `/signup` ke mode invite-only tanpa perubahan kode.
+- `SIGNUP_GUARD_SECRET` sebaiknya berupa secret acak tersendiri; IP dan email pada counter anti-spam hanya disimpan sebagai HMAC.
 - Simpan backup aman `DATA_ENCRYPTION_KEY`. Jangan rotate langsung setelah credential terenkripsi tersimpan.
 
 ### Groq
@@ -311,11 +318,12 @@ Normal web chat mencoba memproses lead refresh segera setelah response. Cron ada
 
 ## 8. Smoke test setelah deployment
 
-Jangan membuka beta invite ke tester sebelum seluruh bagian penting di bawah lolos.
+Jangan membagikan halaman pendaftaran beta ke tester sebelum seluruh bagian penting di bawah lolos.
 
 ### Application dan database
 
 - `GET https://APP_DOMAIN/api/health` menghasilkan HTTP 200, `status: ok`, dan database `ok`.
+- `/signup` dapat membuat workspace baru, membuat session, lalu mengarahkan owner ke onboarding tanpa membocorkan error database.
 - Login owner berhasil dan session tetap aktif setelah navigasi.
 - `/readiness` tidak menunjukkan required setup yang terlewat.
 - Existing business profile, knowledge, products, dan agent tetap sama setelah seed promotion.

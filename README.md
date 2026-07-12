@@ -2,7 +2,7 @@
 
 Aijou adalah workspace AI untuk menangani percakapan customer dari website, WhatsApp, dan Telegram, membantu owner melakukan human takeover, mengelola lead, membuat proposal, mencatat transaksi, membaca receipt, dan membuat payment link.
 
-Status proyek saat ini adalah **private beta**. Widget website dan bot Telegram dapat dipakai tanpa menunggu verifikasi Meta; WhatsApp Cloud API baru aktif setelah credential dan webhook Meta siap.
+Status proyek saat ini adalah **beta terbatas dengan pendaftaran mandiri** melalui `/signup`. Widget website dan bot Telegram dapat dipakai tanpa menunggu verifikasi Meta; WhatsApp Cloud API baru aktif setelah credential dan webhook Meta siap.
 
 ## Fitur utama
 
@@ -14,7 +14,7 @@ Status proyek saat ini adalah **private beta**. Widget website dan bot Telegram 
 - Lead qualification, follow-up state, background lead refresh, proposal draft, editor, dan print view.
 - Orders/transaksi, katalog produk, CSV export, receipt review, serta OCR vision untuk JPEG, PNG, dan WebP.
 - Xendit payment sessions yang dikonfigurasi terpisah untuk setiap workspace.
-- Private beta invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
+- Pendaftaran beta mandiri yang tetap kompatibel dengan invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
 
 Chat widget memulai identitas sesi baru setelah 24 jam. Percakapan lama tetap tersimpan di dashboard untuk histori owner; yang di-reset adalah session dan konteks pengunjung, bukan penghapusan record database.
 

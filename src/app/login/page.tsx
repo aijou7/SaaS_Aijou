@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { CheckCircle2, MessageCircle, WalletCards } from "lucide-react";
+import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { AijouLogo } from "@/components/aijou-logo";
 
@@ -17,37 +18,44 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
 
   return (
-    <main className="page login-page">
+    <main className="page login-page auth-page">
       <div className="login-shell">
-        <section className="login-hero-card">
-          <AijouLogo className="login-brand-mark" size={40} />
-          <p className="eyebrow">Aijou AI workspace</p>
-          <h1>Aijou AI</h1>
-          <p>
-            AI sales agent untuk menjawab chat, mendorong closing, dan menjaga tim Anda
-            tetap memegang kendali.
-          </p>
+        <section className="login-hero-card auth-story-card">
+          <Link className="auth-home-link" href="/" aria-label="Kembali ke beranda Aijou">
+            <AijouLogo className="login-brand-mark" size={40} />
+            <span>Aijou AI</span>
+          </Link>
+          <div className="auth-story-copy">
+            <p className="eyebrow">Workspace bisnis percakapan</p>
+            <h1>Kembali ke percakapan yang perlu dituntaskan.</h1>
+            <p>
+              Semua chat, lead, knowledge, proposal, dan pembayaran tetap rapi di satu tempat.
+            </p>
+          </div>
           <div className="login-feature-grid">
             <span>
               <WalletCards size={17} aria-hidden="true" />
-              Percakapan terarah
+              Follow-up terarah
             </span>
             <span>
               <MessageCircle size={17} aria-hidden="true" />
-              AI yang belajar bisnis
+              Konteks bisnis tersimpan
             </span>
             <span>
               <CheckCircle2 size={17} aria-hidden="true" />
               Kendali tetap di tim
             </span>
           </div>
+          <p className="auth-channel-note">
+            Satu konteks untuk AI dan timmu, dari sapaan pertama sampai tindak lanjut.
+          </p>
         </section>
 
-        <section className="login-panel">
-          <div>
+        <section className="login-panel auth-form-panel">
+          <div className="auth-panel-heading">
             <p className="eyebrow">Masuk ke Aijou</p>
-            <h2>Lanjutkan percakapan yang penting.</h2>
-            <p className="muted">Gunakan akun owner yang dibuat dari seed database lokal.</p>
+            <h2>Selamat datang kembali.</h2>
+            <p className="muted">Masukkan akun owner workspace Anda.</p>
           </div>
           {params.passwordChanged === "1" ? (
             <div className="settings-note" role="status">
@@ -64,14 +72,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <form className="login-form" action="/api/auth/login" method="post">
             <label>
               Email
-              <input name="email" type="email" autoComplete="email" required />
+              <input name="email" type="email" maxLength={254} autoComplete="email" required />
             </label>
             <label>
               Password
-              <input name="password" type="password" autoComplete="current-password" required />
+              <input name="password" type="password" maxLength={128} autoComplete="current-password" required />
             </label>
             <button type="submit">Masuk</button>
           </form>
+          <p className="auth-switch-copy">
+            Belum punya workspace? <Link href="/signup">Daftar beta gratis</Link>
+          </p>
         </section>
       </div>
     </main>

@@ -602,6 +602,21 @@ model BetaInvite {
   @@map("beta_invites")
 }
 
+/// Small, aggregate-only counters used to protect public signup in a
+/// serverless deployment. Raw email addresses and IP addresses are never
+/// stored; the key is an HMAC digest scoped to a single time window.
+model SignupRateLimit {
+  keyHash         String   @id
+  scope           String
+  count           Int      @default(0)
+  windowStartedAt DateTime @default(now())
+  expiresAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("signup_rate_limits")
+}
+
 model BackgroundJob {
   id          String              @id @default(cuid())
   businessId  String

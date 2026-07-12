@@ -6,7 +6,8 @@ export const metadata: Metadata = {
     default: "Aijou AI — Percakapan yang bergerak jadi penjualan",
     template: "%s | Aijou AI",
   },
-  description: "AI sales agent untuk balas chat, bantu closing, dan arahkan pelanggan ke pembayaran.",
+  description:
+    "Satu workspace untuk menjawab chat, merapikan follow-up, dan menjaga tim tetap memegang kendali.",
 };
 
 export default function RootLayout({

@@ -14,7 +14,10 @@ export async function GET() {
     const readiness = await ttlCache("health:database-schema", 5_000, async () => {
       try {
         const rows = await prisma.$queryRaw<Array<{ schemaReady: boolean }>>`
-          SELECT to_regclass('public.telegram_settings') IS NOT NULL AS "schemaReady"
+          SELECT
+            to_regclass('public.telegram_settings') IS NOT NULL
+            AND to_regclass('public.signup_rate_limits') IS NOT NULL
+            AS "schemaReady"
         `;
         return { database: true, schema: rows[0]?.schemaReady === true };
       } catch {
