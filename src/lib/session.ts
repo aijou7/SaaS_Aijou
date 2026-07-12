@@ -2,10 +2,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getPasswordVersion } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import {
+  getSessionCookieClearOptions,
+  getSessionCookieName,
+  getSessionCookieNamesToClear,
+} from "@/lib/session-cookie";
 
-const productionSessionCookieName = "__Host-aijou_session";
-const developmentSessionCookieName = "aijou_session";
-const legacySessionCookieName = "waa_session";
 const maxAgeSeconds = 60 * 60 * 24 * 7;
 
 type SessionPayload = {
@@ -44,13 +46,12 @@ export async function createSessionCookie(input: CreateSessionInput) {
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
 
-  for (const name of new Set([
-    getSessionCookieName(),
-    developmentSessionCookieName,
-    productionSessionCookieName,
-    legacySessionCookieName,
-  ])) {
-    cookieStore.delete(name);
+  for (const name of getSessionCookieNamesToClear()) {
+    // A __Host- cookie can only be overwritten (including expired) when the
+    // clearing Set-Cookie keeps Secure and Path=/. cookies().delete() does not
+    // preserve those attributes consistently, so browsers can reject it and
+    // leave the authenticated session alive.
+    cookieStore.set(name, "", getSessionCookieClearOptions(name));
   }
 }
 
@@ -160,12 +161,6 @@ function getAuthSecret() {
   }
 
   throw new Error("AUTH_SECRET is required in production.");
-}
-
-function getSessionCookieName() {
-  return process.env.NODE_ENV === "production"
-    ? productionSessionCookieName
-    : developmentSessionCookieName;
 }
 
 function safeEqual(left: string, right: string) {
