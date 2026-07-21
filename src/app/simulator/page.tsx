@@ -8,8 +8,7 @@ import {
 } from "@/app/simulator/actions";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
-import { getConversationsInbox } from "@/server/conversations/conversations";
-import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
+import { getSimulatorPageSnapshot } from "@/server/simulator/page-snapshot";
 
 const financeExamples = [
   "Catat beli kabel LAN 2 roll 450 ribu buat project kantor A",
@@ -31,20 +30,17 @@ export default async function SimulatorPage() {
     redirect("/login" as Route);
   }
 
-  const [dashboard, inbox] = await Promise.all([
-    getFinanceDashboardSnapshot(session.userId),
-    getConversationsInbox(session.userId),
-  ]);
+  const simulator = await getSimulatorPageSnapshot(session.userId);
 
   return (
-    <AppShell active="simulator" businessName={dashboard.businessName}>
+    <AppShell active="simulator" businessName={simulator.businessName}>
 
         <section className="hero compact-hero">
           <p className="eyebrow">Demo loop</p>
           <h1>Rasakan app-nya seperti WhatsApp assistant sungguhan.</h1>
           <p>
-            Simulasi ini mengisi database yang sama dengan webhook real, jadi dashboard,
-            transactions, dan conversations langsung ikut berubah.
+            Simulasi ini aman dipakai saat auto-reply channel masih nonaktif. Jawaban preview,
+            handoff, dashboard, dan conversations langsung ikut berubah tanpa mengirim pesan keluar.
           </p>
         </section>
 
@@ -57,20 +53,20 @@ export default async function SimulatorPage() {
                 style: "currency",
                 currency: "IDR",
                 maximumFractionDigits: 0,
-              }).format(dashboard.totalThisMonth)}
+              }).format(simulator.totalThisMonth)}
             </div>
             <p className="muted">Order income yang sudah confirmed.</p>
           </div>
           <div className="card">
             <MessageCircle size={22} aria-hidden="true" />
             <h2>Human Needed</h2>
-            <div className="metric">{inbox.summary.humanNeeded}</div>
+            <div className="metric">{simulator.summary.humanNeeded}</div>
             <p className="muted">Customer butuh owner/admin.</p>
           </div>
           <div className="card">
             <Bot size={22} aria-hidden="true" />
             <h2>Customer Chats</h2>
-            <div className="metric">{inbox.summary.customerService}</div>
+            <div className="metric">{simulator.summary.customerService}</div>
             <p className="muted">AI agent ringan untuk demo.</p>
           </div>
         </section>
@@ -156,11 +152,11 @@ export default async function SimulatorPage() {
                 Buka inbox
               </Link>
             </div>
-            {inbox.conversations.length === 0 ? (
+            {simulator.conversations.length === 0 ? (
               <p className="muted">Belum ada conversation. Kirim simulasi dulu.</p>
             ) : (
               <div className="conversation-list">
-                {inbox.conversations.slice(0, 5).map((conversation) => (
+                {simulator.conversations.map((conversation) => (
                   <Link
                     className="conversation-row"
                     href={`/conversations?conversationId=${conversation.id}`}

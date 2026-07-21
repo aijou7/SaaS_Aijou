@@ -5,7 +5,11 @@ import { CheckCircle2, MessageCircle, UserRoundCheck } from "lucide-react";
 import { AijouLogo } from "@/components/aijou-logo";
 import { getSession } from "@/lib/session";
 import { inspectBetaInvite } from "@/server/auth/beta-invites";
-import { isPublicSignupEnabled } from "@/server/auth/public-signup-validation";
+import {
+  isPublicSignupEnabled,
+  isPublicSignupReady,
+} from "@/server/auth/public-signup-validation";
+import { isTransactionalEmailConfigured } from "@/server/email";
 import { SignupForm } from "@/app/signup/signup-form";
 
 export const metadata: Metadata = {
@@ -23,7 +27,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const { token = "" } = await searchParams;
   const invite = token ? await inspectBetaInvite(token) : null;
   const publicSignupEnabled = isPublicSignupEnabled();
-  const canSignup = Boolean(invite) || publicSignupEnabled;
+  const publicSignupReady = isPublicSignupReady(isTransactionalEmailConfigured());
+  const canSignup = Boolean(invite) || publicSignupReady;
   const isInvite = Boolean(invite);
 
   return (
@@ -72,7 +77,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <p className="muted">
               {isInvite
                 ? "Selesaikan data owner untuk menerima undangan ini."
-                : "Tidak perlu kartu kredit. Isi data singkat, lalu langsung masuk ke onboarding."}
+                : "Tidak perlu kartu kredit. Setelah mengisi data, buka email verifikasi untuk mengaktifkan akses."}
             </p>
           </div>
 
@@ -80,9 +85,11 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <div className="settings-note" role="status">
               <strong>Link undangan sudah tidak aktif</strong>
               <p>
-                {publicSignupEnabled
+                {publicSignupReady
                   ? "Tidak masalah, kamu tetap bisa membuat workspace beta baru di bawah."
-                  : "Minta link baru kepada pengirim undangan atau kembali ke halaman masuk."}
+                  : publicSignupEnabled
+                    ? "Layanan verifikasi email belum siap. Minta undangan baru atau coba lagi nanti."
+                    : "Minta link baru kepada pengirim undangan atau kembali ke halaman masuk."}
               </p>
             </div>
           ) : null}
@@ -96,8 +103,16 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             />
           ) : (
             <div className="settings-note" role="status">
-              <strong>Pendaftaran publik sedang ditutup</strong>
-              <p>Jika sudah menerima undangan, buka kembali link lengkap dari Aijou.</p>
+              <strong>
+                {publicSignupEnabled
+                  ? "Pendaftaran publik sementara belum siap"
+                  : "Pendaftaran publik sedang ditutup"}
+              </strong>
+              <p>
+                {publicSignupEnabled
+                  ? "Layanan email verifikasi belum tersedia. Coba lagi nanti atau gunakan undangan beta."
+                  : "Jika sudah menerima undangan, buka kembali link lengkap dari Aijou."}
+              </p>
             </div>
           )}
 

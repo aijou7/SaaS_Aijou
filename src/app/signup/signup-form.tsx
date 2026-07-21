@@ -102,34 +102,42 @@ export function SignupForm({
         />
       </label>
 
-      <div className="auth-field-row">
-        <label>
-          Password
-          <input
-            aria-describedby="signup-password-hint"
-            name="password"
-            type="password"
-            minLength={12}
-            maxLength={128}
-            autoComplete="new-password"
-            required
-          />
-        </label>
-        <label>
-          Ulangi password
-          <input
-            name="confirmPassword"
-            type="password"
-            minLength={12}
-            maxLength={128}
-            autoComplete="new-password"
-            required
-          />
-        </label>
-      </div>
-      <p className="auth-form-hint" id="signup-password-hint">
-        Minimal 12 karakter, gunakan huruf dan angka. Hindari nama atau emailmu.
-      </p>
+      {mode === "invite" ? (
+        <>
+          <div className="auth-field-row">
+            <label>
+              Password
+              <input
+                aria-describedby="signup-password-hint"
+                name="password"
+                type="password"
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <label>
+              Ulangi password
+              <input
+                name="confirmPassword"
+                type="password"
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+          </div>
+          <p className="auth-form-hint" id="signup-password-hint">
+            Minimal 12 karakter, gunakan huruf dan angka. Hindari nama atau emailmu.
+          </p>
+        </>
+      ) : (
+        <p className="auth-form-hint">
+          Kami akan mengirim link verifikasi. Password baru dibuat setelah email terbukti milikmu.
+        </p>
+      )}
 
       {state.error ? (
         <div className="settings-note" role="alert">

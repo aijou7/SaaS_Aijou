@@ -52,8 +52,20 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid transaction payload." },
+      { error: safeTransactionError(error, "Invalid transaction payload.") },
       { status: 400, headers: noStoreHeaders },
     );
   }
+}
+
+function safeTransactionError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "Produk tidak ditemukan atau sudah nonaktif.",
+    "Total order harus lebih dari 0.",
+    "Nominal transaksi harus lebih dari 0.",
+    "Tanggal transaksi wajib diisi.",
+  ].includes(message)
+    ? message
+    : fallback;
 }

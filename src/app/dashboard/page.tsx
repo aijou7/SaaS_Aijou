@@ -15,14 +15,21 @@ import { formatCurrencyIDR } from "@/lib/format";
 import { getSession } from "@/lib/session";
 import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{ onboarding?: string; deletionCancelled?: string }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login" as Route);
   }
 
-  const dashboard = await getFinanceDashboardSnapshot(session.userId);
+  const [dashboard, params] = await Promise.all([
+    getFinanceDashboardSnapshot(session.userId),
+    searchParams,
+  ]);
 
   return (
     <AppShell active="dashboard" businessName={dashboard.businessName}>
@@ -37,33 +44,49 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className="onboarding-panel">
-        <div>
-          <p className="eyebrow">Mulai bersama Aijou</p>
-          <h2>Bangun alur percakapan yang siap membantu</h2>
-          <p className="muted">
-            Mulai dari konteks bisnis, produk, dan channel. Selebihnya Aijou bantu menjaga
-            percakapan tetap bergerak.
-          </p>
+      {params.onboarding === "complete" && dashboard.onboardingCompleted ? (
+        <div className="settings-note" role="status">
+          <strong>Workspace siap digunakan</strong>
+          <p>Onboarding selesai dan status auto-reply mengikuti aktivasi yang Anda pilih.</p>
         </div>
-        <div className="step-grid">
-          <Link className="step-card" href="/training">
-            <span>1</span>
-            <strong>Latih Aijou</strong>
-            <small>Isi knowledge dan contoh percakapan supaya jawaban terasa sesuai bisnis Anda.</small>
-          </Link>
-          <Link className="step-card" href="/products">
-            <span>2</span>
-            <strong>Isi Produk</strong>
-            <small>Masukkan produk/jasa dan harga supaya AI bisa jualan dengan jelas.</small>
-          </Link>
-          <Link className="step-card" href="/integrations">
-            <span>3</span>
-            <strong>Hubungkan channel</strong>
-            <small>Sambungkan WhatsApp, lalu siapkan Instagram, Messenger, email, dan web chat.</small>
-          </Link>
+      ) : null}
+
+      {params.deletionCancelled === "1" ? (
+        <div className="settings-note" role="status">
+          <strong>Penghapusan akun dibatalkan</strong>
+          <p>Akun dan data workspace tetap aktif karena kamu berhasil masuk kembali.</p>
         </div>
-      </section>
+      ) : null}
+
+      {!dashboard.onboardingCompleted ? (
+        <section className="onboarding-panel">
+          <div>
+            <p className="eyebrow">Mulai bersama Aijou</p>
+            <h2>Selesaikan setup sebelum auto-reply dinyalakan</h2>
+            <p className="muted">
+              Isi konteks bisnis, uji percakapan, lalu hubungkan Web Live Chat atau Telegram.
+              Aijou baru aktif setelah Anda menyalakannya sendiri.
+            </p>
+          </div>
+          <div className="step-grid">
+            <Link className="step-card" href="/setup">
+              <span>1</span>
+              <strong>Lengkapi checklist</strong>
+              <small>Lihat setup yang benar-benar sudah siap dan bagian yang masih kurang.</small>
+            </Link>
+            <Link className="step-card" href="/simulator">
+              <span>2</span>
+              <strong>Uji percakapan</strong>
+              <small>Coba jawaban dan handoff tanpa mengaktifkan auto-reply di channel live.</small>
+            </Link>
+            <Link className="step-card" href="/integrations">
+              <span>3</span>
+              <strong>Hubungkan channel</strong>
+              <small>Mulai dari widget website atau bot Telegram yang sudah tersedia.</small>
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid" aria-label="Ringkasan MVP">
         <div className="card metric-card">
@@ -122,7 +145,7 @@ export default async function DashboardPage() {
           <Link className="module-card" href="/integrations">
             <ClipboardCheck size={22} aria-hidden="true" />
             <strong>Integrations</strong>
-            <p>WhatsApp, Instagram, Messenger, email, TikTok, dan web live chat.</p>
+            <p>Web Live Chat dan Telegram siap dipakai; WhatsApp tersedia setelah setup Meta.</p>
           </Link>
         </div>
       </section>

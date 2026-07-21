@@ -2,6 +2,10 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import {
+  readCredentialSnapshot,
+  requireCompleteCredentialReplacement,
+} from "@/server/integrations/credential-recovery";
+import {
   deleteTelegramWebhook,
   getTelegramBotIdentity,
   getTelegramWebhookInfo,
@@ -20,15 +24,44 @@ export type TelegramSettingsInput = {
 export async function getTelegramSettingsForUser(userId: string) {
   const business = await getBusinessForUser(userId);
   if (!business) {
-    return { business: null, settings: null, readiness: false };
+    return { business: null, configurationIssue: null, settings: null, readiness: false };
   }
 
-  const stored = await ensureTelegramSettings(business.id);
-  const settings = decryptStoredSettings(stored);
-  const readiness = isSettingsReady(settings);
+  const stored = await prisma.telegramSettings.findUnique({ where: { businessId: business.id } });
+  const rawSettings = stored ?? {
+    businessId: business.id,
+    botToken: null,
+    botId: null,
+    botUsername: null,
+    webhookKey: null,
+    webhookSecret: null,
+    webhookUrl: null,
+    isActive: false,
+    lastConnectedAt: null,
+    lastError: null,
+  };
+  let configurationIssue: string | null = null;
+  let settings;
+  try {
+    settings = decryptStoredSettings(rawSettings);
+  } catch {
+    configurationIssue =
+      "Credential Telegram tidak dapat dibaca. Simpan ulang bot token.";
+    settings = {
+      ...rawSettings,
+      botToken: null,
+      webhookKey: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+    };
+    console.error("telegram_credentials_decrypt_failed", { businessId: business.id });
+  }
+  const readiness = !configurationIssue && isSettingsReady(settings);
 
   return {
     business,
+    configurationIssue,
     settings: {
       botId: settings.botId,
       botUsername: settings.botUsername,
@@ -46,11 +79,13 @@ export async function getTelegramSettingsForUser(userId: string) {
 export const getTelegramSettingsPage = getTelegramSettingsForUser;
 
 export async function getTelegramReadinessForBusiness(businessId: string) {
-  const settings = await prisma.telegramSettings.findUnique({
+  const stored = await prisma.telegramSettings.findUnique({
     where: { businessId },
     select: {
+      businessId: true,
       botToken: true,
       botId: true,
+      webhookKey: true,
       webhookKeyHash: true,
       webhookSecret: true,
       webhookUrl: true,
@@ -58,21 +93,58 @@ export async function getTelegramReadinessForBusiness(businessId: string) {
     },
   });
 
+  if (!stored) {
+    return {
+      ready: false,
+      source: "not_configured",
+      checks: { botToken: false, botIdentity: false, webhook: false },
+    };
+  }
+
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      botToken: null,
+      webhookKey: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+    },
+  );
+  if (credentialSnapshot.recoveryRequired) {
+    console.error("telegram_credentials_decrypt_failed", { businessId });
+    return {
+      ready: false,
+      source: "credential_error",
+      checks: {
+        botToken: false,
+        botIdentity: Boolean(stored.botId),
+        webhook: false,
+      },
+    };
+  }
+  const settings = credentialSnapshot.value;
+
   return {
     ready: Boolean(
-      settings?.isActive &&
+      settings.isActive &&
         settings.botToken &&
         settings.botId &&
-        settings.webhookKeyHash &&
+        settings.webhookKey &&
+        stored.webhookKeyHash &&
         settings.webhookSecret &&
         settings.webhookUrl,
     ),
-    source: settings?.isActive ? "dashboard" : "not_configured",
+    source: settings.isActive ? "dashboard" : "not_configured",
     checks: {
-      botToken: Boolean(settings?.botToken),
-      botIdentity: Boolean(settings?.botId),
+      botToken: Boolean(settings.botToken),
+      botIdentity: Boolean(settings.botId),
       webhook: Boolean(
-        settings?.webhookKeyHash && settings.webhookSecret && settings.webhookUrl,
+        settings.webhookKey &&
+          stored.webhookKeyHash &&
+          settings.webhookSecret &&
+          settings.webhookUrl,
       ),
     },
   };
@@ -84,16 +156,42 @@ export async function saveTelegramSettingsForUser(
 ) {
   const business = await requireBusinessForUser(userId);
   const stored = await ensureTelegramSettings(business.id);
-  const existing = decryptStoredSettings(stored);
   const incomingToken = cleanOptional(input.botToken);
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      botToken: null,
+      botId: null,
+      botUsername: null,
+      webhookKey: null,
+      webhookKeyHash: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+      lastConnectedAt: null,
+    },
+  );
+  requireCompleteCredentialReplacement(
+    credentialSnapshot.recoveryRequired,
+    [incomingToken],
+    "Credential Telegram lama tidak dapat dibaca. Masukkan ulang bot token dari BotFather.",
+  );
+  const existing = credentialSnapshot.value;
   const botToken = incomingToken ?? existing.botToken;
-  const tokenChanged = Boolean(incomingToken && existing.botToken !== incomingToken);
+  const tokenChanged =
+    credentialSnapshot.recoveryRequired ||
+    Boolean(incomingToken && existing.botToken !== incomingToken);
 
   if (!botToken) throw new Error("Bot token Telegram wajib diisi.");
   validateBotToken(botToken);
 
   if (input.isActive === false) {
-    if (existing.isActive && existing.botToken) {
+    if (
+      !credentialSnapshot.recoveryRequired &&
+      existing.isActive &&
+      existing.botToken
+    ) {
       const disconnected = await deleteTelegramWebhook(existing.botToken);
       if (!disconnected.ok) {
         await storeLastError(business.id, disconnected.reason);
@@ -127,8 +225,29 @@ export const updateTelegramSettings = saveTelegramSettingsForUser;
 export async function connectTelegramForUser(userId: string, replacementToken?: string) {
   const business = await requireBusinessForUser(userId);
   const stored = await ensureTelegramSettings(business.id);
-  const existing = decryptStoredSettings(stored);
-  const botToken = cleanOptional(replacementToken) ?? existing.botToken;
+  const incomingToken = cleanOptional(replacementToken);
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      botToken: null,
+      botId: null,
+      botUsername: null,
+      webhookKey: null,
+      webhookKeyHash: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+      lastConnectedAt: null,
+    },
+  );
+  requireCompleteCredentialReplacement(
+    credentialSnapshot.recoveryRequired,
+    [incomingToken],
+    "Credential Telegram lama tidak dapat dibaca. Masukkan ulang bot token dari BotFather.",
+  );
+  const existing = credentialSnapshot.value;
+  const botToken = incomingToken ?? existing.botToken;
   if (!botToken) throw new Error("Bot token Telegram wajib diisi.");
   validateBotToken(botToken);
 
@@ -141,8 +260,15 @@ export async function connectTelegramForUser(userId: string, replacementToken?: 
     throw new Error("Bot Telegram ini sudah terhubung ke workspace lain.");
   }
 
-  const tokenChanged = Boolean(existing.botToken && existing.botToken !== botToken);
-  if (tokenChanged && existing.isActive && existing.botToken) {
+  const tokenChanged =
+    credentialSnapshot.recoveryRequired ||
+    Boolean(incomingToken && existing.botToken !== incomingToken);
+  if (
+    tokenChanged &&
+    !credentialSnapshot.recoveryRequired &&
+    existing.isActive &&
+    existing.botToken
+  ) {
     const disconnected = await deleteTelegramWebhook(existing.botToken);
     if (!disconnected.ok) {
       await storeLastError(business.id, disconnected.reason);
@@ -200,9 +326,21 @@ export async function connectTelegramForUser(userId: string, replacementToken?: 
 
 export async function disconnectTelegramForUser(userId: string) {
   const business = await requireBusinessForUser(userId);
-  const settings = decryptStoredSettings(await ensureTelegramSettings(business.id));
+  const stored = await ensureTelegramSettings(business.id);
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      botToken: null,
+      webhookKey: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+    },
+  );
+  const settings = credentialSnapshot.value;
 
-  if (settings.botToken) {
+  if (!credentialSnapshot.recoveryRequired && settings.botToken) {
     const disconnected = await deleteTelegramWebhook(settings.botToken);
     if (!disconnected.ok) {
       await storeLastError(business.id, disconnected.reason);
@@ -212,13 +350,43 @@ export async function disconnectTelegramForUser(userId: string) {
 
   return prisma.telegramSettings.update({
     where: { businessId: business.id },
-    data: { isActive: false, lastError: null },
+    data: credentialSnapshot.recoveryRequired
+      ? {
+          botToken: null,
+          botId: null,
+          botUsername: null,
+          webhookKey: null,
+          webhookKeyHash: null,
+          webhookSecret: null,
+          webhookUrl: null,
+          isActive: false,
+          lastConnectedAt: null,
+          lastError: null,
+        }
+      : { isActive: false, lastError: null },
   });
 }
 
 export async function testTelegramConnectionForUser(userId: string) {
   const business = await requireBusinessForUser(userId);
-  const settings = decryptStoredSettings(await ensureTelegramSettings(business.id));
+  const stored = await ensureTelegramSettings(business.id);
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      botToken: null,
+      webhookKey: null,
+      webhookSecret: null,
+      webhookUrl: null,
+      isActive: false,
+    },
+  );
+  if (credentialSnapshot.recoveryRequired) {
+    throw new Error(
+      "Credential Telegram lama tidak dapat dibaca. Masukkan ulang bot token sebelum mengetes koneksi.",
+    );
+  }
+  const settings = credentialSnapshot.value;
   if (!settings.botToken) throw new Error("Bot token Telegram belum disimpan.");
 
   const [identity, webhookInfo] = await Promise.all([

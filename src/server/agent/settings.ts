@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
+import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
+import { getBusinessActivationReadiness } from "@/server/business/profile";
 
 export type AgentRuntimeSettings = {
   agentName: string;
@@ -13,6 +15,13 @@ export type AgentRuntimeSettings = {
   isActive: boolean;
 };
 
+export class AgentActivationError extends Error {
+  constructor(readonly missingChecks: string[]) {
+    super("Lengkapi readiness sebelum mengaktifkan auto-reply Aijou.");
+    this.name = "AgentActivationError";
+  }
+}
+
 type AgentSettingsInput = AgentRuntimeSettings;
 
 export async function getAgentSettingsPage(userId: string) {
@@ -25,7 +34,21 @@ export async function getAgentSettingsPage(userId: string) {
     };
   }
 
-  const settings = await ensureAgentSettings(business.id);
+  const settings =
+    (await prisma.agentSettings.findUnique({
+      where: { businessId: business.id },
+      select: {
+        agentName: true,
+        tone: true,
+        language: true,
+        openingMessage: true,
+        closingMessage: true,
+        businessDescription: true,
+        handoffRules: true,
+        systemInstruction: true,
+        isActive: true,
+      },
+    })) ?? defaultAgentSettings();
 
   return {
     business,
@@ -63,6 +86,18 @@ export async function getAgentRuntimeSettings(businessId: string) {
 
 export async function updateAgentSettings(userId: string, input: AgentSettingsInput) {
   const business = await requireBusinessForUser(userId);
+  const existing = await prisma.agentSettings.findUnique({
+    where: { businessId: business.id },
+    select: { isActive: true },
+  });
+  if (input.isActive && !existing?.isActive) {
+    const readiness = await getBusinessActivationReadiness(userId, input);
+    if (!readiness.canActivateAgent) {
+      throw new AgentActivationError(
+        readiness.missingBeforeActivation.map((check) => check.label),
+      );
+    }
+  }
   const settings = await prisma.agentSettings.upsert({
     where: { businessId: business.id },
     update: input,
@@ -166,20 +201,9 @@ async function requireBusinessForUser(userId: string) {
 }
 
 function defaultAgentSettings(): AgentRuntimeSettings {
-  return {
-    agentName: "Aijou",
-    tone: "friendly, helpful, concise",
-    language: "id",
-    openingMessage: null,
-    closingMessage: null,
-    businessDescription:
-      "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
-    handoffRules:
-      "Handoff jika customer meminta manusia/admin, meminta harga final, komplain, marah, atau kebutuhan terlalu teknis.",
-    systemInstruction:
-      "Kumpulkan kebutuhan customer secara natural. Jangan memberi harga final. Minta lokasi, scope, jumlah perangkat/titik, urgency, dan budget jika relevan. Untuk project besar, arahkan ke discovery atau survey.",
-    isActive: true,
-  };
+  return newWorkspaceAgentDefaults(
+    "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
+  );
 }
 
 function cleanOptional(value: string, maxLength: number) {

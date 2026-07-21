@@ -7,7 +7,7 @@ import {
   TransactionType,
 } from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
-import { prisma } from "@/lib/prisma";
+import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 
 export type TransactionFilters = {
   status?: string;
@@ -40,6 +40,12 @@ type TransactionInput = {
   status?: TransactionStatus;
 };
 
+type TransactionOperationalSummaryRow = {
+  totalConfirmedThisMonth: Prisma.Decimal | null;
+  totalPending: number;
+  totalNeedsReview: number;
+};
+
 export async function getTransactionsPage(userId: string, filters: TransactionFilters) {
   const business = await getBusinessForUser(userId);
 
@@ -53,8 +59,10 @@ export async function getTransactionsPage(userId: string, filters: TransactionFi
 
   const pageNumber = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(10, filters.pageSize ?? 25));
-  const [transactions, filteredCount, confirmedCount, totalConfirmedThisMonth, totalPending, totalNeedsReview, categories, projects, products] =
-    await Promise.all([
+  // Keep each wave below the default serverless pool size. A single page can
+  // otherwise queue its own reads behind five busy Neon connections and turn
+  // a temporary slowdown into P2024/error-boundary churn.
+  const [transactions, filteredGroups, operationalRows] = await Promise.all([
       prisma.transaction.findMany({
         where,
         orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
@@ -84,31 +92,29 @@ export async function getTransactionsPage(userId: string, filters: TransactionFi
           },
         },
       }),
-      prisma.transaction.count({ where }),
-      prisma.transaction.count({
-        where: { ...where, status: TransactionStatus.CONFIRMED },
+      prisma.transaction.groupBy({
+        by: ["status"],
+        where,
+        _count: { _all: true },
       }),
-      prisma.transaction.aggregate({
-        where: {
-          businessId: business.id,
-          transactionType: TransactionType.INCOME,
-          status: TransactionStatus.CONFIRMED,
-          transactionDate: { gte: startOfMonth },
-        },
-        _sum: { totalAmount: true },
-      }),
-      prisma.transaction.count({
-        where: {
-          businessId: business.id,
-          status: TransactionStatus.PENDING_CONFIRMATION,
-        },
-      }),
-      prisma.transaction.count({
-        where: {
-          businessId: business.id,
-          status: TransactionStatus.NEEDS_REVIEW,
-        },
-      }),
+      withDatabaseRawReadRetry(() => prisma.$queryRaw<TransactionOperationalSummaryRow[]>`
+        SELECT
+          COALESCE(SUM("totalAmount") FILTER (
+            WHERE "transactionType"::text = ${TransactionType.INCOME}
+              AND "status"::text = ${TransactionStatus.CONFIRMED}
+              AND "transactionDate" >= ${startOfMonth}
+          ), 0) AS "totalConfirmedThisMonth",
+          (COUNT(*) FILTER (
+            WHERE "status"::text = ${TransactionStatus.PENDING_CONFIRMATION}
+          ))::int AS "totalPending",
+          (COUNT(*) FILTER (
+            WHERE "status"::text = ${TransactionStatus.NEEDS_REVIEW}
+          ))::int AS "totalNeedsReview"
+        FROM "transactions"
+        WHERE "businessId" = ${business.id}
+      `),
+    ]);
+  const [categories, projects, products] = await Promise.all([
       prisma.category.findMany({
         where: { businessId: business.id },
         orderBy: { name: "asc" },
@@ -125,13 +131,21 @@ export async function getTransactionsPage(userId: string, filters: TransactionFi
         select: { id: true, name: true, description: true, price: true, currency: true },
       }),
     ]);
+  const operational = operationalRows[0] ?? {
+    totalConfirmedThisMonth: null,
+    totalPending: 0,
+    totalNeedsReview: 0,
+  };
+  const filteredCount = filteredGroups.reduce((total, group) => total + group._count._all, 0);
+  const confirmedCount =
+    filteredGroups.find((group) => group.status === TransactionStatus.CONFIRMED)?._count._all ?? 0;
 
   return {
     business,
     summary: {
-      totalConfirmedThisMonth: Number(totalConfirmedThisMonth._sum.totalAmount ?? 0),
-      totalPending,
-      totalNeedsReview,
+      totalConfirmedThisMonth: Number(operational.totalConfirmedThisMonth ?? 0),
+      totalPending: operational.totalPending,
+      totalNeedsReview: operational.totalNeedsReview,
       filteredCount,
       confirmedCount,
       page: pageNumber,

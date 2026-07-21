@@ -13,8 +13,9 @@ import {
   Prisma,
   ProcessingStatus,
   SenderType,
+  UserStatus,
 } from "@/generated/prisma-beta/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductContext } from "@/server/products/catalog";
@@ -25,6 +26,14 @@ import {
 import { sendWhatsAppTextMessage } from "@/server/whatsapp/client";
 import { deliverStoredTelegramTextMessage } from "@/server/telegram/delivery";
 import { normalizeTelegramChatId } from "@/server/telegram/payload";
+import {
+  aiDeliverySuppressionReason,
+  conversationClosedDeliveryReason,
+  humanTakeoverDeliveryReason,
+  resolveTakeoverSafeAiReply,
+  shouldSuppressAiDelivery,
+} from "@/server/conversations/takeover-safety";
+import { buildSnapshotSafeMarkReadMutation } from "@/server/conversations/read-state";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -44,6 +53,14 @@ type ConversationInboxFilters = {
 };
 
 type ConversationChannel = "WHATSAPP" | "TELEGRAM" | "WEB_CHAT";
+
+type ConversationSummaryRow = {
+  open: number;
+  humanNeeded: number;
+  customerService: number;
+  closed: number;
+  unread: number;
+};
 
 export async function getConversationsInbox(userId: string, filters: ConversationInboxFilters = {}) {
   const business = await getBusinessForUser(userId);
@@ -67,7 +84,7 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = 30;
 
-  const [conversations, total, open, humanNeeded, customerService, closed, unread] = await Promise.all([
+  const [conversations, total, summaryRows] = await Promise.all([
     prisma.whatsAppConversation.findMany({
       where,
       orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
@@ -114,32 +131,33 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
       },
     }),
     prisma.whatsAppConversation.count({ where }),
-    prisma.whatsAppConversation.count({
-      where: { businessId: business.id, status: ConversationStatus.OPEN },
-    }),
-    prisma.whatsAppConversation.count({
-      where: { businessId: business.id, status: ConversationStatus.HUMAN_NEEDED },
-    }),
-    prisma.whatsAppConversation.count({
-      where: { businessId: business.id, conversationType: ConversationType.CUSTOMER_SERVICE },
-    }),
-    prisma.whatsAppConversation.count({
-      where: { businessId: business.id, status: ConversationStatus.CLOSED },
-    }),
-    prisma.whatsAppConversation.aggregate({
-      where: { businessId: business.id },
-      _sum: { unreadCount: true },
-    }),
+    withDatabaseRawReadRetry(() => prisma.$queryRaw<ConversationSummaryRow[]>`
+      SELECT
+        (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.OPEN}))::int AS "open",
+        (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.HUMAN_NEEDED}))::int AS "humanNeeded",
+        (COUNT(*) FILTER (WHERE "conversationType"::text = ${ConversationType.CUSTOMER_SERVICE}))::int AS "customerService",
+        (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.CLOSED}))::int AS "closed",
+        COALESCE(SUM("unreadCount"), 0)::int AS "unread"
+      FROM "whatsapp_conversations"
+      WHERE "businessId" = ${business.id}
+    `),
   ]);
+  const summary = summaryRows[0] ?? {
+    open: 0,
+    humanNeeded: 0,
+    customerService: 0,
+    closed: 0,
+    unread: 0,
+  };
 
   return {
     business,
     summary: {
-      open,
-      humanNeeded,
-      customerService,
-      closed,
-      unread: unread._sum.unreadCount ?? 0,
+      open: summary.open,
+      humanNeeded: summary.humanNeeded,
+      customerService: summary.customerService,
+      closed: summary.closed,
+      unread: summary.unread,
     },
     pagination: {
       page,
@@ -190,6 +208,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
       ownerLastReadAt: true,
       ownerNotes: true,
       resolvedAt: true,
+      unreadCount: true,
       contact: {
         select: {
           displayName: true,
@@ -240,10 +259,31 @@ export async function getConversationDetail(userId: string, conversationId?: str
     return null;
   }
 
-  await prisma.whatsAppConversation.update({
-    where: { id: conversation.id },
-    data: { ownerLastReadAt: new Date(), unreadCount: 0 },
-  });
+  if (conversation.unreadCount > 0) {
+    const snapshotMutation = buildSnapshotSafeMarkReadMutation({
+      ownerLastReadAt: conversation.ownerLastReadAt,
+      lastMessageAt: conversation.lastMessageAt,
+      unreadCount: conversation.unreadCount,
+      capturedAt: new Date(),
+    });
+    after(async () => {
+      try {
+        await prisma.whatsAppConversation.updateMany({
+          where: {
+            id: conversation.id,
+            businessId: business.id,
+            ...snapshotMutation.where,
+          },
+          data: snapshotMutation.data,
+        });
+      } catch (error) {
+        console.error("conversation_mark_read_failed", {
+          conversationId: conversation.id,
+          code: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : "unknown",
+        });
+      }
+    });
+  }
 
   return {
     id: conversation.id,
@@ -299,7 +339,13 @@ async function simulateCustomerMessageForResolvedBusiness(
     ? await findDuplicateCustomerMessageResult(business.id, providerMessageId)
     : null;
 
-  if (duplicateResult) return duplicateResult;
+  if (duplicateResult) {
+    return recoverDuplicateCustomerMessageResult(
+      duplicateResult,
+      business.id,
+      input.leadSource,
+    );
+  }
 
   const contact = await upsertContact({
     businessId: business.id,
@@ -325,7 +371,7 @@ async function simulateCustomerMessageForResolvedBusiness(
         messageBody: input.message,
         rawPayload: input.rawPayload,
         intent: inferCustomerIntent(input.message),
-        processingStatus: ProcessingStatus.PROCESSED,
+        processingStatus: ProcessingStatus.RECEIVED,
         deliveryStatus: "STORED",
       },
     })
@@ -339,7 +385,13 @@ async function simulateCustomerMessageForResolvedBusiness(
       business.id,
       providerMessageId,
     );
-    if (racedDuplicate) return racedDuplicate;
+    if (racedDuplicate) {
+      return recoverDuplicateCustomerMessageResult(
+        racedDuplicate,
+        business.id,
+        input.leadSource,
+      );
+    }
     throw new Error("Provider message duplicate belum dapat dipulihkan.");
   }
 
@@ -350,8 +402,8 @@ async function simulateCustomerMessageForResolvedBusiness(
   });
 
   let aiReply: string | null = null;
-  let aiMessageId: string | null = null;
-  let nextStatus = currentConversation?.status ?? conversation.status;
+  const initialStatus = currentConversation?.status ?? conversation.status;
+  let nextStatus = initialStatus;
   if (
     nextStatus === ConversationStatus.PENDING_CONFIRMATION ||
     nextStatus === ConversationStatus.CLOSED
@@ -377,6 +429,7 @@ async function simulateCustomerMessageForResolvedBusiness(
       }),
     ]);
     aiReply = await buildCustomerServiceReplyAi({
+      businessId: business.id,
       message: input.message,
       knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
       conversationContext: messages
@@ -387,139 +440,198 @@ async function simulateCustomerMessageForResolvedBusiness(
     });
   }
 
-  if (aiReply) {
-    const channel = conversationChannelFromSource(input.leadSource);
-    const isExternalChannel = channel !== "WEB_CHAT";
-    const aiMessage = await prisma.whatsAppMessage.create({
+  // AI generation may take several seconds. Lock and re-read the conversation
+  // only after it finishes, then create the AI message and update state in the
+  // same transaction. A takeover that committed while the model was running
+  // therefore wins and the generated text is discarded instead of persisted.
+  const finalized = await prisma.$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw<Array<{ status: ConversationStatus }>>`
+      SELECT "status"
+      FROM "whatsapp_conversations"
+      WHERE "id" = ${conversation.id} AND "businessId" = ${business.id}
+      FOR UPDATE
+    `;
+    const lockedConversation = lockedRows[0];
+    if (!lockedConversation) throw new Error("Conversation tidak ditemukan.");
+
+    // Any concurrent state transition is owner/system intent that happened
+    // after this inbound message started processing. Preserve it and discard
+    // the stale completion rather than reopening or replying over that state.
+    const stateChangedWhileGenerating = lockedConversation.status !== initialStatus;
+    const decision = resolveTakeoverSafeAiReply(
+      lockedConversation.status,
+      stateChangedWhileGenerating ? lockedConversation.status : nextStatus,
+      stateChangedWhileGenerating ? null : aiReply,
+    );
+    const finalReply = decision.reply;
+    const finalStatus = decision.status;
+    let aiMessageId: string | null = null;
+
+    if (finalReply) {
+      const channel = conversationChannelFromSource(input.leadSource);
+      const isExternalChannel = channel !== "WEB_CHAT";
+      const aiMessage = await tx.whatsAppMessage.create({
+        data: {
+          conversationId: conversation.id,
+          providerMessageId: internalOutboundId("ai", providerMessageId),
+          senderType: SenderType.AI,
+          messageType: MessageType.TEXT,
+          messageBody: finalReply,
+          intent: "customer_service_reply",
+          processingStatus: ProcessingStatus.PROCESSED,
+          deliveryStatus: isExternalChannel ? "PENDING" : "STORED",
+          rawPayload: toJsonValue({
+            channel,
+            direction: "OUTBOUND",
+            inReplyToProviderMessageId: providerMessageId,
+          }),
+        },
+      });
+      aiMessageId = aiMessage.id;
+
+      await tx.aiLog.create({
+        data: {
+          businessId: business.id,
+          conversationId: conversation.id,
+          messageId: aiMessage.id,
+          inputText: input.message,
+          outputText: finalReply,
+          intent: handoffRequested ? "handoff_request" : "customer_service_reply",
+          confidenceScore: handoffRequested ? "0.95" : "0.82",
+          actionTaken: handoffRequested
+            ? "handoff_reply_created"
+            : "customer_service_reply_created",
+        },
+      });
+    }
+
+    await tx.whatsAppConversation.update({
+      where: { id: conversation.id },
       data: {
-        conversationId: conversation.id,
-        providerMessageId: internalOutboundId("ai", providerMessageId),
-        senderType: SenderType.AI,
-        messageType: MessageType.TEXT,
-        messageBody: aiReply,
-        intent: "customer_service_reply",
-        processingStatus: ProcessingStatus.PROCESSED,
-        deliveryStatus: isExternalChannel ? "PENDING" : "STORED",
-        rawPayload: toJsonValue({
-          channel,
-          direction: "OUTBOUND",
-          inReplyToProviderMessageId: providerMessageId,
-        }),
+        status: finalStatus,
+        lastMessageAt: new Date(),
+        lastCustomerMessageAt: new Date(),
+        unreadCount: { increment: 1 },
       },
     });
-    aiMessageId = aiMessage.id;
 
-    await prisma.aiLog.create({
-      data: {
-        businessId: business.id,
-        conversationId: conversation.id,
-        messageId: aiMessage.id,
-        inputText: input.message,
-        outputText: aiReply,
-        intent: handoffRequested ? "handoff_request" : "customer_service_reply",
-        confidenceScore: handoffRequested ? "0.95" : "0.82",
-        actionTaken: handoffRequested
-          ? "handoff_reply_created"
-          : "customer_service_reply_created",
-      },
+    await tx.whatsAppMessage.update({
+      where: { id: customerMessage.id },
+      data: { processingStatus: ProcessingStatus.PROCESSED },
     });
-  }
 
-  await prisma.whatsAppConversation.update({
-    where: { id: conversation.id },
-    data: {
-      status: nextStatus,
-      lastMessageAt: new Date(),
-      lastCustomerMessageAt: new Date(),
-      unreadCount: { increment: 1 },
-    },
+    return { aiMessageId, aiReply: finalReply, status: finalStatus };
   });
 
-  await enqueueLeadRefresh({
-    businessId: business.id,
-    conversationId: conversation.id,
-    source: input.leadSource,
-  });
-  after(async () => {
-    await processPendingJobs(2);
-  });
+  await queueLeadRefresh(business.id, conversation.id, input.leadSource);
 
   return {
     conversationId: conversation.id,
     customerMessageId: customerMessage.id,
-    aiMessageId,
-    aiReply,
-    status: nextStatus,
+    aiMessageId: finalized.aiMessageId,
+    aiReply: finalized.aiReply,
+    status: finalized.status,
     leadSummary: null,
     deduped: false,
+    processing: false,
   };
 }
 
 export async function setConversationTakeover(userId: string, conversationId: string, takeover: boolean) {
   const business = await requireBusinessForUser(userId);
-  const conversation = await prisma.whatsAppConversation.findFirst({
-    where: { id: conversationId, businessId: business.id },
-    select: { id: true },
-  });
-
-  if (!conversation) {
-    throw new Error("Conversation tidak ditemukan.");
-  }
-
   const status = takeover ? ConversationStatus.HUMAN_NEEDED : ConversationStatus.OPEN;
 
-  await prisma.whatsAppConversation.update({
-    where: { id: conversationId },
-    data: {
-      status,
-      resolvedAt: null,
-      ownerLastReadAt: new Date(),
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "whatsapp_conversations"
+      WHERE "id" = ${conversationId} AND "businessId" = ${business.id}
+      FOR UPDATE
+    `;
+    if (!lockedRows[0]) throw new Error("Conversation tidak ditemukan.");
 
-  await prisma.whatsAppMessage.create({
-    data: {
-      conversationId,
-      providerMessageId: `system-${crypto.randomUUID()}`,
-      senderType: SenderType.SYSTEM,
-      messageType: MessageType.SYSTEM,
-      messageBody: takeover ? "Human takeover aktif. AI auto-reply berhenti." : "AI auto-reply aktif kembali.",
-      intent: takeover ? "human_takeover_enabled" : "human_takeover_released",
-      processingStatus: ProcessingStatus.PROCESSED,
-    },
+    await tx.whatsAppConversation.update({
+      where: { id: conversationId },
+      data: {
+        status,
+        resolvedAt: null,
+        ownerLastReadAt: new Date(),
+      },
+    });
+
+    if (takeover) {
+      await tx.whatsAppMessage.updateMany({
+        where: {
+          conversationId,
+          senderType: SenderType.AI,
+          deliveryStatus: "PENDING",
+        },
+        data: {
+          deliveryStatus: "SUPPRESSED",
+          deliveryError: humanTakeoverDeliveryReason,
+          processingStatus: ProcessingStatus.PROCESSED,
+        },
+      });
+    }
+
+    await tx.whatsAppMessage.create({
+      data: {
+        conversationId,
+        providerMessageId: `system-${crypto.randomUUID()}`,
+        senderType: SenderType.SYSTEM,
+        messageType: MessageType.SYSTEM,
+        messageBody: takeover ? "Human takeover aktif. AI auto-reply berhenti." : "AI auto-reply aktif kembali.",
+        intent: takeover ? "human_takeover_enabled" : "human_takeover_released",
+        processingStatus: ProcessingStatus.PROCESSED,
+      },
+    });
   });
 }
 
 export async function resolveConversation(userId: string, conversationId: string) {
   const business = await requireBusinessForUser(userId);
-  const conversation = await prisma.whatsAppConversation.findFirst({
-    where: { id: conversationId, businessId: business.id },
-    select: { id: true },
-  });
+  await prisma.$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "whatsapp_conversations"
+      WHERE "id" = ${conversationId} AND "businessId" = ${business.id}
+      FOR UPDATE
+    `;
+    if (!lockedRows[0]) throw new Error("Conversation tidak ditemukan.");
 
-  if (!conversation) {
-    throw new Error("Conversation tidak ditemukan.");
-  }
+    await tx.whatsAppConversation.update({
+      where: { id: conversationId },
+      data: {
+        status: ConversationStatus.CLOSED,
+        resolvedAt: new Date(),
+        ownerLastReadAt: new Date(),
+      },
+    });
 
-  await prisma.whatsAppConversation.update({
-    where: { id: conversationId },
-    data: {
-      status: ConversationStatus.CLOSED,
-      resolvedAt: new Date(),
-      ownerLastReadAt: new Date(),
-    },
-  });
+    await tx.whatsAppMessage.updateMany({
+      where: {
+        conversationId,
+        senderType: { in: [SenderType.AI, SenderType.SYSTEM] },
+        deliveryStatus: "PENDING",
+      },
+      data: {
+        deliveryStatus: "SUPPRESSED",
+        deliveryError: conversationClosedDeliveryReason,
+        processingStatus: ProcessingStatus.PROCESSED,
+      },
+    });
 
-  await prisma.whatsAppMessage.create({
-    data: {
-      conversationId,
-      providerMessageId: `system-${crypto.randomUUID()}`,
-      senderType: SenderType.SYSTEM,
-      messageType: MessageType.SYSTEM,
-      messageBody: "Conversation ditandai resolved oleh owner.",
-      intent: "conversation_resolved",
-      processingStatus: ProcessingStatus.PROCESSED,
-    },
+    await tx.whatsAppMessage.create({
+      data: {
+        conversationId,
+        providerMessageId: `system-${crypto.randomUUID()}`,
+        senderType: SenderType.SYSTEM,
+        messageType: MessageType.SYSTEM,
+        messageBody: "Conversation ditandai resolved oleh owner.",
+        intent: "conversation_resolved",
+        processingStatus: ProcessingStatus.PROCESSED,
+      },
+    });
   });
 }
 
@@ -824,6 +936,8 @@ export async function deliverStoredWhatsAppTextMessage(params: {
       messageBody: true,
       rawPayload: true,
       deliveryStatus: true,
+      senderType: true,
+      conversation: { select: { status: true } },
     },
   });
 
@@ -841,11 +955,31 @@ export async function deliverStoredWhatsAppTextMessage(params: {
     };
   }
 
+  if (
+    message.deliveryStatus === "PENDING" &&
+    shouldSuppressAiDelivery(message.senderType, message.conversation.status)
+  ) {
+    return suppressWhatsAppAiDelivery(
+      message.id,
+      message.providerMessageId,
+      message.conversation.status,
+    );
+  }
+
   const claim = await prisma.whatsAppMessage.updateMany({
     where: {
       id: message.id,
       deliveryStatus: "PENDING",
-      conversation: { businessId: params.businessId },
+      conversation: {
+        businessId: params.businessId,
+        ...(message.senderType === SenderType.AI
+          ? {
+              status: {
+                notIn: [ConversationStatus.HUMAN_NEEDED, ConversationStatus.CLOSED],
+              },
+            }
+          : {}),
+      },
     },
     data: {
       deliveryStatus: "SENDING",
@@ -857,10 +991,27 @@ export async function deliverStoredWhatsAppTextMessage(params: {
   if (claim.count === 0) {
     const current = await prisma.whatsAppMessage.findUnique({
       where: { id: message.id },
-      select: { deliveryStatus: true, providerMessageId: true, deliveryError: true },
+      select: {
+        deliveryStatus: true,
+        providerMessageId: true,
+        deliveryError: true,
+        senderType: true,
+        conversation: { select: { status: true } },
+      },
     });
     const accepted =
       ["ACCEPTED", "DELIVERED", "READ"].includes(current?.deliveryStatus ?? "");
+    if (
+      !accepted &&
+      current?.deliveryStatus === "PENDING" &&
+      shouldSuppressAiDelivery(current.senderType, current.conversation.status)
+    ) {
+      return suppressWhatsAppAiDelivery(
+        message.id,
+        current.providerMessageId ?? message.providerMessageId,
+        current.conversation.status,
+      );
+    }
     return {
       accepted,
       delivered: current?.deliveryStatus === "DELIVERED" || current?.deliveryStatus === "READ",
@@ -869,6 +1020,14 @@ export async function deliverStoredWhatsAppTextMessage(params: {
       reason: accepted ? null : current?.deliveryError ?? "whatsapp_delivery_already_claimed",
     };
   }
+
+  const takeoverSuppressed = await suppressClaimedWhatsAppAiDelivery(
+    message.id,
+    params.businessId,
+    message.senderType,
+    message.providerMessageId,
+  );
+  if (takeoverSuppressed) return takeoverSuppressed;
 
   let delivery: Awaited<ReturnType<typeof sendWhatsAppTextMessage>>;
   try {
@@ -928,6 +1087,68 @@ export async function deliverStoredWhatsAppTextMessage(params: {
     providerMessageId: delivery.sent
       ? delivery.providerMessageId
       : message.providerMessageId,
+    reason,
+  };
+}
+
+async function suppressClaimedWhatsAppAiDelivery(
+  messageId: string,
+  businessId: string,
+  senderType: SenderType,
+  providerMessageId: string,
+) {
+  if (senderType !== SenderType.AI) return null;
+  const suppressed = await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: messageId,
+      senderType: SenderType.AI,
+      deliveryStatus: "SENDING",
+      conversation: {
+        businessId,
+        status: { in: [ConversationStatus.HUMAN_NEEDED, ConversationStatus.CLOSED] },
+      },
+    },
+    data: {
+      deliveryStatus: "SUPPRESSED",
+      deliveryError: humanTakeoverDeliveryReason,
+      processingStatus: ProcessingStatus.PROCESSED,
+    },
+  });
+  return suppressed.count === 1
+    ? suppressedWhatsAppDelivery(providerMessageId)
+    : null;
+}
+
+async function suppressWhatsAppAiDelivery(
+  messageId: string,
+  providerMessageId: string,
+  conversationStatus: ConversationStatus,
+) {
+  const reason = aiDeliverySuppressionReason(conversationStatus);
+  await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: messageId,
+      senderType: SenderType.AI,
+      deliveryStatus: "PENDING",
+    },
+    data: {
+      deliveryStatus: "SUPPRESSED",
+      deliveryError: reason,
+      processingStatus: ProcessingStatus.PROCESSED,
+    },
+  });
+  return suppressedWhatsAppDelivery(providerMessageId, reason);
+}
+
+function suppressedWhatsAppDelivery(
+  providerMessageId: string,
+  reason = humanTakeoverDeliveryReason,
+) {
+  return {
+    accepted: false as const,
+    delivered: false,
+    deliveryStatus: "SUPPRESSED",
+    providerMessageId,
     reason,
   };
 }
@@ -1078,8 +1299,11 @@ async function requireBusinessForUser(userId: string) {
 }
 
 async function requireBusinessById(businessId: string) {
-  const business = await prisma.business.findUnique({
-    where: { id: businessId },
+  const business = await prisma.business.findFirst({
+    where: {
+      id: businessId,
+      user: { status: UserStatus.ACTIVE },
+    },
     select: { id: true, businessName: true },
   });
 
@@ -1119,7 +1343,7 @@ async function findDuplicateCustomerMessageResult(
     select: {
       id: true,
       conversationId: true,
-      createdAt: true,
+      processingStatus: true,
       conversation: { select: { businessId: true, status: true } },
     },
   });
@@ -1129,30 +1353,19 @@ async function findDuplicateCustomerMessageResult(
     throw new Error("Provider message ID sudah dipakai workspace lain.");
   }
 
-  const linkedAiReply =
-    (await prisma.whatsAppMessage.findFirst({
-      where: {
-        conversationId: duplicateMessage.conversationId,
-        senderType: SenderType.AI,
-        messageType: MessageType.TEXT,
-        rawPayload: {
-          path: ["inReplyToProviderMessageId"],
-          equals: providerMessageId,
-        },
+  const linkedAiReply = await prisma.whatsAppMessage.findFirst({
+    where: {
+      conversationId: duplicateMessage.conversationId,
+      senderType: SenderType.AI,
+      messageType: MessageType.TEXT,
+      rawPayload: {
+        path: ["inReplyToProviderMessageId"],
+        equals: providerMessageId,
       },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, messageBody: true },
-    })) ??
-    (await prisma.whatsAppMessage.findFirst({
-      where: {
-        conversationId: duplicateMessage.conversationId,
-        senderType: SenderType.AI,
-        messageType: MessageType.TEXT,
-        createdAt: { gte: duplicateMessage.createdAt },
-      },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, messageBody: true },
-    }));
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, messageBody: true },
+  });
 
   return {
     conversationId: duplicateMessage.conversationId,
@@ -1162,7 +1375,27 @@ async function findDuplicateCustomerMessageResult(
     status: duplicateMessage.conversation.status,
     leadSummary: null,
     deduped: true,
+    processing: duplicateMessage.processingStatus === ProcessingStatus.RECEIVED,
   };
+}
+
+async function recoverDuplicateCustomerMessageResult<
+  T extends { conversationId: string; processing: boolean },
+>(result: T, businessId: string, source?: string) {
+  // The original request can commit the conversation and then fail while
+  // enqueueing its lead refresh. A provider retry must restore that side
+  // effect, but must not run it while the original AI turn is still active.
+  if (!result.processing) {
+    await queueLeadRefresh(businessId, result.conversationId, source);
+  }
+  return result;
+}
+
+async function queueLeadRefresh(businessId: string, conversationId: string, source?: string) {
+  await enqueueLeadRefresh({ businessId, conversationId, source });
+  after(async () => {
+    await processPendingJobs(2);
+  });
 }
 
 async function findIdempotentOutgoingMessage(

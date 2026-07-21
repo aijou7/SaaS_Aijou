@@ -1,5 +1,15 @@
-import { ProcessingStatus, Prisma } from "@/generated/prisma-beta/client";
+import {
+  ConversationStatus,
+  ProcessingStatus,
+  Prisma,
+  SenderType,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import {
+  aiDeliverySuppressionReason,
+  humanTakeoverDeliveryReason,
+  shouldSuppressAiDelivery,
+} from "@/server/conversations/takeover-safety";
 import { sendTelegramTextMessage } from "@/server/telegram/client";
 import { normalizeTelegramChatId } from "@/server/telegram/payload";
 import { getTelegramDeliveryCredentialsForBusiness } from "@/server/telegram/settings";
@@ -23,11 +33,12 @@ export async function deliverStoredTelegramTextMessage(params: {
       messageBody: true,
       rawPayload: true,
       deliveryStatus: true,
+      senderType: true,
+      conversation: { select: { status: true } },
     },
   });
 
   if (!message?.messageBody) throw new Error("Pesan outbound Telegram tidak ditemukan.");
-  if (!chatId) return failWithoutClaim(message.id, "telegram_chat_id_invalid");
 
   if (acceptedStatuses.has(message.deliveryStatus)) {
     return {
@@ -40,11 +51,33 @@ export async function deliverStoredTelegramTextMessage(params: {
     };
   }
 
+  if (
+    message.deliveryStatus === "PENDING" &&
+    shouldSuppressAiDelivery(message.senderType, message.conversation.status)
+  ) {
+    return suppressTelegramAiDelivery(
+      message.id,
+      message.providerMessageId,
+      message.conversation.status,
+    );
+  }
+  if (!chatId) return failWithoutClaim(message.id, "telegram_chat_id_invalid");
+
   const claim = await prisma.whatsAppMessage.updateMany({
     where: {
       id: message.id,
       deliveryStatus: "PENDING",
-      conversation: { businessId: params.businessId, channel: "TELEGRAM" },
+      conversation: {
+        businessId: params.businessId,
+        channel: "TELEGRAM",
+        ...(message.senderType === SenderType.AI
+          ? {
+              status: {
+                notIn: [ConversationStatus.HUMAN_NEEDED, ConversationStatus.CLOSED],
+              },
+            }
+          : {}),
+      },
     },
     data: {
       deliveryStatus: "SENDING",
@@ -56,9 +89,26 @@ export async function deliverStoredTelegramTextMessage(params: {
   if (claim.count !== 1) {
     const current = await prisma.whatsAppMessage.findUnique({
       where: { id: message.id },
-      select: { deliveryStatus: true, providerMessageId: true, deliveryError: true },
+      select: {
+        deliveryStatus: true,
+        providerMessageId: true,
+        deliveryError: true,
+        senderType: true,
+        conversation: { select: { status: true } },
+      },
     });
     const accepted = acceptedStatuses.has(current?.deliveryStatus ?? "");
+    if (
+      !accepted &&
+      current?.deliveryStatus === "PENDING" &&
+      shouldSuppressAiDelivery(current.senderType, current.conversation.status)
+    ) {
+      return suppressTelegramAiDelivery(
+        message.id,
+        current.providerMessageId ?? message.providerMessageId,
+        current.conversation.status,
+      );
+    }
     return {
       accepted,
       delivered: accepted,
@@ -68,6 +118,14 @@ export async function deliverStoredTelegramTextMessage(params: {
       retryable: false,
     };
   }
+
+  const takeoverSuppressed = await suppressClaimedTelegramAiDelivery(
+    message.id,
+    params.businessId,
+    message.senderType,
+    message.providerMessageId,
+  );
+  if (takeoverSuppressed) return takeoverSuppressed;
 
   const credentials = await getTelegramDeliveryCredentialsForBusiness(params.businessId);
   if (!credentials?.botToken) {
@@ -129,6 +187,70 @@ export async function deliverStoredTelegramTextMessage(params: {
     retryAfterSeconds: delivery.retryAfterSeconds,
   });
   return { ...result, retryable };
+}
+
+async function suppressClaimedTelegramAiDelivery(
+  messageId: string,
+  businessId: string,
+  senderType: SenderType,
+  providerMessageId: string,
+) {
+  if (senderType !== SenderType.AI) return null;
+  const suppressed = await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: messageId,
+      senderType: SenderType.AI,
+      deliveryStatus: "SENDING",
+      conversation: {
+        businessId,
+        channel: "TELEGRAM",
+        status: { in: [ConversationStatus.HUMAN_NEEDED, ConversationStatus.CLOSED] },
+      },
+    },
+    data: {
+      deliveryStatus: "SUPPRESSED",
+      deliveryError: humanTakeoverDeliveryReason,
+      processingStatus: ProcessingStatus.PROCESSED,
+    },
+  });
+  return suppressed.count === 1
+    ? suppressedTelegramDelivery(providerMessageId)
+    : null;
+}
+
+async function suppressTelegramAiDelivery(
+  messageId: string,
+  providerMessageId: string,
+  conversationStatus: ConversationStatus,
+) {
+  const reason = aiDeliverySuppressionReason(conversationStatus);
+  await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: messageId,
+      senderType: SenderType.AI,
+      deliveryStatus: "PENDING",
+    },
+    data: {
+      deliveryStatus: "SUPPRESSED",
+      deliveryError: reason,
+      processingStatus: ProcessingStatus.PROCESSED,
+    },
+  });
+  return suppressedTelegramDelivery(providerMessageId, reason);
+}
+
+function suppressedTelegramDelivery(
+  providerMessageId: string,
+  reason = humanTakeoverDeliveryReason,
+) {
+  return {
+    accepted: false as const,
+    delivered: false,
+    deliveryStatus: "SUPPRESSED",
+    providerMessageId,
+    reason,
+    retryable: false,
+  };
 }
 
 async function failWithoutClaim(messageId: string, reason: string) {

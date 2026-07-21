@@ -20,12 +20,14 @@ import {
   Tags,
   TrendingUp,
   UserCircle,
+  Users,
   WalletCards,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
+import { isTeamManagementEnabled } from "@/lib/team-feature";
 
 type ModuleKey =
   | "settings"
@@ -62,6 +64,9 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
       { href: "/business", label: "Profil bisnis", icon: Building2, key: "business" },
       { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup" },
       { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage" },
+      ...(isTeamManagementEnabled()
+        ? [{ href: "/team", label: "Tim & akses", icon: Users, key: "team" }]
+        : []),
       { href: "/account", label: "Keamanan akun", icon: Settings, key: "account" },
     ],
   },
@@ -130,6 +135,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   business: "settings",
   setup: "settings",
   usage: "settings",
+  team: "settings",
   account: "settings",
   conversations: "inbox",
   leads: "inbox",

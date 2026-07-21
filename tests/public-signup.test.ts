@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   isPublicSignupEnabled,
+  isPublicSignupReady,
   normalizePublicSignupInput,
   PublicSignupError,
   publicSignupRateRules,
@@ -16,6 +17,12 @@ describe("public beta signup", () => {
     assert.equal(isPublicSignupEnabled("0"), false);
   });
 
+  test("is ready only when signup and transactional email are both available", () => {
+    assert.equal(isPublicSignupReady(true, undefined), true);
+    assert.equal(isPublicSignupReady(false, undefined), false);
+    assert.equal(isPublicSignupReady(true, "false"), false);
+  });
+
   test("normalizes a valid isolated workspace registration", () => {
     assert.deepEqual(
       normalizePublicSignupInput({
@@ -23,39 +30,25 @@ describe("public beta signup", () => {
         email: " OWNER@Example.COM ",
         phoneNumber: "+62 812-3456-7890",
         businessName: "  Aijou   Studio ",
-        password: "BetaAijou2026!",
       }),
       {
         name: "Aijou Owner",
         email: "owner@example.com",
         phoneNumber: "6281234567890",
         businessName: "Aijou Studio",
-        password: "BetaAijou2026!",
       },
     );
   });
 
-  test("rejects malformed identity and weak passwords before database work", () => {
+  test("rejects malformed identity before database work", () => {
     assert.throws(
       () =>
         normalizePublicSignupInput({
           name: "A",
           email: "not-an-email",
           businessName: "X",
-          password: "short",
         }),
       PublicSignupError,
-    );
-
-    assert.throws(
-      () =>
-        normalizePublicSignupInput({
-          name: "Aijou Owner",
-          email: "owner@example.com",
-          businessName: "Aijou Studio",
-          password: "password1234",
-        }),
-      /mudah ditebak/i,
     );
   });
 

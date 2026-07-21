@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { isStrongRuntimeSecret } from "@/lib/runtime-secret";
 import { prisma } from "@/lib/prisma";
 import { ttlCache } from "@/lib/ttl-cache";
 
@@ -32,6 +33,7 @@ export async function resolveWidgetBusiness(originValue: string, workspaceKey?: 
           userId: true,
           businessName: true,
           websiteUrl: true,
+          widgetAllowedOrigin: true,
           widgetKey: true,
           agentSettings: {
             select: { agentName: true, openingMessage: true, isActive: true },
@@ -39,7 +41,10 @@ export async function resolveWidgetBusiness(originValue: string, workspaceKey?: 
         },
       });
 
-      return business && isOriginAllowedForWebsite(origin, business.websiteUrl)
+      return business && isOriginAllowedForWebsite(
+        origin,
+        business.widgetAllowedOrigin || business.websiteUrl,
+      )
         ? { ...business, origin }
         : null;
     }
@@ -51,6 +56,8 @@ export async function resolveWidgetBusiness(originValue: string, workspaceKey?: 
         OR: [
           { websiteUrl: { equals: origin, mode: "insensitive" } },
           { websiteUrl: { equals: `${origin}/`, mode: "insensitive" } },
+          { widgetAllowedOrigin: { equals: origin, mode: "insensitive" } },
+          { widgetAllowedOrigin: { equals: `${origin}/`, mode: "insensitive" } },
         ],
       },
       select: {
@@ -58,6 +65,7 @@ export async function resolveWidgetBusiness(originValue: string, workspaceKey?: 
         userId: true,
         businessName: true,
         websiteUrl: true,
+        widgetAllowedOrigin: true,
         widgetKey: true,
         agentSettings: {
           select: { agentName: true, openingMessage: true, isActive: true },
@@ -66,7 +74,10 @@ export async function resolveWidgetBusiness(originValue: string, workspaceKey?: 
       take: 3,
     });
     const allowed = candidates.filter((candidate) =>
-      isOriginAllowedForWebsite(origin, candidate.websiteUrl),
+      isOriginAllowedForWebsite(
+        origin,
+        candidate.widgetAllowedOrigin || candidate.websiteUrl,
+      ),
     );
 
     // A legacy origin without a workspace key is only safe when it resolves to
@@ -190,15 +201,22 @@ function sign(value: string) {
 }
 
 function getWidgetSecret() {
-  const secret = process.env.WIDGET_SIGNING_SECRET || process.env.AUTH_SECRET;
-
-  if (secret && (process.env.NODE_ENV !== "production" || secret.length >= 32)) {
-    return secret;
-  }
-
   if (process.env.NODE_ENV !== "production") {
-    return "dev-only-widget-signing-secret-change-me";
+    return (
+      process.env.WIDGET_SIGNING_SECRET?.trim() ||
+      process.env.AUTH_SECRET?.trim() ||
+      "dev-only-widget-signing-secret-change-me"
+    );
   }
 
-  throw new Error("WIDGET_SIGNING_SECRET or a strong AUTH_SECRET is required.");
+  const secret = process.env.WIDGET_SIGNING_SECRET?.trim();
+  if (
+    !isStrongRuntimeSecret(secret) ||
+    secret === process.env.AUTH_SECRET?.trim()
+  ) {
+    throw new Error(
+      "A strong, dedicated WIDGET_SIGNING_SECRET is required in production.",
+    );
+  }
+  return secret;
 }

@@ -36,7 +36,7 @@ Gunakan dua jenis connection string bila Neon menyediakannya:
 Contoh format, bukan credential asli:
 
 ```text
-postgresql://ROLE:PASSWORD@HOST/DATABASE?sslmode=require
+postgresql://ROLE:PASSWORD@HOST/DATABASE?sslmode=verify-full
 ```
 
 Sebelum migration, buat Neon branch, snapshot, atau backup yang dapat dipakai untuk recovery.
@@ -82,7 +82,10 @@ Tambahkan ke Vercel Production sebelum deployment:
 ```env
 DATABASE_URL="POOLED_NEON_URL"
 DATABASE_POOL_MAX="5"
-DATABASE_CONNECTION_TIMEOUT_MS="5000"
+DATABASE_CONNECTION_TIMEOUT_MS="15000"
+DATABASE_READ_RETRY_MAX_ATTEMPTS="3"
+DATABASE_READ_RETRY_BASE_DELAY_MS="100"
+DATABASE_READ_RETRY_MAX_DELAY_MS="800"
 DATABASE_IDLE_TIMEOUT_MS="10000"
 
 AUTH_SECRET="RANDOM_MINIMUM_32_BYTES"
@@ -92,10 +95,23 @@ CRON_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
 
 NEXT_PUBLIC_APP_URL="https://app.example.com"
 
+# Wajib untuk signup publik, verifikasi email, dan reset password.
+RESEND_API_KEY="RESEND_API_KEY_PRODUCTION"
+EMAIL_FROM="Aijou AI <noreply@YOUR_VERIFIED_DOMAIN>"
+
 # Opsional: default pendaftaran publik adalah aktif. Gunakan false sebagai kill switch.
 PUBLIC_SIGNUP_ENABLED="true"
 # Opsional: jika kosong, AUTH_SECRET dipakai untuk HMAC rate-limit signup.
 SIGNUP_GUARD_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
+
+# Opsional: kapasitas tenant-wide. Default ini sudah longgar dan dapat dinaikkan
+# untuk campaign besar tanpa patch kode.
+WIDGET_INIT_WORKSPACE_PER_MINUTE="5000"
+WIDGET_INIT_WORKSPACE_PER_HOUR="100000"
+WEB_CHAT_WORKSPACE_PER_MINUTE="2000"
+WEB_CHAT_WORKSPACE_PER_HOUR="100000"
+WEB_BRIEF_WORKSPACE_PER_MINUTE="600"
+WEB_BRIEF_WORKSPACE_PER_HOUR="20000"
 ```
 
 Buat nilai acak terpisah dengan Node, jangan memakai output yang sama untuk semua key:
@@ -111,9 +127,11 @@ Ketentuan penting:
 - `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte.
 - `CRON_SECRET` harus sama dengan secret yang dipakai Vercel Cron untuk bearer authorization.
 - `NEXT_PUBLIC_APP_URL` harus canonical HTTPS origin tanpa trailing path. Setelah custom domain berubah, update nilai ini lalu redeploy.
+- `RESEND_API_KEY` dan `EMAIL_FROM` wajib tersedia sebelum signup publik dibuka. Sender/domain pada `EMAIL_FROM` harus sudah terverifikasi di Resend; jika belum siap, halaman signup akan fail-closed dan tidak membuat workspace publik.
 - `PUBLIC_SIGNUP_ENABLED=false` mengembalikan `/signup` ke mode invite-only tanpa perubahan kode.
 - `SIGNUP_GUARD_SECRET` sebaiknya berupa secret acak tersendiri; IP dan email pada counter anti-spam hanya disimpan sebagai HMAC.
 - Simpan backup aman `DATA_ENCRYPTION_KEY`. Jangan rotate langsung setelah credential terenkripsi tersimpan.
+- Batas workspace widget/chat/brief bersifat pelindung tenant, bukan batas jumlah customer. Nilainya dapat dinaikkan mengikuti kebutuhan campaign tanpa mengubah kode; pantau database dan provider AI sebelum menaikkannya ekstrem.
 
 ### Groq
 
@@ -310,11 +328,14 @@ Tidak perlu menyalin URL webhook secara manual ke BotFather. Buka `/integrations
 
 Sesudah tersambung, buka link username bot, tekan **Start**, dan kirim pesan teks lewat private DM. Satu bot hanya boleh terhubung ke satu workspace. Untuk memindahkannya, putuskan koneksi dari workspace lama terlebih dahulu agar webhook lama dihapus dengan benar.
 
-### Background job cron
+### Background job dan maintenance cron
 
-`vercel.json` menjadwalkan recovery job setiap hari pukul `03:00 UTC` (`11:00` Singapore). Request harus membawa `Authorization: Bearer CRON_SECRET`.
+`vercel.json` memisahkan dua pekerjaan harian agar antrean provider tidak berebut durasi dengan housekeeping:
 
-Normal web chat mencoba memproses lead refresh segera setelah response. Cron adalah recovery path dan saat ini mengambil maksimal 20 job per run; monitor backlog `background_jobs` selama beta.
+- `/api/cron/jobs` pukul `03:00 UTC` (`11:00` Singapore) memulihkan background job tertunda dengan pemilihan adil antar-workspace dan berhenti sebelum batas durasi function.
+- `/api/cron/maintenance` pukul `04:00 UTC` (`12:00` Singapore) memangkas record lama serta menghapus maksimal satu akun yang grace period-nya sudah lewat pada setiap run.
+
+Keduanya harus membawa `Authorization: Bearer CRON_SECRET`. Normal webhook dan web chat tetap memproses irisan antrean kecil segera; cron adalah recovery path dan dapat mengambil maksimal 100 kandidat per run sesuai sisa waktu. Pantau backlog `background_jobs` selama beta.
 
 ## 8. Smoke test setelah deployment
 
@@ -323,7 +344,8 @@ Jangan membagikan halaman pendaftaran beta ke tester sebelum seluruh bagian pent
 ### Application dan database
 
 - `GET https://APP_DOMAIN/api/health` menghasilkan HTTP 200, `status: ok`, dan database `ok`.
-- `/signup` dapat membuat workspace baru, membuat session, lalu mengarahkan owner ke onboarding tanpa membocorkan error database.
+- Signup publik mengirim email verifikasi tanpa membuat session; link verifikasi meminta owner menetapkan password final sebelum login dan onboarding.
+- Jika Resend belum dikonfigurasi atau pengiriman verifikasi gagal, signup publik tidak meninggalkan akun/workspace unverified yang dapat dipakai.
 - Login owner berhasil dan session tetap aktif setelah navigasi.
 - `/readiness` tidak menunjukkan required setup yang terlewat.
 - Existing business profile, knowledge, products, dan agent tetap sama setelah seed promotion.

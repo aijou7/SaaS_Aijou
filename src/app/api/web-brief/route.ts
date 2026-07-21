@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { checkAbuseLimit, generousBriefRules, getClientIp } from "@/lib/abuse-guard";
+import { consumeDurableRateLimit } from "@/lib/durable-rate-limit";
 import {
   readRequestBodyBuffer,
   RequestBodyTooLargeError,
@@ -136,6 +137,36 @@ export async function POST(request: NextRequest) {
       { "Retry-After": String(abuseCheck.retryAfterSeconds) },
     );
   }
+  const [durableIp, durableSession, durableWorkspace] = await Promise.all([
+    consumeDurableRateLimit(clientIp, [
+      { scope: "web-brief:ip:10m", max: 300, windowMs: 10 * 60_000 },
+      { scope: "web-brief:ip:1h", max: 2_000, windowMs: 60 * 60_000 },
+    ]),
+    consumeDurableRateLimit(`${business.id}:${visitorKey}`, [
+      { scope: "web-brief:session:10m", max: 60, windowMs: 10 * 60_000 },
+      { scope: "web-brief:session:1h", max: 500, windowMs: 60 * 60_000 },
+    ]),
+    consumeDurableRateLimit(business.id, [
+      {
+        scope: "web-brief:workspace:1m",
+        max: readCapacity("WEB_BRIEF_WORKSPACE_PER_MINUTE", 600),
+        windowMs: 60_000,
+      },
+      {
+        scope: "web-brief:workspace:1h",
+        max: readCapacity("WEB_BRIEF_WORKSPACE_PER_HOUR", 20_000),
+        windowMs: 60 * 60_000,
+      },
+    ]),
+  ]);
+  const durableAbuse = [durableIp, durableSession, durableWorkspace].find(
+    (result) => !result.allowed,
+  );
+  if (durableAbuse) {
+    return json(request, { error: "Traffic brief terlalu tinggi. Coba lagi sebentar ya." }, 429, {
+      "Retry-After": String(durableAbuse.retryAfterSeconds),
+    });
+  }
   const phoneNumber = `web-brief-${visitorKey}`;
   const synthesizedMessage = [
     "Project brief dari website Aijou:",
@@ -208,4 +239,11 @@ function corsHeaders(request: NextRequest): Record<string, string> {
 
 function getVisitorKey(origin: string, sessionKey: string) {
   return createHash("sha256").update(`${origin}:${sessionKey}`).digest("hex").slice(0, 20);
+}
+
+function readCapacity(name: string, fallback: number) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 100
+    ? Math.min(parsed, 10_000_000)
+    : fallback;
 }

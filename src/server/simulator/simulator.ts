@@ -1,5 +1,15 @@
-import { MessageType, ProcessingStatus, SenderType } from "@/generated/prisma-beta/client";
+import {
+  ConversationStatus,
+  MessageType,
+  ProcessingStatus,
+  SenderType,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import {
+  buildCustomerServiceReplyAi,
+  isHandoffRequest,
+} from "@/server/ai/customer-agent";
+import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { extractExpenseFromTextAi } from "@/server/ai/expense-extractor";
 import { detectIntentFromText } from "@/server/ai/intent";
 import {
@@ -8,6 +18,8 @@ import {
   createPendingExpenseFromExtraction,
 } from "@/server/finance/expense-flow";
 import { simulateCustomerMessage } from "@/server/conversations/conversations";
+import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
+import { getActiveProductContext } from "@/server/products/catalog";
 import { storeIncomingWhatsAppMessage } from "@/server/whatsapp/store";
 import type { ExtractedWhatsAppMessage, WhatsAppWebhookPayload } from "@/server/whatsapp/payload";
 
@@ -83,7 +95,69 @@ export async function simulateClientChatMessage(userId: string, params: {
   displayName?: string;
   message: string;
 }) {
-  return simulateCustomerMessage(userId, params);
+  const business = await requireBusinessForUser(userId);
+  const settings = await getAgentRuntimeSettings(business.id);
+  const result = await simulateCustomerMessage(userId, params);
+
+  // The simulator is a private preview surface. New workspaces keep live
+  // auto-reply off, but owners still need to inspect a real generated answer
+  // before they explicitly activate the agent.
+  if (settings.isActive || result.aiReply) return result;
+
+  const [knowledgeContext, productContext] = await Promise.all([
+    getActiveKnowledgeContext(business.id),
+    getActiveProductContext(business.id),
+  ]);
+  const previewReply = await buildCustomerServiceReplyAi({
+    businessId: business.id,
+    message: params.message,
+    knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
+    conversationContext: `Customer: ${params.message}`,
+    settings,
+  });
+  const handoffRequested = isHandoffRequest(params.message);
+  const previewStatus = handoffRequested
+    ? ConversationStatus.HUMAN_NEEDED
+    : ConversationStatus.OPEN;
+  const aiMessage = await prisma.$transaction(async (tx) => {
+    const message = await tx.whatsAppMessage.create({
+      data: {
+        conversationId: result.conversationId,
+        providerMessageId: `sim-preview-ai-${crypto.randomUUID()}`,
+        senderType: SenderType.AI,
+        messageType: MessageType.TEXT,
+        messageBody: previewReply,
+        intent: "customer_service_preview",
+        processingStatus: ProcessingStatus.PROCESSED,
+        deliveryStatus: "STORED",
+        rawPayload: { simulatorPreview: true, neverDeliverExternally: true },
+      },
+    });
+    await tx.aiLog.create({
+      data: {
+        businessId: business.id,
+        conversationId: result.conversationId,
+        messageId: message.id,
+        inputText: params.message,
+        outputText: previewReply,
+        intent: handoffRequested ? "handoff_request" : "customer_service_preview",
+        confidenceScore: handoffRequested ? "0.95" : "0.82",
+        actionTaken: "simulator_preview_reply_created",
+      },
+    });
+    await tx.whatsAppConversation.update({
+      where: { id: result.conversationId },
+      data: { status: previewStatus, lastMessageAt: new Date() },
+    });
+    return message;
+  });
+
+  return {
+    ...result,
+    aiMessageId: aiMessage.id,
+    aiReply: previewReply,
+    status: previewStatus,
+  };
 }
 
 async function createAssistantMessage(conversationId: string, message: string) {

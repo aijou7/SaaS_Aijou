@@ -19,10 +19,11 @@ export default async function PaymentsPage() {
     redirect("/login" as Route);
   }
 
-  const [page, payments] = await Promise.all([
-    getTransactionsPage(session.userId, parseTransactionFilters({ transactionType: "INCOME" })),
-    getPaymentsPage(session.userId),
-  ]);
+  const page = await getTransactionsPage(
+    session.userId,
+    parseTransactionFilters({ transactionType: "INCOME" }),
+  );
+  const payments = await getPaymentsPage(session.userId);
   return (
     <AppShell active="payments" businessName={page.business?.businessName}>
       <section className="core-page">
@@ -74,6 +75,8 @@ export default async function PaymentsPage() {
                   name="secretKey"
                   type="password"
                   autoComplete="off"
+                  maxLength={4096}
+                  required={Boolean(payments.configurationIssue)}
                   placeholder={`Current: ${payments.settings?.secretKeyMasked ?? "Not set"}`}
                 />
               </label>
@@ -83,6 +86,8 @@ export default async function PaymentsPage() {
                   name="webhookToken"
                   type="password"
                   autoComplete="off"
+                  maxLength={4096}
+                  required={Boolean(payments.configurationIssue)}
                   placeholder={`Current: ${payments.settings?.webhookTokenMasked ?? "Not set"}`}
                 />
               </label>
@@ -92,6 +97,11 @@ export default async function PaymentsPage() {
               </label>
               <button className="primary-button span-2" type="submit">Simpan payment settings</button>
             </form>
+            {payments.configurationIssue ? (
+              <div className="settings-note" role="alert">
+                {payments.configurationIssue}
+              </div>
+            ) : null}
             <p className="muted">
               Mode terdeteksi: {payments.settings?.testMode ? "Development / test" : "Production / live"}.
               Mode mengikuti API key Xendit dan tidak dapat diubah dari checkbox lokal.

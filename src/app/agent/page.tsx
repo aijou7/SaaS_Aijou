@@ -1,12 +1,18 @@
 import { Bot, Power, SlidersHorizontal } from "lucide-react";
 import type { Route } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { updateAgentSettingsAction } from "@/app/agent/actions";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
+import { getBusinessProfilePage } from "@/server/business/profile";
 
-export default async function AgentSettingsPage() {
+type AgentSettingsPageProps = {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+};
+
+export default async function AgentSettingsPage({ searchParams }: AgentSettingsPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -14,6 +20,11 @@ export default async function AgentSettingsPage() {
   }
 
   const page = await getAgentSettingsPage(session.userId);
+  const [profile, params] = await Promise.all([
+    getBusinessProfilePage(session.userId),
+    searchParams,
+  ]);
+  const activationLocked = !page.settings.isActive && !profile.readiness.canActivateAgent;
 
   return (
     <AppShell active="agent" businessName={page.business?.businessName}>
@@ -51,6 +62,41 @@ export default async function AgentSettingsPage() {
         <section className="section">
           <div className="card">
             <h2>Konfigurasi Aijou</h2>
+            {params.saved === "1" ? (
+              <div className="settings-note" role="status">
+                <strong>Pengaturan Aijou tersimpan</strong>
+                <p>
+                  {page.settings.isActive
+                    ? "Auto-reply aktif untuk channel yang sudah tersambung."
+                    : "Aijou masih dalam mode aman dan belum membalas channel live."}
+                </p>
+              </div>
+            ) : null}
+            {params.error === "not_ready" ? (
+              <div className="settings-note" role="alert">
+                <strong>Auto-reply belum diaktifkan</strong>
+                <p>Lengkapi seluruh readiness terlebih dahulu, lalu aktifkan kembali dari halaman ini.</p>
+              </div>
+            ) : null}
+            {!page.settings.isActive ? (
+              <div className="settings-note" role="status">
+                <strong>
+                  {profile.readiness.canActivateAgent
+                    ? "Semua prasyarat siap"
+                    : "Mode aman masih aktif"}
+                </strong>
+                <p>
+                  {profile.readiness.canActivateAgent
+                    ? "Centang aktivasi di bawah untuk mulai mengizinkan auto-reply di channel live."
+                    : `Masih perlu: ${profile.readiness.missingBeforeActivation
+                        .map((check) => check.label)
+                        .join(", ")}.`}
+                </p>
+                {!profile.readiness.canActivateAgent ? (
+                  <Link className="ghost-button" href="/setup">Lihat checklist setup</Link>
+                ) : null}
+              </div>
+            ) : null}
             <form className="form-grid" action={updateAgentSettingsAction}>
               <label>
                 Agent Name
@@ -68,8 +114,13 @@ export default async function AgentSettingsPage() {
                 <input name="tone" type="text" defaultValue={page.settings.tone} maxLength={200} />
               </label>
               <label className="checkbox-label">
-                <input name="isActive" type="checkbox" defaultChecked={page.settings.isActive} />
-                Auto-reply active
+                <input
+                  name="isActive"
+                  type="checkbox"
+                  defaultChecked={page.settings.isActive}
+                  disabled={activationLocked}
+                />
+                Aktifkan auto-reply di channel live
               </label>
               <label className="span-2">
                 Business Description

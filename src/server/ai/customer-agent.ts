@@ -2,6 +2,7 @@ import { callGroqText } from "@/server/ai/groq";
 import type { AgentRuntimeSettings } from "@/server/agent/settings";
 
 export async function buildCustomerServiceReplyAi(params: {
+  businessId: string;
   message: string;
   knowledgeContext: string;
   conversationContext?: string;
@@ -15,6 +16,8 @@ export async function buildCustomerServiceReplyAi(params: {
   }
 
   const result = await callGroqText({
+    businessId: params.businessId,
+    usageType: "CUSTOMER_REPLY",
     fallback,
     system: [
       `You are ${settings.agentName}, an AI customer-service agent for ${settings.businessDescription ?? "a business"}.`,

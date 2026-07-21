@@ -8,6 +8,10 @@ import {
 } from "@/generated/prisma-beta/client";
 import { decryptSecret, encryptSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
+import {
+  readCredentialSnapshot,
+  requireCompleteCredentialReplacement,
+} from "@/server/integrations/credential-recovery";
 
 const xenditApiBase = "https://api.xendit.co";
 
@@ -17,11 +21,27 @@ export type PaymentSettingsInput = {
   isActive?: boolean;
 };
 
+export async function getPaymentReadinessForBusiness(businessId: string) {
+  const stored = await prisma.paymentSettings.findUnique({
+    where: { businessId },
+  });
+  if (!stored) return false;
+
+  try {
+    const settings = decryptPaymentSettings(stored);
+    return Boolean(settings.isActive && settings.secretKey && settings.webhookToken);
+  } catch {
+    console.error("payment_credentials_decrypt_failed", { businessId });
+    return false;
+  }
+}
+
 export async function getPaymentsPage(userId: string) {
   const business = await getBusinessForUser(userId);
   if (!business) {
     return {
       business: null,
+      configurationIssue: null,
       settings: null,
       ready: false,
       summary: { pending: 0, completed: 0, failed: 0 },
@@ -30,7 +50,7 @@ export async function getPaymentsPage(userId: string) {
   }
 
   const [stored, grouped, recent] = await Promise.all([
-    ensurePaymentSettings(business.id),
+    prisma.paymentSettings.findUnique({ where: { businessId: business.id } }),
     prisma.paymentSession.groupBy({
       by: ["status"],
       where: { businessId: business.id },
@@ -52,12 +72,29 @@ export async function getPaymentsPage(userId: string) {
       },
     }),
   ]);
-  const settings = decryptPaymentSettings(stored);
+  const rawSettings = stored ?? {
+    businessId: business.id,
+    secretKey: null,
+    webhookToken: null,
+    isActive: false,
+    testMode: true,
+  };
+  let configurationIssue: string | null = null;
+  let settings;
+  try {
+    settings = decryptPaymentSettings(rawSettings);
+  } catch {
+    configurationIssue =
+      "Credential payment tidak dapat dibaca. Isi ulang Xendit secret key dan webhook verification token.";
+    settings = { ...rawSettings, secretKey: null, webhookToken: null, isActive: false };
+    console.error("payment_credentials_decrypt_failed", { businessId: business.id });
+  }
   const count = (status: PaymentSessionStatus) =>
     grouped.find((item) => item.status === status)?._count._all ?? 0;
 
   return {
     business,
+    configurationIssue,
     settings: {
       isActive: settings.isActive,
       testMode: settings.testMode,
@@ -83,14 +120,33 @@ export async function getPaymentsPage(userId: string) {
 export async function updatePaymentSettings(userId: string, input: PaymentSettingsInput) {
   const business = await requireBusinessForUser(userId);
   const stored = await ensurePaymentSettings(business.id);
-  const existing = decryptPaymentSettings(stored);
-  const secretKey = mergeSecret(existing.secretKey, input.secretKey);
-  const webhookToken = mergeSecret(existing.webhookToken, input.webhookToken);
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptPaymentSettings(stored),
+    { ...stored, secretKey: null, webhookToken: null, isActive: false },
+  );
+  const existing = credentialSnapshot.value;
+  const incomingSecretKey = cleanCredential(input.secretKey);
+  const incomingWebhookToken = cleanCredential(input.webhookToken);
+
+  requireCompleteCredentialReplacement(
+    credentialSnapshot.recoveryRequired,
+    [incomingSecretKey, incomingWebhookToken],
+    "Credential payment lama tidak dapat dibaca. Isi ulang Xendit secret key dan webhook verification token.",
+  );
+
+  const secretKey = mergeSecret(existing.secretKey, incomingSecretKey);
+  const webhookToken = mergeSecret(existing.webhookToken, incomingWebhookToken);
   if (secretKey && secretKey.length < 20) {
     throw new Error("Xendit secret key terlihat tidak valid.");
   }
+  if (secretKey && secretKey.length > 4_096) {
+    throw new Error("Xendit secret key terlalu panjang.");
+  }
   if (webhookToken && webhookToken.length < 16) {
     throw new Error("Webhook verification token minimal 16 karakter.");
+  }
+  if (webhookToken && webhookToken.length > 4_096) {
+    throw new Error("Webhook verification token terlalu panjang.");
   }
 
   const ready = Boolean(secretKey && webhookToken);
@@ -496,8 +552,12 @@ function buildReturnUrls() {
 }
 
 function mergeSecret(existing: string | null, incoming?: string | null) {
-  const value = incoming?.trim();
-  return value ? value : existing;
+  return incoming ?? existing;
+}
+
+function cleanCredential(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function detectXenditTestMode(secretKey: string | null) {

@@ -3,6 +3,7 @@ import {
   Prisma,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { mapKeyedSequential } from "@/lib/keyed-concurrency";
 import { extractExpenseFromTextAi } from "@/server/ai/expense-extractor";
 import { detectIntentFromText, extractExpenseFromText } from "@/server/ai/intent";
 import {
@@ -44,8 +45,11 @@ export async function processIncomingWhatsAppWebhook(payload: WhatsAppWebhookPay
     };
   }
 
-  const processedMessages = await mapWithConcurrency(messages, 4, (message) =>
-    processIncomingMessage(message),
+  const processedMessages = await mapKeyedSequential(
+    messages,
+    4,
+    whatsAppOrderingKey,
+    (message) => processIncomingMessage(message),
   );
 
   return {
@@ -74,7 +78,7 @@ export async function processQueuedWhatsAppWebhook(payload: unknown, businessId:
 
   const deliveryStatuses = await applyWhatsAppDeliveryStatuses(webhook, businessId);
   const processedMessages = expectedBusiness
-    ? await mapWithConcurrency(messages, 4, (message) => {
+    ? await mapKeyedSequential(messages, 4, whatsAppOrderingKey, (message) => {
         const configuredPhoneNumberId = expectedBusiness.whatsAppSettings?.phoneNumberId;
         if (!configuredPhoneNumberId || !message.businessIdentifiers.includes(configuredPhoneNumberId)) {
           throw new Error("WhatsApp message destination does not match the queued workspace.");
@@ -499,28 +503,9 @@ function buildMessageResult(
   };
 }
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-) {
-  if (items.length === 0) return [] as R[];
-
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  const workers = Array.from(
-    { length: Math.min(items.length, Math.max(1, concurrency)) },
-    async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        results[index] = await worker(items[index], index);
-      }
-    },
-  );
-
-  await Promise.all(workers);
-  return results;
+function whatsAppOrderingKey(message: ExtractedWhatsAppMessage) {
+  const destination = [...message.businessIdentifiers].sort().join(",") || "unknown";
+  return `${destination}\0${message.from || "unknown"}`;
 }
 
 function toJsonValue(value: unknown) {

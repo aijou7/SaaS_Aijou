@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { getPasswordVersion } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
@@ -74,12 +75,37 @@ export async function getSession() {
     select: {
       id: true,
       email: true,
+      emailVerifiedAt: true,
       passwordHash: true,
+      status: true,
+      lastSeenAt: true,
     },
   });
 
-  if (!user || !safeEqual(payload.passwordVersion, getPasswordVersion(user.passwordHash))) {
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    !user.emailVerifiedAt ||
+    !safeEqual(payload.passwordVersion, getPasswordVersion(user.passwordHash))
+  ) {
     return null;
+  }
+
+  if (!user.lastSeenAt || user.lastSeenAt.getTime() < Date.now() - 5 * 60_000) {
+    const staleBefore = new Date(Date.now() - 5 * 60_000);
+    after(async () => {
+      try {
+        await prisma.user.updateMany({
+          where: {
+            id: user.id,
+            OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: staleBefore } }],
+          },
+          data: { lastSeenAt: new Date() },
+        });
+      } catch {
+        console.error("session_last_seen_update_failed", { userId: user.id });
+      }
+    });
   }
 
   return {

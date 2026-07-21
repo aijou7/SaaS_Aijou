@@ -12,6 +12,40 @@ enum UserRole {
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETION_PENDING
+  PURGING
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+enum FeedbackCategory {
+  BUG
+  IDEA
+  CONFUSING
+  SUPPORT
+  OTHER
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 enum ContactType {
   OWNER
   CUSTOMER
@@ -127,18 +161,35 @@ enum BackgroundJobStatus {
 }
 
 model User {
-  id              String        @id @default(cuid())
-  name            String
-  email           String        @unique
-  passwordHash    String
-  phoneNumber     String?
-  role            UserRole      @default(OWNER)
-  isPlatformAdmin Boolean       @default(false)
-  businesses      Business[]
-  transactions    Transaction[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                    String                 @id @default(cuid())
+  name                  String
+  email                 String                 @unique
+  passwordHash          String
+  phoneNumber           String?
+  role                  UserRole               @default(OWNER)
+  status                UserStatus             @default(ACTIVE)
+  isPlatformAdmin       Boolean                @default(false)
+  emailVerifiedAt       DateTime?
+  lastLoginAt           DateTime?
+  lastSeenAt            DateTime?
+  signupSource          String                 @default("PUBLIC")
+  signupAttribution     Json?
+  suspendedAt           DateTime?
+  deletionRequestedAt   DateTime?
+  businesses            Business[]
+  memberships           WorkspaceMembership[]
+  authTokens            AuthToken[]
+  feedback              Feedback[]
+  teamInvitesCreated    TeamInvite[]           @relation("TeamInviteCreator")
+  teamInvitesAccepted   TeamInvite[]           @relation("TeamInviteAcceptor")
+  assignedConversations WhatsAppConversation[] @relation("ConversationAssignee")
+  sentMessages          WhatsAppMessage[]      @relation("MessageHumanSender")
+  transactions          Transaction[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
+  @@index([status, createdAt])
+  @@index([lastSeenAt])
   @@map("users")
 }
 
@@ -152,6 +203,8 @@ model Business {
   operatingHours       String?
   mainServices         String?
   websiteUrl           String?
+  widgetAllowedOrigin  String?
+  widgetLastSeenAt     DateTime?
   widgetKey            String                 @unique @default(cuid())
   address              String?
   onboardingCompleted  Boolean                @default(false)
@@ -177,11 +230,16 @@ model Business {
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
   telegramSettings     TelegramSettings?
+  memberships          WorkspaceMembership[]
+  teamInvites          TeamInvite[]
+  feedback             Feedback[]
+  activationEvents     ActivationEvent[]
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
   @@unique([userId])
   @@index([websiteUrl])
+  @@index([widgetAllowedOrigin])
   @@map("businesses")
 }
 
@@ -214,8 +272,10 @@ model WhatsAppConversation {
   sessionExpiresAt     DateTime?
   lastCustomerMessageAt DateTime?
   unreadCount          Int                   @default(0)
+  assignedToUserId     String?
   business             Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
   contact              Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignedToUser       User?                 @relation("ConversationAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   messages             WhatsAppMessage[]
   transactions         Transaction[]
   confirmationSessions ConfirmationSession[]
@@ -229,6 +289,7 @@ model WhatsAppConversation {
   @@index([businessId, status, lastMessageAt])
   @@index([businessId, conversationType, lastMessageAt])
   @@index([businessId, channel, sessionExpiresAt])
+  @@index([businessId, assignedToUserId, status])
   @@map("whatsapp_conversations")
 }
 
@@ -246,8 +307,10 @@ model WhatsAppMessage {
   deliveryStatus    String               @default("STORED")
   deliveryError     String?
   deliveredAt       DateTime?
+  sentByUserId      String?
   conversation      WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   mediaFile         MediaFile?           @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+  sentByUser        User?                @relation("MessageHumanSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
   aiLogs            AiLog[]
   createdAt         DateTime             @default(now())
 
@@ -431,7 +494,7 @@ model AgentSettings {
   businessDescription String?
   handoffRules        String?
   systemInstruction   String?
-  isActive            Boolean  @default(true)
+  isActive            Boolean  @default(false)
   business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -615,6 +678,111 @@ model SignupRateLimit {
 
   @@index([expiresAt])
   @@map("signup_rate_limits")
+}
+
+/// Durable, privacy-preserving counters for authentication and public API
+/// abuse protection across multiple serverless instances.
+model SecurityRateLimit {
+  keyHash         String   @id
+  scope           String
+  count           Int      @default(0)
+  windowStartedAt DateTime @default(now())
+  expiresAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([scope, expiresAt])
+  @@index([expiresAt])
+  @@map("security_rate_limits")
+}
+
+model AuthToken {
+  id        String           @id @default(cuid())
+  userId    String
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, purpose, createdAt])
+  @@index([expiresAt, usedAt])
+  @@map("auth_tokens")
+}
+
+model WorkspaceMembership {
+  id         String        @id @default(cuid())
+  businessId String
+  userId     String
+  role       WorkspaceRole @default(AGENT)
+  isActive   Boolean       @default(true)
+  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([businessId, userId])
+  @@index([userId, isActive])
+  @@index([businessId, role, isActive])
+  @@map("workspace_memberships")
+}
+
+model TeamInvite {
+  id           String        @id @default(cuid())
+  businessId   String
+  email        String
+  role         WorkspaceRole @default(AGENT)
+  tokenHash    String        @unique
+  createdById  String
+  acceptedById String?
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  revokedAt    DateTime?
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("TeamInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  acceptedBy   User?         @relation("TeamInviteAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([businessId, createdAt])
+  @@index([email, expiresAt])
+  @@map("team_invites")
+}
+
+model Feedback {
+  id            String           @id @default(cuid())
+  businessId    String
+  submittedById String
+  category      FeedbackCategory
+  status        FeedbackStatus   @default(OPEN)
+  title         String
+  message       String
+  rating        Int?
+  pageUrl       String?
+  userAgent     String?
+  adminResponse String?
+  resolvedAt    DateTime?
+  business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  submittedBy   User             @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([businessId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("feedback")
+}
+
+model ActivationEvent {
+  id         String   @id @default(cuid())
+  businessId String
+  type       String
+  metadata   Json?
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, type])
+  @@index([type, createdAt])
+  @@map("activation_events")
 }
 
 model BackgroundJob {

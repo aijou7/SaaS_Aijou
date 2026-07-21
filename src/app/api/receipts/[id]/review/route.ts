@@ -60,8 +60,19 @@ export async function PATCH(request: NextRequest, context: ReceiptReviewRouteCon
       );
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to review receipt." },
+      { error: safeReceiptReviewError(error) },
       { status: 400, headers: noStoreHeaders },
     );
   }
+}
+
+function safeReceiptReviewError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "Nominal receipt harus lebih dari 0.",
+    "Receipt tidak ditemukan.",
+    "Tanggal receipt wajib diisi.",
+  ].includes(message)
+    ? message
+    : "Unable to review receipt.";
 }

@@ -7,14 +7,30 @@ export async function getIntegrationWorkspaceSummary(userId: string, includeWebS
       select: {
         businessName: true,
         websiteUrl: true,
+        widgetLastSeenAt: true,
         widgetKey: true,
+        conversations: {
+          where: {
+            channel: "WEB_CHAT",
+            messages: { some: { senderType: "CUSTOMER" } },
+          },
+          orderBy: { lastMessageAt: "desc" },
+          take: 1,
+          select: { lastMessageAt: true, createdAt: true },
+        },
       },
     });
+    const detectedConversation = business?.conversations[0];
 
     return {
       businessName: business?.businessName ?? null,
       websiteUrl: business?.websiteUrl ?? null,
       widgetKey: business?.widgetKey ?? null,
+      webChatDetectedAt:
+        business?.widgetLastSeenAt ??
+        detectedConversation?.lastMessageAt ??
+        detectedConversation?.createdAt ??
+        null,
     };
   }
 
@@ -27,5 +43,6 @@ export async function getIntegrationWorkspaceSummary(userId: string, includeWebS
     businessName: business?.businessName ?? null,
     websiteUrl: null,
     widgetKey: null,
+    webChatDetectedAt: null,
   };
 }

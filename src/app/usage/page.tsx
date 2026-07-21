@@ -1,4 +1,4 @@
-import { Activity, Bot, CreditCard, MessageCircle, RadioTower, RefreshCcw } from "lucide-react";
+import { Activity, Bot, CircleDollarSign, Clock3, CreditCard, MessageCircle, RadioTower, RefreshCcw } from "lucide-react";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -18,6 +18,9 @@ export default async function UsagePage() {
     { title: "AI runs", metric: usage.aiRequests, helper: "Reply, lead summary, dan proposal", icon: Bot },
     { title: "Automation jobs", metric: usage.automationRuns, helper: "Background workflow yang dijadwalkan", icon: RefreshCcw },
     { title: "Payment sessions", metric: usage.paymentSessions, helper: "Hosted checkout yang dibuat", icon: CreditCard },
+    { title: "Token AI", metric: usage.inputTokens + usage.outputTokens, helper: `${usage.instrumentedAiRequests} request terinstrumentasi`, icon: Bot },
+    { title: "Latency AI", metric: `${usage.averageLatencyMs} ms`, helper: `${usage.aiFailures} request gagal`, icon: Clock3 },
+    { title: "Estimasi biaya AI", metric: `$${usage.estimatedCostUsd.toFixed(4)}`, helper: "Berdasarkan rate environment provider", icon: CircleDollarSign },
   ];
 
   return (
@@ -29,7 +32,9 @@ export default async function UsagePage() {
             <h1>Penggunaan workspace</h1>
             <p>Angka di bawah dibaca langsung dari aktivitas workspace, bukan data contoh.</p>
           </div>
-          <span className="status">Private beta · tanpa hard limit</span>
+          <span className={usage.spendAlert ? "status status-warning" : "status"}>
+            {usage.spendAlert ? "Perlu cek biaya AI" : "Private beta · tanpa hard limit kecil"}
+          </span>
         </div>
         <div className="usage-plan-card">
           <div className="usage-plan-header">
@@ -48,7 +53,7 @@ export default async function UsagePage() {
                     <Icon size={18} aria-hidden="true" />
                   </div>
                   <div className="usage-metric">
-                    <strong>{section.metric.toLocaleString("id-ID")}</strong>
+                    <strong>{typeof section.metric === "number" ? section.metric.toLocaleString("id-ID") : section.metric}</strong>
                     <small>{section.helper}</small>
                   </div>
                   <p className="usage-reset">Tidak ada quota kecil yang memotong kebutuhan chat tester.</p>

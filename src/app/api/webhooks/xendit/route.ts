@@ -28,9 +28,14 @@ export async function POST(request: NextRequest) {
     if (error instanceof RequestBodyTooLargeError) {
       return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
     }
-    const message = error instanceof Error ? error.message : "invalid_webhook";
+    console.error("xendit_webhook_failed", {
+      code:
+        error && typeof error === "object" && "code" in error && typeof error.code === "string"
+          ? error.code.slice(0, 48)
+          : "unknown",
+    });
     return NextResponse.json(
-      { error: message },
+      { error: "invalid_webhook" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }

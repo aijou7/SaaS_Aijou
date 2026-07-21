@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { clearSessionCookie, getSession } from "@/lib/session";
+import {
+  AccountLifecycleError,
+  cancelAccountDeletion,
+  requestAccountDeletion,
+} from "@/server/auth/account-lifecycle";
 
 export async function updateAccountProfileAction(formData: FormData) {
   const session = await getSession();
@@ -66,6 +71,30 @@ export async function changePasswordAction(formData: FormData) {
 
   await clearSessionCookie();
   redirect("/login?passwordChanged=1");
+}
+
+export async function requestAccountDeletionAction(formData: FormData) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  const password = String(formData.get("password") ?? "");
+  try {
+    await requestAccountDeletion(session.userId, password);
+  } catch (error) {
+    const code = error instanceof AccountLifecycleError ? error.code.toLowerCase() : "failed";
+    redirect(`/account?deleteError=${encodeURIComponent(code)}`);
+  }
+
+  await clearSessionCookie();
+  redirect("/login?deletionScheduled=1");
+}
+
+export async function cancelAccountDeletionAction() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  await cancelAccountDeletion(session.userId);
+  redirect("/account?deletionCancelled=1");
 }
 
 function normalizeOwnerPhone(value: string) {

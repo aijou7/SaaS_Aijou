@@ -1,6 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
+import {
+  readCredentialSnapshot,
+  requireCompleteCredentialReplacement,
+} from "@/server/integrations/credential-recovery";
 
 export type WhatsAppSettingsInput = {
   phoneNumberId?: string | null;
@@ -17,17 +21,44 @@ export async function getWhatsAppSettingsPage(userId: string) {
   if (!business) {
     return {
       business: null,
+      configurationIssue: null,
       settings: null,
       ready: false,
     };
   }
 
-  const stored = await ensureWhatsAppSettings(business.id);
-  const settings = decryptStoredSettings(stored);
-  const ready = isSettingsReady(settings);
+  const stored = await prisma.whatsAppSettings.findUnique({ where: { businessId: business.id } });
+  const rawSettings = stored ?? {
+    businessId: business.id,
+    phoneNumberId: null,
+    accessToken: null,
+    verifyToken: null,
+    appSecret: null,
+    webhookUrl: null,
+    isActive: false,
+    lastConnectedAt: null,
+  };
+  let configurationIssue: string | null = null;
+  let settings;
+  try {
+    settings = decryptStoredSettings(rawSettings);
+  } catch {
+    configurationIssue =
+      "Credential WhatsApp tidak dapat dibaca. Isi ulang Phone Number ID, access token, verify token, dan app secret.";
+    settings = {
+      ...rawSettings,
+      accessToken: null,
+      verifyToken: null,
+      appSecret: null,
+      isActive: false,
+    };
+    console.error("whatsapp_credentials_decrypt_failed", { businessId: business.id });
+  }
+  const ready = !configurationIssue && isSettingsReady(settings);
 
   return {
     business,
+    configurationIssue,
     settings: {
       phoneNumberId: settings.phoneNumberId,
       webhookUrl: settings.webhookUrl,
@@ -45,19 +76,43 @@ export async function getWhatsAppSettingsPage(userId: string) {
 export async function updateWhatsAppSettings(userId: string, input: WhatsAppSettingsInput) {
   const business = await requireBusinessForUser(userId);
   const stored = await ensureWhatsAppSettings(business.id);
-  const existing = decryptStoredSettings(stored);
-
-  const nextAccessToken = mergeSecret(existing.accessToken, input.accessToken, "access token");
-  const nextVerifyToken = mergeSecret(existing.verifyToken, input.verifyToken, "verify token");
-  const nextAppSecret = mergeSecret(existing.appSecret, input.appSecret, "app secret");
+  const credentialSnapshot = readCredentialSnapshot(
+    () => decryptStoredSettings(stored),
+    {
+      ...stored,
+      accessToken: null,
+      verifyToken: null,
+      appSecret: null,
+      isActive: false,
+      lastConnectedAt: null,
+    },
+  );
+  const existing = credentialSnapshot.value;
   const nextPhoneNumberId = cleanOptional(input.phoneNumberId);
   const nextWebhookUrl = cleanOptional(input.webhookUrl);
+  const incomingAccessToken = cleanOptional(input.accessToken);
+  const incomingVerifyToken = cleanOptional(input.verifyToken);
+  const incomingAppSecret = cleanOptional(input.appSecret);
+
+  requireCompleteCredentialReplacement(
+    credentialSnapshot.recoveryRequired,
+    [nextPhoneNumberId, incomingAccessToken, incomingVerifyToken, incomingAppSecret],
+    "Credential WhatsApp lama tidak dapat dibaca. Isi ulang Phone Number ID, access token, verify token, dan app secret.",
+  );
+
+  const nextAccessToken = mergeSecret(existing.accessToken, incomingAccessToken, "access token");
+  const nextVerifyToken = mergeSecret(existing.verifyToken, incomingVerifyToken, "verify token");
+  const nextAppSecret = mergeSecret(existing.appSecret, incomingAppSecret, "app secret");
 
   if (nextPhoneNumberId && !/^\d{5,32}$/.test(nextPhoneNumberId)) {
     throw new Error("Phone Number ID harus berupa angka yang valid.");
   }
 
   if (nextWebhookUrl) validateWebhookUrl(nextWebhookUrl);
+
+  if (nextAccessToken && nextAccessToken.length < 20) {
+    throw new Error("Access token WhatsApp terlihat tidak valid.");
+  }
 
   if (nextVerifyToken && nextVerifyToken.length < 16) {
     throw new Error("Verify token minimal 16 karakter agar tidak mudah ditebak.");
@@ -78,7 +133,12 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
       appSecret: encryptSecret(nextAppSecret, secretContext(business.id, "appSecret")),
       webhookUrl: nextWebhookUrl,
       isActive: Boolean(input.isActive && ready),
-      lastConnectedAt: input.isActive && ready ? new Date() : existing.lastConnectedAt,
+      lastConnectedAt:
+        input.isActive && ready
+          ? new Date()
+          : credentialSnapshot.recoveryRequired
+            ? null
+            : existing.lastConnectedAt,
     },
   });
 }
@@ -184,8 +244,26 @@ export async function findWhatsAppSettingsByIdentifier(identifiers: string[]) {
 }
 
 export async function getWhatsAppReadinessForBusiness(businessId: string) {
-  const stored = await ensureWhatsAppSettings(businessId);
-  const settings = decryptStoredSettings(stored);
+  const stored = await prisma.whatsAppSettings.findUnique({ where: { businessId } });
+  if (!stored) {
+    return {
+      ready: false,
+      source: "not_configured",
+      checks: { accessToken: false, verifyToken: false, phoneNumberId: false, appSecret: false },
+    };
+  }
+
+  let settings;
+  try {
+    settings = decryptStoredSettings(stored);
+  } catch {
+    console.error("whatsapp_credentials_decrypt_failed", { businessId });
+    return {
+      ready: false,
+      source: "credential_error",
+      checks: { accessToken: false, verifyToken: false, phoneNumberId: Boolean(stored.phoneNumberId), appSecret: false },
+    };
+  }
 
   return {
     ready: isSettingsReady(settings),

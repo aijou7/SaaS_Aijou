@@ -5,7 +5,20 @@ import {
   TransactionStatus,
   TransactionType,
 } from "@/generated/prisma-beta/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+
+type DashboardAggregateRow = {
+  totalThisMonth: string;
+  receiptReviewCount: number;
+  confirmedCount: number;
+  humanNeededCount: number;
+  customerConversationCount: number;
+  pendingTransactionCount: number;
+  newLeadCount: number;
+  unreadConversationCount: number;
+  hotLeadCount: number;
+  dueFollowUpCount: number;
+};
 
 export async function getFinanceDashboardSnapshot(userId: string) {
   const business = await prisma.business.findFirst({
@@ -13,12 +26,14 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     select: {
       id: true,
       businessName: true,
+      onboardingCompleted: true,
     },
   });
 
   if (!business) {
     return {
       businessName: null,
+      onboardingCompleted: false,
       totalThisMonth: 0,
       receiptReviewCount: 0,
       confirmedCount: 0,
@@ -38,91 +53,77 @@ export async function getFinanceDashboardSnapshot(userId: string) {
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
   const followUpDueAt = new Date();
-  const [
-    totalThisMonth,
-    receiptReviewCount,
-    confirmedCount,
-    humanNeededCount,
-    customerConversationCount,
-    pendingTransactionCount,
-    newLeadCount,
-    unreadConversationCount,
-    hotLeadCount,
-    dueFollowUpCount,
-    latestAiActions,
-    recentTransactions,
-  ] = await Promise.all([
-    prisma.transaction.aggregate({
-      where: {
-        businessId: business.id,
-        transactionType: TransactionType.INCOME,
-        status: TransactionStatus.CONFIRMED,
-        transactionDate: {
-          gte: startOfMonth,
-        },
-      },
-      _sum: {
-        totalAmount: true,
-      },
-    }),
-    prisma.transaction.count({
-      where: {
-        businessId: business.id,
-        status: TransactionStatus.NEEDS_REVIEW,
-      },
-    }),
-    prisma.transaction.count({
-      where: {
-        businessId: business.id,
-        transactionType: TransactionType.INCOME,
-        status: TransactionStatus.CONFIRMED,
-      },
-    }),
-    prisma.whatsAppConversation.count({
-      where: {
-        businessId: business.id,
-        status: ConversationStatus.HUMAN_NEEDED,
-      },
-    }),
-    prisma.whatsAppConversation.count({
-      where: {
-        businessId: business.id,
-        conversationType: ConversationType.CUSTOMER_SERVICE,
-      },
-    }),
-    prisma.transaction.count({
-      where: {
-        businessId: business.id,
-        status: TransactionStatus.PENDING_CONFIRMATION,
-      },
-    }),
-    prisma.lead.count({
-      where: {
-        businessId: business.id,
-        status: LeadStatus.NEW,
-      },
-    }),
-    prisma.whatsAppConversation.count({
-      where: {
-        businessId: business.id,
-        conversationType: ConversationType.CUSTOMER_SERVICE,
-        unreadCount: { gt: 0 },
-      },
-    }),
-    prisma.lead.count({
-      where: {
-        businessId: business.id,
-        qualificationScore: { gte: 70 },
-        status: { notIn: [LeadStatus.WON, LeadStatus.LOST, LeadStatus.CLOSED, LeadStatus.SPAM] },
-      },
-    }),
-    prisma.lead.count({
-      where: {
-        businessId: business.id,
-        nextFollowUpAt: { lte: followUpDueAt },
-        status: { notIn: [LeadStatus.WON, LeadStatus.LOST, LeadStatus.CLOSED, LeadStatus.SPAM] },
-      },
-    }),
+  const [aggregateRows, latestAiActions, recentTransactions] = await Promise.all([
+    withDatabaseRawReadRetry(() => prisma.$queryRaw<DashboardAggregateRow[]>`
+      WITH transaction_stats AS (
+        SELECT
+          COALESCE(
+            SUM("totalAmount") FILTER (
+              WHERE "transactionType" = ${TransactionType.INCOME}::"TransactionType"
+                AND "status" = ${TransactionStatus.CONFIRMED}::"TransactionStatus"
+                AND "transactionDate" >= ${startOfMonth}
+            ),
+            0
+          )::text AS "totalThisMonth",
+          COUNT(*) FILTER (
+            WHERE "status" = ${TransactionStatus.NEEDS_REVIEW}::"TransactionStatus"
+          )::double precision AS "receiptReviewCount",
+          COUNT(*) FILTER (
+            WHERE "transactionType" = ${TransactionType.INCOME}::"TransactionType"
+              AND "status" = ${TransactionStatus.CONFIRMED}::"TransactionStatus"
+          )::double precision AS "confirmedCount",
+          COUNT(*) FILTER (
+            WHERE "status" = ${TransactionStatus.PENDING_CONFIRMATION}::"TransactionStatus"
+          )::double precision AS "pendingTransactionCount"
+        FROM "transactions"
+        WHERE "businessId" = ${business.id}
+      ),
+      conversation_stats AS (
+        SELECT
+          COUNT(*) FILTER (
+            WHERE "status" = ${ConversationStatus.HUMAN_NEEDED}::"ConversationStatus"
+          )::double precision AS "humanNeededCount",
+          COUNT(*) FILTER (
+            WHERE "conversationType" = ${ConversationType.CUSTOMER_SERVICE}::"ConversationType"
+          )::double precision AS "customerConversationCount",
+          COUNT(*) FILTER (
+            WHERE "conversationType" = ${ConversationType.CUSTOMER_SERVICE}::"ConversationType"
+              AND "unreadCount" > 0
+          )::double precision AS "unreadConversationCount"
+        FROM "whatsapp_conversations"
+        WHERE "businessId" = ${business.id}
+      ),
+      lead_stats AS (
+        SELECT
+          COUNT(*) FILTER (
+            WHERE "status" = ${LeadStatus.NEW}::"LeadStatus"
+          )::double precision AS "newLeadCount",
+          COUNT(*) FILTER (
+            WHERE "qualificationScore" >= 70
+              AND "status" NOT IN (
+                ${LeadStatus.WON}::"LeadStatus",
+                ${LeadStatus.LOST}::"LeadStatus",
+                ${LeadStatus.CLOSED}::"LeadStatus",
+                ${LeadStatus.SPAM}::"LeadStatus"
+              )
+          )::double precision AS "hotLeadCount",
+          COUNT(*) FILTER (
+            WHERE "nextFollowUpAt" <= ${followUpDueAt}
+              AND "status" NOT IN (
+                ${LeadStatus.WON}::"LeadStatus",
+                ${LeadStatus.LOST}::"LeadStatus",
+                ${LeadStatus.CLOSED}::"LeadStatus",
+                ${LeadStatus.SPAM}::"LeadStatus"
+              )
+          )::double precision AS "dueFollowUpCount"
+        FROM "leads"
+        WHERE "businessId" = ${business.id}
+      )
+      SELECT *
+      FROM transaction_stats
+      CROSS JOIN conversation_stats
+      CROSS JOIN lead_stats
+    `),
     prisma.aiLog.findMany({
       where: { businessId: business.id },
       orderBy: { createdAt: "desc" },
@@ -166,19 +167,25 @@ export async function getFinanceDashboardSnapshot(userId: string) {
       },
     }),
   ]);
+  const aggregate = aggregateRows[0];
+
+  if (!aggregate) {
+    throw new Error("Dashboard aggregate query returned no result.");
+  }
 
   return {
     businessName: business.businessName,
-    totalThisMonth: Number(totalThisMonth._sum.totalAmount ?? 0),
-    receiptReviewCount,
-    confirmedCount,
-    humanNeededCount,
-    customerConversationCount,
-    pendingTransactionCount,
-    newLeadCount,
-    unreadConversationCount,
-    hotLeadCount,
-    dueFollowUpCount,
+    onboardingCompleted: business.onboardingCompleted,
+    totalThisMonth: Number(aggregate.totalThisMonth),
+    receiptReviewCount: aggregate.receiptReviewCount,
+    confirmedCount: aggregate.confirmedCount,
+    humanNeededCount: aggregate.humanNeededCount,
+    customerConversationCount: aggregate.customerConversationCount,
+    pendingTransactionCount: aggregate.pendingTransactionCount,
+    newLeadCount: aggregate.newLeadCount,
+    unreadConversationCount: aggregate.unreadConversationCount,
+    hotLeadCount: aggregate.hotLeadCount,
+    dueFollowUpCount: aggregate.dueFollowUpCount,
     latestAiActions: latestAiActions.map((action) => ({
       id: action.id,
       actionTaken: action.actionTaken ?? "-",

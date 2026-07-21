@@ -1,8 +1,10 @@
-import { KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
+import { KeyRound, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   changePasswordAction,
+  cancelAccountDeletionAction,
+  requestAccountDeletionAction,
   updateAccountProfileAction,
 } from "@/app/account/actions";
 import { AppShell } from "@/components/app-shell";
@@ -10,7 +12,12 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
 type AccountPageProps = {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    saved?: string;
+    deleteError?: string;
+    deletionCancelled?: string;
+  }>;
 };
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
@@ -21,7 +28,15 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     searchParams,
     prisma.user.findUnique({
       where: { id: session.userId },
-      select: { name: true, email: true, phoneNumber: true, role: true, isPlatformAdmin: true },
+      select: {
+        name: true,
+        email: true,
+        phoneNumber: true,
+        role: true,
+        status: true,
+        deletionRequestedAt: true,
+        isPlatformAdmin: true,
+      },
     }),
     prisma.business.findFirst({
       where: { userId: session.userId },
@@ -136,8 +151,78 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </form>
         </div>
       </section>
+
+      <section className="section">
+        <div className="card">
+          <div className="section-title-row">
+            <div>
+              <p className="eyebrow">Privasi & data</p>
+              <h2>Export atau hapus akun</h2>
+            </div>
+            <Trash2 size={24} aria-hidden="true" />
+          </div>
+          <p className="muted">
+            Download konfigurasi workspace kapan saja. Penghapusan akun memakai masa tunggu 7 hari
+            agar masih dapat dibatalkan jika berubah pikiran.
+          </p>
+          <div className="quick-actions">
+            <a className="ghost-button" href="/api/account/export" download>
+              Download data akun
+            </a>
+          </div>
+
+          {params.deletionCancelled === "1" ? (
+            <div className="settings-note" role="status">Penghapusan akun dibatalkan.</div>
+          ) : null}
+          {params.deleteError ? (
+            <div className="settings-note" role="alert">
+              {formatDeletionError(params.deleteError)}
+            </div>
+          ) : null}
+
+          {user.status === "DELETION_PENDING" ? (
+            <div className="settings-note" role="alert">
+              <strong>Akun dijadwalkan untuk dihapus</strong>
+              <p>
+                Permintaan dibuat {user.deletionRequestedAt?.toLocaleString("id-ID") ?? "baru saja"}.
+                Batalkan sebelum masa tunggu selesai untuk mempertahankan data.
+              </p>
+              <form action={cancelAccountDeletionAction}>
+                <button className="ghost-button" type="submit">Batalkan penghapusan</button>
+              </form>
+            </div>
+          ) : (
+            <form className="form-grid" action={requestAccountDeletionAction}>
+              <label className="span-2">
+                Konfirmasi password untuk menjadwalkan penghapusan
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  maxLength={128}
+                  required
+                />
+              </label>
+              <button className="danger-button span-2" type="submit">
+                Jadwalkan hapus akun
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
     </AppShell>
   );
+}
+
+function formatDeletionError(value: string) {
+  const messages: Record<string, string> = {
+    invalid_password: "Password tidak cocok.",
+    platform_admin: "Lepaskan akses platform admin sebelum menghapus akun.",
+    workspace_has_members:
+      "Pindahkan kepemilikan atau nonaktifkan anggota tim sebelum menghapus akun owner.",
+    failed: "Permintaan penghapusan belum berhasil. Coba lagi.",
+  };
+  return messages[value] ?? messages.failed;
 }
 
 function formatPasswordError(value: string) {

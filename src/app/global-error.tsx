@@ -1,6 +1,23 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  claimAutomaticRecovery,
+  getErrorDigest,
+  sanitizeRuntimePath,
+} from "@/lib/runtime-errors";
+
+function subscribeToPathname() {
+  return () => undefined;
+}
+
+function getBrowserPathname() {
+  return sanitizeRuntimePath(window.location.pathname);
+}
+
+function getServerPathname() {
+  return "/unknown";
+}
 
 export default function GlobalError({
   error,
@@ -9,9 +26,46 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const reference = getErrorDigest(error);
+  const pathname = useSyncExternalStore(
+    subscribeToPathname,
+    getBrowserPathname,
+    getServerPathname,
+  );
+  const recoveryDecision = useRef<{ key: string; shouldRecover: boolean } | null>(null);
+
   useEffect(() => {
-    console.error("Aijou global error", { digest: error.digest ?? "unknown" });
-  }, [error]);
+    const decisionKey = `${pathname}:${reference}`;
+
+    if (recoveryDecision.current?.key !== decisionKey) {
+      let shouldRecover = false;
+      try {
+        shouldRecover = claimAutomaticRecovery(
+          window.sessionStorage,
+          pathname,
+          reference,
+        );
+      } catch {
+        shouldRecover = false;
+      }
+
+      recoveryDecision.current = { key: decisionKey, shouldRecover };
+      console.error("aijou.client.global_error", {
+        path: pathname,
+        recovery: shouldRecover ? "automatic" : "manual",
+        reference,
+      });
+    }
+
+    const shouldRecover = recoveryDecision.current?.shouldRecover ?? false;
+
+    if (!shouldRecover) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(reset, 700);
+    return () => window.clearTimeout(timeoutId);
+  }, [pathname, reference, reset]);
 
   return (
     <html lang="id">
@@ -45,6 +99,18 @@ export default function GlobalError({
             <h1 style={{ fontSize: 28, margin: "0 0 12px" }}>Aplikasi perlu dimuat ulang</h1>
             <p style={{ color: "#64748b", lineHeight: 1.6, margin: "0 0 22px" }}>
               Ada gangguan sementara saat membuka workspace. Data yang sudah tersimpan tidak hilang.
+            </p>
+            <p
+              style={{
+                color: "#64748b",
+                fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                fontSize: 12,
+                lineHeight: 1.6,
+                margin: "0 0 22px",
+                overflowWrap: "anywhere",
+              }}
+            >
+              Referensi: {reference} · Lokasi: {pathname}
             </p>
             <button
               type="button"

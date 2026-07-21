@@ -16,6 +16,7 @@ import {
   saveTelegramSettingsAction,
   testTelegramConnectionAction,
 } from "@/app/telegram/actions";
+import { WidgetSnippetCopy } from "@/app/integrations/widget-snippet-copy";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
@@ -67,6 +68,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const widgetKey = workspace?.widgetKey ?? "";
   const widgetSnippet = `<script src="${appUrl}/aijou-widget.js" data-workspace="${widgetKey}" defer></script>`;
+  const webChatDetected = Boolean(workspace?.webChatDetectedAt);
   const whatsAppWebhookUrl =
     whatsAppPage?.settings?.webhookUrl ?? `${appUrl}/api/webhooks/whatsapp`;
   const telegramFeedback = getTelegramFeedback(resolvedSearchParams);
@@ -136,8 +138,12 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <h2>Web Live Chat</h2>
                 <p className="muted">Sesi 24 jam otomatis masuk ke inbox serta lead pipeline.</p>
               </div>
-              <span className={workspace?.websiteUrl ? "status" : "status status-warning"}>
-                {workspace?.websiteUrl ? "Ready" : "Set domain dulu"}
+              <span className={webChatDetected ? "status" : "status status-warning"}>
+                {webChatDetected
+                  ? "Widget terdeteksi"
+                  : workspace?.websiteUrl
+                    ? "Menunggu tes"
+                    : "Set domain dulu"}
               </span>
             </div>
             <div className="env-list">
@@ -149,14 +155,38 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <code>Workspace key</code>
                 <span>{widgetKey || "Belum tersedia"}</span>
               </div>
+              <div className="env-row">
+                <code>Chat web terakhir</code>
+                <span>{formatWidgetDate(workspace?.webChatDetectedAt ?? null)}</span>
+              </div>
             </div>
-            <label className="span-2">
-              Embed sebelum penutup &lt;/body&gt;
-              <textarea value={widgetSnippet} readOnly rows={4} />
-            </label>
+            <WidgetSnippetCopy
+              snippet={widgetSnippet}
+              enabled={Boolean(workspace?.websiteUrl && widgetKey)}
+            />
+            {workspace?.websiteUrl && !webChatDetected ? (
+              <div className="settings-note" role="status">
+                <strong>Domain sudah diizinkan, widget belum terdeteksi</strong>
+                <p>
+                  Upload snippet ke website, buka halaman publiknya, lalu kirim satu pesan dari
+                  widget. Setelah pesan masuk ke inbox Aijou, muat ulang halaman ini.
+                </p>
+              </div>
+            ) : null}
             <div className="quick-actions">
               <Link className="ghost-button" href="/business">Atur domain website</Link>
-              <Link className="primary-button" href="/simulator">Tes agent</Link>
+              {workspace?.websiteUrl ? (
+                <a
+                  className="primary-button"
+                  href={workspace.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Buka website untuk tes
+                </a>
+              ) : (
+                <Link className="primary-button" href="/business">Simpan domain</Link>
+              )}
             </div>
           </section>
         ) : null}
@@ -179,6 +209,13 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               <div className="settings-note" role={telegramFeedback.isError ? "alert" : "status"}>
                 <strong>{telegramFeedback.title}</strong>
                 <p>{telegramFeedback.message}</p>
+              </div>
+            ) : null}
+
+            {telegramPage.configurationIssue ? (
+              <div className="settings-note" role="alert">
+                <strong>Credential perlu disimpan ulang</strong>
+                <p>{telegramPage.configurationIssue}</p>
               </div>
             ) : null}
 
@@ -232,6 +269,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   type="password"
                   autoComplete="off"
                   maxLength={256}
+                  required={Boolean(telegramPage.configurationIssue)}
                   spellCheck={false}
                   placeholder={
                     telegramPage.settings.configured
@@ -239,7 +277,11 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                       : "123456789:AA..."
                   }
                 />
-                <small>Kosongkan untuk mempertahankan token yang sudah tersimpan.</small>
+                <small>
+                  {telegramPage.configurationIssue
+                    ? "Masukkan token baru untuk mengganti credential yang tidak dapat dibaca."
+                    : "Kosongkan untuk mempertahankan token yang sudah tersimpan."}
+                </small>
               </label>
               <label className="span-2">
                 Webhook URL
@@ -318,10 +360,21 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 {whatsAppPage.ready ? "Connected" : "Draft"}
               </span>
             </div>
+            {whatsAppPage.configurationIssue ? (
+              <div className="settings-note" role="alert">
+                <strong>Credential perlu disimpan ulang</strong>
+                <p>{whatsAppPage.configurationIssue}</p>
+              </div>
+            ) : null}
             <form className="form-grid" action={updateWhatsAppSettingsAction}>
               <label>
                 Phone Number ID
-                <input name="phoneNumberId" type="text" defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""} />
+                <input
+                  name="phoneNumberId"
+                  type="text"
+                  defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
+                  required={Boolean(whatsAppPage.configurationIssue)}
+                />
               </label>
               <label>
                 Webhook URL
@@ -332,6 +385,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="accessToken"
                   type="password"
+                  maxLength={4096}
+                  required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.accessTokenMasked ?? "Not set"}`}
                 />
               </label>
@@ -340,6 +395,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="verifyToken"
                   type="password"
+                  maxLength={4096}
+                  required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.verifyTokenMasked ?? "Not set"}`}
                 />
               </label>
@@ -348,6 +405,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="appSecret"
                   type="password"
+                  maxLength={4096}
+                  required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.appSecretMasked ?? "Not set"}`}
                 />
               </label>
@@ -387,7 +446,8 @@ function getPlatformStatus(
   if (platform !== selectedPlatform) return "Tersedia";
   if (platform === "telegram") return pages.telegramPage?.readiness ? "Connected" : "Setup";
   if (platform === "whatsapp") return pages.whatsAppPage?.ready ? "Connected" : "Setup";
-  return pages.workspace?.websiteUrl ? "Ready" : "Setup";
+  if (pages.workspace?.webChatDetectedAt) return "Connected";
+  return pages.workspace?.websiteUrl ? "Needs test" : "Setup";
 }
 
 function getTelegramFeedback(searchParams: Record<string, string | string[] | undefined>) {
@@ -442,4 +502,12 @@ function formatTelegramDate(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatWidgetDate(value: Date | null) {
+  if (!value) return "Belum terdeteksi";
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
 }

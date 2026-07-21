@@ -53,7 +53,7 @@
   var greetingBubble = addBubble("agent", defaultGreeting);
 
   applyWidgetConfig(state);
-  if (state.pendingMessage && state.pendingMessage.text) {
+  if (state.pendingMessage && state.pendingMessage.text && !state.pendingMessage.awaitingReply) {
     input.value = state.pendingMessage.text;
   }
 
@@ -170,11 +170,19 @@
         })
       }, 25000);
     }).then(readJson).then(function (data) {
-      if (data.reply) addBubble("agent", data.reply);
-      delete state.pendingMessage;
-      persistState();
+      if (data.reply && (!data.replyId || !messages.querySelector('[data-id="' + cssEscape(data.replyId) + '"]'))) {
+        addBubble("agent", data.reply, data.replyId);
+      }
+      if (data.processing) {
+        if (state.pendingMessage && state.pendingMessage.id === retry.id) {
+          state.pendingMessage.awaitingReply = true;
+          persistState();
+        }
+      } else {
+        clearPendingMessage(retry.id);
+      }
       idlePollCount = 0;
-      if (panel.classList.contains("open")) startPolling();
+      if (panel.classList.contains("open")) startPolling(Boolean(data.processing));
     }).catch(function (error) {
       optimisticBubble.remove();
       showError(error);
@@ -191,7 +199,10 @@
     var pollStartedAt = new Date().toISOString();
     var includeHistory = !historyLoaded;
     var url = apiOrigin + "/api/web-chat?since=" + encodeURIComponent(lastPollAt) +
-      (includeHistory ? "&history=1" : "");
+      (includeHistory ? "&history=1" : "") +
+      (state.pendingMessage && state.pendingMessage.id
+        ? "&pendingClientMessageId=" + encodeURIComponent(state.pendingMessage.id)
+        : "");
     syncPromise = fetchWithTimeout(
       url,
       { headers: { "X-Aijou-Workspace": workspaceKey, "Authorization": "Bearer " + state.token } },
@@ -215,6 +226,7 @@
           addedCount += 1;
         }
       });
+      if (data.pendingResolved) clearPendingMessage();
       lastPollAt = pollStartedAt;
       return addedCount;
     }).finally(function () {
@@ -331,6 +343,13 @@
     try {
       localStorage.setItem(storageKey, JSON.stringify(state));
     } catch (_) {}
+  }
+  function clearPendingMessage(expectedId) {
+    if (!state.pendingMessage || (expectedId && state.pendingMessage.id !== expectedId)) return;
+    var pendingText = state.pendingMessage.text;
+    delete state.pendingMessage;
+    if (input.value.trim() === pendingText) input.value = "";
+    persistState();
   }
   function createId() {
     return window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random();

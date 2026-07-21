@@ -181,7 +181,7 @@ export async function getReceiptReviewPage(
   const receiptWhere: Prisma.ReceiptWhereInput = {
     transaction: { businessId: business.id },
   };
-  const [receipts, total, categories, projects, needsReview, pending, reviewed] = await Promise.all([
+  const [receipts, statusGroups, categories, projects] = await Promise.all([
     prisma.receipt.findMany({
       where: receiptWhere,
       orderBy: {
@@ -218,7 +218,11 @@ export async function getReceiptReviewPage(
         },
       },
     }),
-    prisma.receipt.count({ where: receiptWhere }),
+    prisma.receipt.groupBy({
+      by: ["reviewStatus"],
+      where: receiptWhere,
+      _count: { _all: true },
+    }),
     prisma.category.findMany({
       where: { businessId: business.id, type: CategoryType.EXPENSE },
       orderBy: { name: "asc" },
@@ -229,34 +233,19 @@ export async function getReceiptReviewPage(
       orderBy: { projectName: "asc" },
       select: { id: true, projectName: true },
     }),
-    prisma.receipt.count({
-      where: {
-        reviewStatus: ReviewStatus.NEEDS_REVIEW,
-        transaction: { businessId: business.id },
-      },
-    }),
-    prisma.receipt.count({
-      where: {
-        reviewStatus: ReviewStatus.PENDING,
-        transaction: { businessId: business.id },
-      },
-    }),
-    prisma.receipt.count({
-      where: {
-        reviewStatus: ReviewStatus.REVIEWED,
-        transaction: { businessId: business.id },
-      },
-    }),
   ]);
+  const countForStatus = (status: ReviewStatus) =>
+    statusGroups.find((group) => group.reviewStatus === status)?._count._all ?? 0;
+  const total = statusGroups.reduce((count, group) => count + group._count._all, 0);
 
   return {
     business,
     categories,
     projects,
     summary: {
-      needsReview,
-      pending,
-      reviewed,
+      needsReview: countForStatus(ReviewStatus.NEEDS_REVIEW),
+      pending: countForStatus(ReviewStatus.PENDING),
+      reviewed: countForStatus(ReviewStatus.REVIEWED),
     },
     pagination: {
       page,

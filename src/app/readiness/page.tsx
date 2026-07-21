@@ -1,4 +1,4 @@
-import { AlertTriangle, BadgeCheck, CheckCircle2, RadioTower, Send, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BadgeCheck, CheckCircle2, Globe2, Send, ShieldCheck } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -36,10 +36,14 @@ export default async function ReadinessPage() {
           </p>
         </div>
         <div className="card">
-          <RadioTower size={22} aria-hidden="true" />
-          <h2>WhatsApp</h2>
-          <div className="metric">{page.readiness.channels.whatsapp ? "Ready" : "Draft"}</div>
-          <p className="muted">Config webhook Meta/WhatsApp Cloud API dari dashboard.</p>
+          <Globe2 size={22} aria-hidden="true" />
+          <h2>Web Live Chat</h2>
+          <div className="metric">{page.readiness.channels.web ? "Ready" : "Draft"}</div>
+          <p className="muted">
+            {page.readiness.channels.webConfigured
+              ? "Domain tersimpan; kirim chat percobaan agar widget terdeteksi."
+              : "Simpan origin website lalu pasang snippet widget."}
+          </p>
         </div>
         <div className="card">
           <Send size={22} aria-hidden="true" />
@@ -87,7 +91,11 @@ export default async function ReadinessPage() {
           <h2>Status channel</h2>
           <div className="env-list">
             <EnvRow name="GROQ_API_KEY" ready={Boolean(process.env.GROQ_API_KEY)} />
-            <EnvRow name="Web Live Chat" ready={page.readiness.channels.web} />
+            <EnvRow
+              name="Web Live Chat"
+              ready={page.readiness.channels.web}
+              pending={page.readiness.channels.webConfigured}
+            />
             <EnvRow name="Telegram" ready={page.readiness.channels.telegram} />
             <EnvRow name="WhatsApp" ready={page.readiness.channels.whatsapp} />
           </div>
@@ -102,12 +110,12 @@ export default async function ReadinessPage() {
   );
 }
 
-function EnvRow({ name, ready }: { name: string; ready: boolean }) {
+function EnvRow({ name, ready, pending = false }: { name: string; ready: boolean; pending?: boolean }) {
   return (
     <div className="env-row">
       <code>{name}</code>
       <span className={ready ? "status" : "status status-warning"}>
-        {ready ? "Set" : "Missing"}
+        {ready ? "Set" : pending ? "Needs test" : "Missing"}
       </span>
     </div>
   );

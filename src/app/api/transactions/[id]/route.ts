@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest, context: TransactionRouteConte
       );
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid transaction payload." },
+      { error: safeTransactionError(error, "Invalid transaction payload.") },
       { status: 400, headers: noStoreHeaders },
     );
   }
@@ -65,8 +65,21 @@ export async function DELETE(request: NextRequest, context: TransactionRouteCont
     return NextResponse.json({ deleted: true }, { headers: noStoreHeaders });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to delete transaction." },
+      { error: safeTransactionError(error, "Unable to delete transaction.") },
       { status: 400, headers: noStoreHeaders },
     );
   }
+}
+
+function safeTransactionError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "Transaction not found.",
+    "Produk tidak ditemukan atau sudah nonaktif.",
+    "Total order harus lebih dari 0.",
+    "Nominal transaksi harus lebih dari 0.",
+    "Tanggal transaksi wajib diisi.",
+  ].includes(message)
+    ? message
+    : fallback;
 }

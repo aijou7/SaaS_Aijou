@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { completeOnboarding } from "@/server/business/profile";
+import {
+  completeOnboarding,
+  OnboardingReadinessError,
+} from "@/server/business/profile";
 
 export async function completeOnboardingAction() {
   const session = await getSession();
@@ -12,9 +15,17 @@ export async function completeOnboardingAction() {
     redirect("/login");
   }
 
-  await completeOnboarding(session.userId);
+  try {
+    await completeOnboarding(session.userId);
+  } catch (error) {
+    if (error instanceof OnboardingReadinessError) {
+      redirect("/setup?error=not_ready");
+    }
+    throw error;
+  }
   revalidatePath("/");
+  revalidatePath("/dashboard");
   revalidatePath("/setup");
   revalidatePath("/readiness");
-  redirect("/");
+  redirect("/dashboard?onboarding=complete");
 }

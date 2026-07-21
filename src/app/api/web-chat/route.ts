@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { MessageType, SenderType } from "@/generated/prisma-beta/client";
 import { checkAbuseLimit, generousChatRules, getClientIp } from "@/lib/abuse-guard";
+import { consumeDurableRateLimit } from "@/lib/durable-rate-limit";
 import { prisma } from "@/lib/prisma";
 import {
   readRequestBodyBuffer,
   RequestBodyTooLargeError,
 } from "@/lib/request-security";
 import { simulateCustomerMessageForBusiness } from "@/server/conversations/conversations";
+import { activationTypes, recordActivationEvent } from "@/server/activation";
 import {
   getWorkspaceKey,
   normalizeWebOrigin,
@@ -15,6 +17,10 @@ import {
   verifyWidgetSessionToken,
   widgetSessionTtlMs,
 } from "@/server/web/widget-security";
+import {
+  isExactWebChatReply,
+  webChatProviderMessageId,
+} from "@/server/web/chat-correlation";
 
 const maxChatBodyBytes = 32 * 1024;
 
@@ -37,8 +43,8 @@ export async function POST(request: NextRequest) {
 
   const clientIp = getClientIp(request);
   const preflightLimit = checkAbuseLimit(`web-chat-pre:ip:${clientIp}`, [
-    { max: 1_200, windowMs: 60_000 },
-    { max: 30_000, windowMs: 60 * 60_000 },
+    { max: 6_000, windowMs: 60_000 },
+    { max: 100_000, windowMs: 60 * 60_000 },
   ]);
   if (!preflightLimit.allowed) {
     return json(request, { error: "Traffic chat terlalu tinggi. Coba lagi sebentar ya." }, 429, {
@@ -78,8 +84,8 @@ export async function POST(request: NextRequest) {
   }
 
   const ipCheck = checkAbuseLimit(`web-chat:ip:${clientIp}`, [
-    { max: 1_000, windowMs: 60_000 },
-    { max: 20_000, windowMs: 60 * 60_000 },
+    { max: 5_000, windowMs: 60_000 },
+    { max: 100_000, windowMs: 60 * 60_000 },
   ]);
   const sessionCheck = checkAbuseLimit(
     `web-chat:session:${context.businessId}:${context.visitorKey}`,
@@ -95,15 +101,47 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const [durableIp, durableSession, durableWorkspace] = await Promise.all([
+    consumeDurableRateLimit(clientIp, [
+      { scope: "web-chat:ip:1m", max: 5_000, windowMs: 60_000 },
+      { scope: "web-chat:ip:1h", max: 100_000, windowMs: 60 * 60_000 },
+    ]),
+    consumeDurableRateLimit(`${context.businessId}:${context.visitorKey}`, [
+      { scope: "web-chat:session:1m", max: 180, windowMs: 60_000 },
+      { scope: "web-chat:session:1h", max: 2_000, windowMs: 60 * 60_000 },
+    ]),
+    consumeDurableRateLimit(context.businessId, [
+      {
+        scope: "web-chat:workspace:1m",
+        max: readCapacity("WEB_CHAT_WORKSPACE_PER_MINUTE", 2_000),
+        windowMs: 60_000,
+      },
+      {
+        scope: "web-chat:workspace:1h",
+        max: readCapacity("WEB_CHAT_WORKSPACE_PER_HOUR", 100_000),
+        windowMs: 60 * 60_000,
+      },
+    ]),
+  ]);
+  const durableAbuse = [durableIp, durableSession, durableWorkspace].find(
+    (result) => !result.allowed,
+  );
+  if (durableAbuse) {
+    return json(request, { error: "Traffic chat terlalu tinggi. Coba lagi sebentar ya." }, 429, {
+      "Retry-After": String(durableAbuse.retryAfterSeconds),
+    });
+  }
+
   const clientMessageId = clean(body?.clientMessageId, 160);
+  const providerMessageId = clientMessageId
+    ? webChatProviderMessageId(context.businessId, context.visitorKey, clientMessageId)
+    : undefined;
   const result = await simulateCustomerMessageForBusiness(context.businessId, {
     phoneNumber: `web-${context.visitorKey}`,
     displayName: clean(body?.visitorName, 80) || "Pengunjung website",
     message,
     leadSource: "WEB_CHAT",
-    providerMessageId: clientMessageId
-      ? `web-${hash(`${context.businessId}:${context.visitorKey}:${clientMessageId}`)}`
-      : undefined,
+    providerMessageId,
   });
 
   await prisma.whatsAppConversation.updateMany({
@@ -114,11 +152,25 @@ export async function POST(request: NextRequest) {
       lastCustomerMessageAt: new Date(),
     },
   });
+  after(async () => {
+    try {
+      await recordActivationEvent(context.businessId, activationTypes.firstChannel, {
+        channel: "WEB_CHAT",
+        origin,
+      });
+    } catch {
+      console.error("web_chat_activation_event_failed", { businessId: context.businessId });
+    }
+  });
 
   return json(request, {
     reply:
       result.aiReply ??
-      "Pesanmu sudah diterima. Tim Aijou akan melanjutkan secepatnya.",
+      (result.processing
+        ? null
+        : "Pesanmu sudah diterima. Tim Aijou akan melanjutkan secepatnya."),
+    replyId: result.aiMessageId,
+    processing: result.processing,
     handoff: result.status === "HUMAN_NEEDED",
     deduped: result.deduped ?? false,
   });
@@ -159,6 +211,17 @@ export async function GET(request: NextRequest) {
 
   const since = clampSince(request.nextUrl.searchParams.get("since"));
   const includeHistory = request.nextUrl.searchParams.get("history") === "1";
+  const pendingClientMessageId = clean(
+    request.nextUrl.searchParams.get("pendingClientMessageId"),
+    160,
+  );
+  const pendingProviderMessageId = pendingClientMessageId
+    ? webChatProviderMessageId(
+        context.businessId,
+        context.visitorKey,
+        pendingClientMessageId,
+      )
+    : null;
   const conversation = await prisma.whatsAppConversation.findFirst({
     where: {
       businessId: context.businessId,
@@ -172,21 +235,52 @@ export async function GET(request: NextRequest) {
           ? { messageType: MessageType.TEXT }
           : {
               messageType: MessageType.TEXT,
-              senderType: SenderType.USER,
-              createdAt: { gt: since },
+              OR: [
+                {
+                  senderType: SenderType.USER,
+                  createdAt: { gt: since },
+                },
+                ...(pendingProviderMessageId
+                  ? [
+                      {
+                        senderType: SenderType.AI,
+                        rawPayload: {
+                          path: ["inReplyToProviderMessageId"],
+                          equals: pendingProviderMessageId,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
             },
         orderBy: { createdAt: "desc" },
         take: 100,
-        select: { id: true, senderType: true, messageBody: true, createdAt: true },
+        select: {
+          id: true,
+          senderType: true,
+          messageBody: true,
+          rawPayload: true,
+          createdAt: true,
+        },
       },
     },
   });
   const chronological = [...(conversation?.messages ?? [])].reverse();
+  const isPendingReply = (item: (typeof chronological)[number]) =>
+    isExactWebChatReply(
+      item.senderType,
+      item.rawPayload,
+      pendingProviderMessageId,
+    );
 
   return json(request, {
     handoff: conversation?.status === "HUMAN_NEEDED",
     messages: chronological
-      .filter((item) => item.senderType === SenderType.USER && item.createdAt > since)
+      .filter(
+        (item) =>
+          (item.senderType === SenderType.USER && item.createdAt > since) ||
+          isPendingReply(item),
+      )
       .map((item) => ({
         id: item.id,
         text: item.messageBody ?? "",
@@ -205,6 +299,7 @@ export async function GET(request: NextRequest) {
           createdAt: item.createdAt.toISOString(),
         }))
       : [],
+    pendingResolved: chronological.some(isPendingReply),
     expiresAt: context.expiresAt.toISOString(),
   });
 }
@@ -287,4 +382,11 @@ function corsHeaders(request: NextRequest): Record<string, string> {
         Vary: "Origin",
       }
     : { Vary: "Origin" };
+}
+
+function readCapacity(name: string, fallback: number) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 100
+    ? Math.min(parsed, 10_000_000)
+    : fallback;
 }

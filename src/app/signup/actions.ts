@@ -4,16 +4,22 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getClientIpFromHeaders } from "@/lib/abuse-guard";
 import { createSessionCookie } from "@/lib/session";
+import { isTransactionalEmailConfigured } from "@/server/email";
 import {
   acceptBetaInvite,
   getSafeBetaInviteError,
 } from "@/server/auth/beta-invites";
 import {
   createPublicBetaAccount,
+  discardUnverifiedPublicBetaAccount,
   getSafePublicSignupError,
 } from "@/server/auth/public-signup";
+import { sendVerificationEmailForUser } from "@/server/auth/account-lifecycle";
 
 export type SignupActionState = { error?: string };
+
+const verificationDeliveryError =
+  "Pendaftaran sementara belum tersedia karena email verifikasi belum dapat dikirim. Coba lagi nanti.";
 
 export async function signupPublicBetaAction(
   _state: SignupActionState,
@@ -25,9 +31,8 @@ export async function signupPublicBetaAction(
     return { error: "Pendaftaran belum berhasil. Coba lagi beberapa saat." };
   }
 
-  const password = String(formData.get("password") ?? "");
-  if (password !== String(formData.get("confirmPassword") ?? "")) {
-    return { error: "Konfirmasi password tidak sama." };
+  if (!isTransactionalEmailConfigured()) {
+    return { error: verificationDeliveryError };
   }
 
   let user: Awaited<ReturnType<typeof createPublicBetaAccount>>;
@@ -39,7 +44,6 @@ export async function signupPublicBetaAction(
         email: String(formData.get("email") ?? ""),
         phoneNumber: String(formData.get("phoneNumber") ?? ""),
         businessName: String(formData.get("businessName") ?? ""),
-        password,
       },
       { clientIp: getClientIpFromHeaders(requestHeaders) },
     );
@@ -47,11 +51,23 @@ export async function signupPublicBetaAction(
     return { error: getSafePublicSignupError(error) };
   }
 
-  await createSessionCookie({
-    userId: user.userId,
-    passwordHash: user.passwordHash,
-  });
-  redirect("/setup?welcome=1");
+  try {
+    const delivery = await sendVerificationEmailForUser(user.userId);
+    if (!delivery.sent) {
+      console.error("public_signup_verification_delivery_failed", {
+        userId: user.userId,
+        configured: delivery.configured,
+        error: delivery.error,
+      });
+      await discardFailedPublicSignup(user.userId);
+      return { error: verificationDeliveryError };
+    }
+  } catch (error) {
+    console.error("public_signup_verification_failed", { userId: user.userId, error });
+    await discardFailedPublicSignup(user.userId);
+    return { error: verificationDeliveryError };
+  }
+  redirect("/verify-email?sent=1");
 }
 
 export async function signupWithInviteAction(
@@ -84,4 +100,17 @@ export async function signupWithInviteAction(
 
   await createSessionCookie({ userId: user.userId, passwordHash: user.passwordHash });
   redirect("/setup?welcome=1");
+}
+
+async function discardFailedPublicSignup(userId: string) {
+  try {
+    const deleted = await discardUnverifiedPublicBetaAccount(userId);
+    if (deleted !== 1) {
+      console.error("public_signup_cleanup_skipped", { userId, deleted });
+    }
+  } catch (error) {
+    // Authentication remains fail-closed because unverified users cannot create
+    // a session. Keep the cleanup failure visible to operators for remediation.
+    console.error("public_signup_cleanup_failed", { userId, error });
+  }
 }

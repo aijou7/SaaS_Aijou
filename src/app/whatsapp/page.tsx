@@ -55,6 +55,11 @@ export default async function WhatsAppSettingsPage() {
       <section className="section split-layout">
         <div className="card">
           <h2>Connection Settings</h2>
+          {page.configurationIssue ? (
+            <div className="settings-note" role="alert">
+              {page.configurationIssue}
+            </div>
+          ) : null}
           <form className="form-grid" action={updateWhatsAppSettingsAction}>
             <label>
               Phone Number ID
@@ -62,6 +67,7 @@ export default async function WhatsAppSettingsPage() {
                 name="phoneNumberId"
                 type="text"
                 defaultValue={page.settings?.phoneNumberId ?? ""}
+                required={Boolean(page.configurationIssue)}
                 placeholder="1234567890"
               />
             </label>
@@ -74,6 +80,8 @@ export default async function WhatsAppSettingsPage() {
               <input
                 name="accessToken"
                 type="password"
+                maxLength={4096}
+                required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.accessTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -82,6 +90,8 @@ export default async function WhatsAppSettingsPage() {
               <input
                 name="verifyToken"
                 type="password"
+                maxLength={4096}
+                required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.verifyTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -90,6 +100,8 @@ export default async function WhatsAppSettingsPage() {
               <input
                 name="appSecret"
                 type="password"
+                maxLength={4096}
+                required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.appSecretMasked ?? "Not set"}`}
               />
             </label>

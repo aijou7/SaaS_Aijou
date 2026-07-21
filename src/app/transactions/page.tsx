@@ -24,7 +24,7 @@ import {
   getTransactionsPage,
   parseTransactionFilters,
 } from "@/server/finance/transactions";
-import { getPaymentsPage } from "@/server/payments/payments";
+import { getPaymentReadinessForBusiness } from "@/server/payments/payments";
 
 type TransactionsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -46,10 +46,11 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   if (view === "balance" || view === "payment-settings") {
     redirect("/payments");
   }
-  const [page, paymentPage] = await Promise.all([
-    getTransactionsPage(session.userId, filters),
-    view === "create" ? getPaymentsPage(session.userId) : Promise.resolve(null),
-  ]);
+  const page = await getTransactionsPage(session.userId, filters);
+  const paymentReady =
+    view === "create" && page.business
+      ? await getPaymentReadinessForBusiness(page.business.id)
+      : false;
   const visibleProducts = productQuery
     ? page.products.filter((product) =>
         `${product.name} ${product.description ?? ""}`.toLowerCase().includes(productQuery),
@@ -64,7 +65,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
           today={today}
           products={page.products}
           selectedProductId={selectedProductId}
-          paymentReady={Boolean(paymentPage?.ready)}
+          paymentReady={paymentReady}
         />
       ) : view === "products" ? (
         <ProductsPage modal={modal} productQuery={productQuery} products={visibleProducts} />

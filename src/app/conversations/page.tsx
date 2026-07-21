@@ -27,6 +27,7 @@ import {
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
+import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { ConversationStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
@@ -35,6 +36,8 @@ import {
   getConversationDetail,
   getConversationsInbox,
 } from "@/server/conversations/conversations";
+import type { InboxLiveState } from "@/lib/inbox-live";
+import { getInboxLiveState } from "@/server/conversations-live";
 import { getActiveQuickRepliesForUser } from "@/server/quick-replies/quick-replies";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
@@ -85,11 +88,13 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
       conversationId ? getConversationDetail(session.userId, conversationId) : Promise.resolve(null),
       conversationId ? getActiveQuickRepliesForUser(session.userId) : Promise.resolve([]),
     ]);
+    const liveState = await getInboxLiveState(session.userId);
 
     return (
       <AppShell active="conversations" businessName={inbox.business?.businessName}>
         <ChatInboxView
           inbox={inbox}
+          liveState={liveState}
           q={q}
           quickReplies={quickReplies}
           selectedConversation={selectedConversation}
@@ -123,6 +128,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
 
 function ChatInboxView({
   inbox,
+  liveState,
   q,
   quickReplies,
   selectedConversation,
@@ -130,6 +136,7 @@ function ChatInboxView({
   unread,
 }: {
   inbox: ConversationInbox;
+  liveState: InboxLiveState;
   q?: string;
   quickReplies: QuickReplies;
   selectedConversation: ConversationDetail;
@@ -139,6 +146,7 @@ function ChatInboxView({
   return (
     <section className="chat-page">
       <aside className="chat-inbox">
+        <InboxLiveRefresher initialState={liveState} />
         <form className="chat-filter-form" action="/conversations" method="get">
           <input
             name="q"
@@ -832,10 +840,20 @@ function PlatformsPanel({
               {whatsAppPage.ready ? "Connected" : "Draft"}
             </span>
           </div>
+          {whatsAppPage.configurationIssue ? (
+            <div className="settings-note" role="alert">
+              {whatsAppPage.configurationIssue}
+            </div>
+          ) : null}
           <form className="form-grid" action={updateWhatsAppSettingsAction}>
             <label>
               Phone Number ID
-              <input name="phoneNumberId" type="text" defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""} />
+              <input
+                name="phoneNumberId"
+                type="text"
+                defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
+                required={Boolean(whatsAppPage.configurationIssue)}
+              />
             </label>
             <label>
               Webhook URL
@@ -846,6 +864,8 @@ function PlatformsPanel({
               <input
                 name="accessToken"
                 type="password"
+                maxLength={4096}
+                required={Boolean(whatsAppPage.configurationIssue)}
                 placeholder={`Current: ${whatsAppPage.settings?.accessTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -854,6 +874,8 @@ function PlatformsPanel({
               <input
                 name="verifyToken"
                 type="password"
+                maxLength={4096}
+                required={Boolean(whatsAppPage.configurationIssue)}
                 placeholder={`Current: ${whatsAppPage.settings?.verifyTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -862,6 +884,8 @@ function PlatformsPanel({
               <input
                 name="appSecret"
                 type="password"
+                maxLength={4096}
+                required={Boolean(whatsAppPage.configurationIssue)}
                 placeholder={`Current: ${whatsAppPage.settings?.appSecretMasked ?? "Not set"}`}
               />
             </label>

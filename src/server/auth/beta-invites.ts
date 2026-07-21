@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { UserRole } from "@/generated/prisma-beta/client";
+import { UserRole, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
 
 export class BetaInviteError extends Error {
   constructor(message: string) {
@@ -155,6 +156,8 @@ export async function acceptBetaInvite(input: {
           phoneNumber,
           passwordHash,
           role: UserRole.OWNER,
+          signupSource: "BETA_INVITE",
+          emailVerifiedAt: claimedAt,
         },
       });
       const business = await tx.business.create({
@@ -168,15 +171,14 @@ export async function acceptBetaInvite(input: {
       await tx.agentSettings.create({
         data: {
           businessId: business.id,
-          agentName: "Aijou",
-          tone: "friendly, helpful, concise",
-          language: "id",
-          businessDescription: businessName,
-          handoffRules:
-            "Handoff jika customer meminta manusia, meminta harga final, komplain, atau kebutuhan perlu keputusan owner.",
-          systemInstruction:
-            "Pahami kebutuhan secara natural, gunakan knowledge bisnis, jangan mengarang harga, dan arahkan ke langkah berikutnya.",
+          ...newWorkspaceAgentDefaults(businessName),
         },
+      });
+      await tx.workspaceMembership.create({
+        data: { businessId: business.id, userId: user.id, role: WorkspaceRole.OWNER },
+      });
+      await tx.activationEvent.create({
+        data: { businessId: business.id, type: "SIGNUP", metadata: { source: "BETA_INVITE" } },
       });
       await tx.betaInvite.update({
         where: { tokenHash },

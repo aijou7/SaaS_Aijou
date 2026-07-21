@@ -1,6 +1,6 @@
 import { LeadStatus, Prisma } from "@/generated/prisma-beta/client";
 import { callGroqJson } from "@/server/ai/groq";
-import { prisma } from "@/lib/prisma";
+import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 
 type LeadSummary = {
   customerName: string | null;
@@ -199,6 +199,19 @@ type LeadsPageFilters = {
   status?: string;
 };
 
+type LeadSummaryCountsRow = {
+  newCount: number;
+  followUp: number;
+  qualified: number;
+  won: number;
+  lost: number;
+  webChat: number;
+  telegram: number;
+  brief: number;
+  hot: number;
+  dueFollowUp: number;
+};
+
 export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {}) {
   const business = await prisma.business.findFirst({
     where: { userId },
@@ -246,7 +259,7 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
         }
       : {}),
   };
-  const [leads, total, newCount, followUp, qualified, won, lost, webChat, telegram, brief, hot, dueFollowUp] = await Promise.all([
+  const [leads, total, summaryRows] = await Promise.all([
     prisma.lead.findMany({
       where: leadWhere,
       orderBy: { updatedAt: "desc" },
@@ -291,27 +304,60 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
       },
     }),
     prisma.lead.count({ where: leadWhere }),
-    prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.NEW } }),
-    prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.NEED_FOLLOW_UP } }),
-    prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.QUALIFIED } }),
-    prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.WON } }),
-    prisma.lead.count({ where: { businessId: business.id, status: LeadStatus.LOST } }),
-    prisma.lead.count({ where: { businessId: business.id, source: "WEB_CHAT" } }),
-    prisma.lead.count({ where: { businessId: business.id, source: "TELEGRAM" } }),
-    prisma.lead.count({ where: { businessId: business.id, source: "BRIEF" } }),
-    prisma.lead.count({ where: { businessId: business.id, qualificationScore: { gte: 70 } } }),
-    prisma.lead.count({
-      where: {
-        businessId: business.id,
-        nextFollowUpAt: { lte: followUpDueAt },
-        status: { notIn: completedLeadStatuses },
-      },
-    }),
+    withDatabaseRawReadRetry(() => prisma.$queryRaw<LeadSummaryCountsRow[]>`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE "status" = ${LeadStatus.NEW}::"LeadStatus"
+        )::double precision AS "newCount",
+        COUNT(*) FILTER (
+          WHERE "status" = ${LeadStatus.NEED_FOLLOW_UP}::"LeadStatus"
+        )::double precision AS "followUp",
+        COUNT(*) FILTER (
+          WHERE "status" = ${LeadStatus.QUALIFIED}::"LeadStatus"
+        )::double precision AS "qualified",
+        COUNT(*) FILTER (
+          WHERE "status" = ${LeadStatus.WON}::"LeadStatus"
+        )::double precision AS "won",
+        COUNT(*) FILTER (
+          WHERE "status" = ${LeadStatus.LOST}::"LeadStatus"
+        )::double precision AS "lost",
+        COUNT(*) FILTER (WHERE "source" = 'WEB_CHAT')::double precision AS "webChat",
+        COUNT(*) FILTER (WHERE "source" = 'TELEGRAM')::double precision AS "telegram",
+        COUNT(*) FILTER (WHERE "source" = 'BRIEF')::double precision AS "brief",
+        COUNT(*) FILTER (WHERE "qualificationScore" >= 70)::double precision AS "hot",
+        COUNT(*) FILTER (
+          WHERE "nextFollowUpAt" <= ${followUpDueAt}
+            AND "status" NOT IN (
+              ${LeadStatus.WON}::"LeadStatus",
+              ${LeadStatus.LOST}::"LeadStatus",
+              ${LeadStatus.CLOSED}::"LeadStatus",
+              ${LeadStatus.SPAM}::"LeadStatus"
+            )
+        )::double precision AS "dueFollowUp"
+      FROM "leads"
+      WHERE "businessId" = ${business.id}
+    `),
   ]);
+  const summary = summaryRows[0];
+
+  if (!summary) {
+    throw new Error("Lead summary aggregate query returned no result.");
+  }
 
   return {
     business,
-    summary: { new: newCount, followUp, qualified, won, lost, webChat, telegram, brief, hot, dueFollowUp },
+    summary: {
+      new: summary.newCount,
+      followUp: summary.followUp,
+      qualified: summary.qualified,
+      won: summary.won,
+      lost: summary.lost,
+      webChat: summary.webChat,
+      telegram: summary.telegram,
+      brief: summary.brief,
+      hot: summary.hot,
+      dueFollowUp: summary.dueFollowUp,
+    },
     pagination: {
       page,
       pageSize,

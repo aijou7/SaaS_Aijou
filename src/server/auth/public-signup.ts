@@ -1,9 +1,11 @@
-import { createHmac } from "node:crypto";
-import { UserRole } from "@/generated/prisma-beta/client";
+import { createHmac, randomBytes } from "node:crypto";
+import { UserRole, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
 import {
   isPublicSignupEnabled,
+  isPublicSignupReady,
   normalizePublicSignupInput,
   PublicSignupError,
   publicSignupRateRules,
@@ -12,6 +14,7 @@ import {
 
 export {
   isPublicSignupEnabled,
+  isPublicSignupReady,
   normalizePublicSignupInput,
   PublicSignupError,
   publicSignupRateRules,
@@ -37,7 +40,10 @@ export async function createPublicBetaAccount(
 
   // Hash before attempting the insert so an existing email and a new email
   // have roughly the same expensive password-work path.
-  const passwordHash = await hashPassword(normalized.password);
+  // The public flow proves email ownership before accepting a real password.
+  // Keep a random, unusable provisional hash so a signup attacker cannot pick
+  // credentials for somebody else's address.
+  const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -48,8 +54,9 @@ export async function createPublicBetaAccount(
           phoneNumber: normalized.phoneNumber,
           passwordHash,
           role: UserRole.OWNER,
+          signupSource: "PUBLIC",
         },
-        select: { id: true, email: true, passwordHash: true },
+        select: { id: true, email: true },
       });
 
       const business = await tx.business.create({
@@ -65,21 +72,20 @@ export async function createPublicBetaAccount(
       await tx.agentSettings.create({
         data: {
           businessId: business.id,
-          agentName: "Aijou",
-          tone: "friendly, helpful, concise",
-          language: "id",
-          businessDescription: normalized.businessName,
-          handoffRules:
-            "Handoff jika customer meminta manusia, meminta harga final, komplain, atau kebutuhan perlu keputusan owner.",
-          systemInstruction:
-            "Pahami kebutuhan secara natural, gunakan knowledge bisnis, jangan mengarang harga, dan arahkan ke langkah berikutnya.",
+          ...newWorkspaceAgentDefaults(normalized.businessName),
         },
+      });
+
+      await tx.workspaceMembership.create({
+        data: { businessId: business.id, userId: user.id, role: WorkspaceRole.OWNER },
+      });
+      await tx.activationEvent.create({
+        data: { businessId: business.id, type: "SIGNUP", metadata: { source: "PUBLIC" } },
       });
 
       return {
         userId: user.id,
         email: user.email,
-        passwordHash: user.passwordHash,
       };
     });
   } catch (error) {
@@ -92,6 +98,17 @@ export async function createPublicBetaAccount(
 
     throw error;
   }
+}
+
+export async function discardUnverifiedPublicBetaAccount(userId: string) {
+  const result = await prisma.user.deleteMany({
+    where: {
+      id: userId,
+      signupSource: "PUBLIC",
+      emailVerifiedAt: null,
+    },
+  });
+  return result.count;
 }
 
 export function getSafePublicSignupError(error: unknown) {
