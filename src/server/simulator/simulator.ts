@@ -19,7 +19,7 @@ import {
 } from "@/server/finance/expense-flow";
 import { simulateCustomerMessage } from "@/server/conversations/conversations";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
-import { getActiveProductContext } from "@/server/products/catalog";
+import { getActiveProductCatalog } from "@/server/products/catalog";
 import { storeIncomingWhatsAppMessage } from "@/server/whatsapp/store";
 import type { ExtractedWhatsAppMessage, WhatsAppWebhookPayload } from "@/server/whatsapp/payload";
 
@@ -104,14 +104,16 @@ export async function simulateClientChatMessage(userId: string, params: {
   // before they explicitly activate the agent.
   if (settings.isActive || result.aiReply) return result;
 
-  const [knowledgeContext, productContext] = await Promise.all([
+  const [knowledgeContext, productCatalog] = await Promise.all([
     getActiveKnowledgeContext(business.id),
-    getActiveProductContext(business.id),
+    getActiveProductCatalog(business.id),
   ]);
   const previewReply = await buildCustomerServiceReplyAi({
     businessId: business.id,
     message: params.message,
-    knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
+    knowledgeContext,
+    productContext: productCatalog.context,
+    products: productCatalog.items,
     conversationContext: `Customer: ${params.message}`,
     settings,
   });

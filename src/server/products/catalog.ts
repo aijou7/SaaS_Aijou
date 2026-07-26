@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  buildActiveProductPromptContext,
+  type PublicCatalogItem,
+} from "@/lib/customer-pricing";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 
 type ProductInput = {
@@ -6,6 +10,13 @@ type ProductInput = {
   description?: string;
   price: number;
   isActive?: boolean;
+};
+
+export type ActiveProductCatalogItem = PublicCatalogItem;
+
+type ActiveProductCatalog = {
+  items: ActiveProductCatalogItem[];
+  context: string;
 };
 
 export async function getProductsPage(userId: string) {
@@ -35,12 +46,18 @@ export async function getProductsPage(userId: string) {
 }
 
 export async function getActiveProductContext(businessId: string) {
-  return ttlCache(`product-context:${businessId}`, 60_000, () =>
-    getActiveProductContextFresh(businessId),
+  return (await getActiveProductCatalog(businessId)).context;
+}
+
+export async function getActiveProductCatalog(businessId: string) {
+  return ttlCache(`product-catalog:${businessId}`, 60_000, () =>
+    getActiveProductCatalogFresh(businessId),
   );
 }
 
-async function getActiveProductContextFresh(businessId: string) {
+async function getActiveProductCatalogFresh(
+  businessId: string,
+): Promise<ActiveProductCatalog> {
   const products = await prisma.product.findMany({
     where: { businessId, isActive: true },
     orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }],
@@ -49,29 +66,26 @@ async function getActiveProductContextFresh(businessId: string) {
   });
 
   if (products.length === 0) {
-    return "Belum ada katalog aktif. Jangan mengarang produk, paket, atau harga.";
+    return {
+      items: [],
+      context: "Belum ada katalog aktif. Jangan mengarang produk, paket, atau harga.",
+    };
   }
 
-  return products
-    .map((product) => {
-      const price = new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: product.currency,
-        maximumFractionDigits: 0,
-      }).format(Number(product.price));
-      return [product.name, product.description, `Harga mulai: ${price}`]
-        .filter(Boolean)
-        .join(" — ");
-    })
-    .join("\n")
-    .slice(0, 16_000);
+  const items = products.map((product) => ({
+    ...product,
+    price: Number(product.price),
+  }));
+
+  return {
+    items,
+    context: buildActiveProductPromptContext(items),
+  };
 }
 
 export async function createProduct(userId: string, input: ProductInput) {
   const business = await requireBusinessForUser(userId);
-  invalidateTtlCache(`product-context:${business.id}`);
-
-  return prisma.product.create({
+  const product = await prisma.product.create({
     data: {
       businessId: business.id,
       name: input.name.trim(),
@@ -80,14 +94,14 @@ export async function createProduct(userId: string, input: ProductInput) {
       isActive: input.isActive ?? true,
     },
   });
+  invalidateProductCatalog(business.id);
+  return product;
 }
 
 export async function updateProduct(userId: string, productId: string, input: ProductInput) {
   const business = await requireBusinessForUser(userId);
   await ensureProductBelongsToBusiness(productId, business.id);
-  invalidateTtlCache(`product-context:${business.id}`);
-
-  return prisma.product.update({
+  const product = await prisma.product.update({
     where: { id: productId },
     data: {
       name: input.name.trim(),
@@ -96,17 +110,19 @@ export async function updateProduct(userId: string, productId: string, input: Pr
       isActive: input.isActive ?? true,
     },
   });
+  invalidateProductCatalog(business.id);
+  return product;
 }
 
 export async function deleteProduct(userId: string, productId: string) {
   const business = await requireBusinessForUser(userId);
   await ensureProductBelongsToBusiness(productId, business.id);
-  invalidateTtlCache(`product-context:${business.id}`);
 
   await prisma.product.update({
     where: { id: productId },
     data: { isActive: false },
   });
+  invalidateProductCatalog(business.id);
 }
 
 export function parseProductFormData(formData: FormData): ProductInput {
@@ -166,4 +182,9 @@ async function ensureProductBelongsToBusiness(productId: string, businessId: str
 function cleanOptional(value?: string) {
   const cleaned = value?.trim();
   return cleaned || undefined;
+}
+
+function invalidateProductCatalog(businessId: string) {
+  invalidateTtlCache(`product-catalog:${businessId}`);
+  invalidateTtlCache(`product-context:${businessId}`);
 }

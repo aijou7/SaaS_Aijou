@@ -227,7 +227,7 @@ export async function generateStarterKnowledge(userId: string) {
         title: "FAQ Awal",
         category: "faq",
         content:
-          "Jika customer bertanya harga, minta detail kebutuhan, lokasi, scope pekerjaan, timeline, dan budget. Jangan memberikan harga final tanpa review owner.",
+          "Jika customer bertanya harga dan ada harga katalog atau harga mulai dari website, sebutkan harga publik itu terlebih dahulu sebagai harga awal. Setelah itu minta detail kebutuhan, lokasi, scope, atau timeline yang masih diperlukan. Jangan memberikan quotation final tanpa review owner.",
       },
       {
         title: "Aturan Handoff",
@@ -285,7 +285,7 @@ export function parseKnowledgeBaseFormData(formData: FormData) {
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
     where: { userId },
-    select: { id: true, businessName: true },
+    select: { id: true, businessName: true, websiteUrl: true },
   });
 }
 
@@ -319,7 +319,7 @@ export const knowledgeTemplates = [
     title: "Pricing Guardrail",
     category: "pricing",
     content:
-      "AI tidak boleh memberi harga final. AI hanya boleh menyebut bahwa estimasi tergantung scope, lokasi, jumlah item/perangkat, urgency, dan kondisi existing. Harga final dari owner.",
+      "AI boleh menyebut harga katalog, range, atau harga mulai dari website yang sudah dipublikasikan. Jelaskan bahwa angka tersebut adalah harga awal, bukan quotation final. Harga final tetap mengikuti scope, lokasi, jumlah item/perangkat, urgency, integrasi, dan kondisi existing serta dikonfirmasi owner.",
   },
   {
     key: "handoff",

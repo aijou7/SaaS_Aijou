@@ -18,7 +18,7 @@ import {
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
-import { getActiveProductContext } from "@/server/products/catalog";
+import { getActiveProductCatalog } from "@/server/products/catalog";
 import {
   enqueueLeadRefresh,
   processPendingJobs,
@@ -418,9 +418,9 @@ async function simulateCustomerMessageForResolvedBusiness(
     nextStatus = ConversationStatus.HUMAN_NEEDED;
     aiReply = `${settings.agentName}: Baik, saya panggilkan owner/admin untuk lanjut bantu ya.`;
   } else if (currentConversation?.status !== ConversationStatus.HUMAN_NEEDED) {
-    const [knowledgeContext, productContext, messages] = await Promise.all([
+    const [knowledgeContext, productCatalog, messages] = await Promise.all([
       getActiveKnowledgeContext(business.id),
-      getActiveProductContext(business.id),
+      getActiveProductCatalog(business.id),
       prisma.whatsAppMessage.findMany({
         where: { conversationId: conversation.id, messageType: MessageType.TEXT },
         orderBy: { createdAt: "desc" },
@@ -431,7 +431,9 @@ async function simulateCustomerMessageForResolvedBusiness(
     aiReply = await buildCustomerServiceReplyAi({
       businessId: business.id,
       message: input.message,
-      knowledgeContext: `${knowledgeContext}\n\nKatalog aktif:\n${productContext}`,
+      knowledgeContext,
+      productContext: productCatalog.context,
+      products: productCatalog.items,
       conversationContext: messages
         .reverse()
         .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Aijou"}: ${item.messageBody ?? ""}`)

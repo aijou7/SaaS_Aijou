@@ -12,6 +12,7 @@ import {
   parseKnowledgeBaseFormData,
   updateKnowledgeBaseEntry,
 } from "@/server/knowledge/knowledge-base";
+import { syncBusinessWebsiteKnowledge } from "@/server/knowledge/website-sync";
 
 export async function createKnowledgeBaseAction(formData: FormData) {
   const session = await getRequiredSession();
@@ -91,6 +92,13 @@ export async function generateStarterKnowledgeAction() {
 
   await generateStarterKnowledge(session.userId);
   revalidateKnowledgePaths();
+}
+
+export async function syncWebsiteKnowledgeAction() {
+  const session = await getRequiredSession();
+  const result = await syncBusinessWebsiteKnowledge(session.userId);
+  revalidateKnowledgePaths();
+  redirect(`/training?websiteSync=success&prices=${result.priceCount}`);
 }
 
 async function getRequiredSession() {

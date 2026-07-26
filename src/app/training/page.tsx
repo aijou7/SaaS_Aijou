@@ -1,4 +1,4 @@
-import { BookOpen, FileText, MessageCircle, Plus, Sparkles } from "lucide-react";
+import { BookOpen, FileText, Globe2, MessageCircle, Plus, Sparkles } from "lucide-react";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import {
@@ -6,6 +6,7 @@ import {
   createKnowledgeTemplateAction,
   generateStarterKnowledgeAction,
   importTextKnowledgeAction,
+  syncWebsiteKnowledgeAction,
 } from "@/app/knowledge/actions";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -17,7 +18,11 @@ import {
 import { getSession } from "@/lib/session";
 import { getKnowledgeBasePage, knowledgeTemplates } from "@/server/knowledge/knowledge-base";
 
-export default async function TrainingPage() {
+type TrainingPageProps = {
+  searchParams?: Promise<{ websiteSync?: string; prices?: string }>;
+};
+
+export default async function TrainingPage({ searchParams }: TrainingPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -25,6 +30,8 @@ export default async function TrainingPage() {
   }
 
   const page = await getKnowledgeBasePage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const syncedPriceCount = Math.max(0, Number(params.prices ?? "0") || 0);
 
   return (
     <AppShell active="training" businessName={page.business?.businessName}>
@@ -46,6 +53,13 @@ export default async function TrainingPage() {
           </form>
         </div>
 
+        {params.websiteSync === "success" ? (
+          <p className="chat-live-notice" role="status">
+            Website berhasil disinkronkan. {syncedPriceCount} harga mulai terdeteksi dan
+            sekarang aktif sebagai knowledge AI.
+          </p>
+        ) : null}
+
         <div className="core-metrics">
           <div className="core-metric">
             <BookOpen size={20} aria-hidden="true" />
@@ -60,7 +74,7 @@ export default async function TrainingPage() {
           <div className="core-metric">
             <MessageCircle size={20} aria-hidden="true" />
             <span>Sumber pembelajaran</span>
-            <strong>Manual + TXT</strong>
+            <strong>Manual + File + Web</strong>
           </div>
         </div>
 
@@ -154,6 +168,40 @@ export default async function TrainingPage() {
             </form>
           </section>
         </div>
+
+        <section className="core-card">
+          <div className="section-header">
+            <div>
+              <h2>Sinkronkan website resmi</h2>
+              <p className="muted">
+                Ambil ulang layanan, FAQ, dan harga “mulai dari” dari homepage publik.
+                Jalankan lagi setelah konten website berubah.
+              </p>
+            </div>
+            <Globe2 size={22} aria-hidden="true" />
+          </div>
+          <div className="form-grid">
+            <label className="span-2">
+              Website aktif
+              <input
+                type="url"
+                value={page.business?.websiteUrl ?? ""}
+                placeholder="Atur URL di Business Profile"
+                readOnly
+              />
+            </label>
+            <form className="span-2" action={syncWebsiteKnowledgeAction}>
+              <button
+                className="primary-button icon-link"
+                type="submit"
+                disabled={!page.business?.websiteUrl}
+              >
+                <Globe2 size={17} aria-hidden="true" />
+                Sinkronkan website sekarang
+              </button>
+            </form>
+          </div>
+        </section>
 
         <section className="core-card">
           <div className="section-header">
