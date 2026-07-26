@@ -35,6 +35,18 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   typedRoutes: false,
   poweredByHeader: false,
+  turbopack: {
+    // Runtime receipt cleanup intentionally accepts a verified, workspace-
+    // scoped file path. NFT cannot prove that bound statically and reports the
+    // project root as a false-positive trace even though Vercel uploads only
+    // the scoped function output.
+    ignoreIssue: [
+      {
+        path: /next\.config\.ts$/,
+        title: /unexpected file in nft list/i,
+      },
+    ],
+  },
   async headers() {
     return [
       {

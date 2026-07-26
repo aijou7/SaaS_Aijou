@@ -41,7 +41,7 @@ export function buildReceiptMediaCleanupPlan(
   const localFiles = new Map<string, ReceiptMediaCleanupPlan["localFiles"][number]>();
   const receiptsDirectory = cwd
     ? resolve(cwd, "storage", "receipts")
-    : resolve(/* turbopackIgnore: true */ process.cwd(), "storage", "receipts");
+    : resolve("storage", "receipts");
 
   for (const item of media) {
     const allowedDirectory = resolve(receiptsDirectory, item.businessId);
