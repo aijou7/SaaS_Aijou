@@ -44,6 +44,7 @@ describe("published pricing grounding", () => {
     assert.match(reply ?? "", /Instalasi WiFi Basic/);
     assert.match(reply ?? "", /Rp\s*350\.000/);
     assert.match(reply ?? "", /harga awal/i);
+    assert.doesNotMatch(reply ?? "", /Website Company Profile/);
   });
 
   test("uses recent conversation context for a follow-up price question", () => {

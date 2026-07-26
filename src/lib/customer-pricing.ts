@@ -63,10 +63,22 @@ export function buildPublishedPriceReply(params: {
   const ranked = uniqueOffers
     .map((offer) => ({
       offer,
-      score: scoreOfferMatch(offer.label, latestQuery, fullQuery),
+      latestScore: scoreOfferMatch(offer.label, latestQuery),
+      conversationScore: scoreOfferMatch(offer.label, fullQuery),
     }))
-    .sort((left, right) => right.score - left.score);
-  const relevant = ranked.filter((item) => item.score > 0).slice(0, 3);
+    .sort(
+      (left, right) =>
+        right.latestScore - left.latestScore ||
+        right.conversationScore - left.conversationScore,
+    );
+  const latestMatches = ranked.filter((item) => item.latestScore > 0);
+  const relevant = (
+    latestMatches.length > 0
+      ? latestMatches
+      : ranked
+          .filter((item) => item.conversationScore > 0)
+          .sort((left, right) => right.conversationScore - left.conversationScore)
+  ).slice(0, 3);
   const selected =
     relevant.length > 0
       ? relevant.map((item) => item.offer)
@@ -139,20 +151,17 @@ function deduplicateOffers(offers: PublishedPriceOffer[]) {
   });
 }
 
-function scoreOfferMatch(label: string, latestQuery: string, fullQuery: string) {
+function scoreOfferMatch(label: string, query: string) {
   const normalizedLabel = normalizeSearchText(label);
   if (!normalizedLabel) return 0;
-  if (latestQuery.includes(normalizedLabel)) return 200;
-  if (fullQuery.includes(normalizedLabel)) return 120;
+  if (query.includes(normalizedLabel)) return 200;
 
   const tokens = normalizedLabel
     .split(" ")
     .filter((token) => token.length >= 3 && !priceMatchStopWords.has(token));
 
   return tokens.reduce((score, token) => {
-    if (latestQuery.includes(token)) return score + 30;
-    if (fullQuery.includes(token)) return score + 12;
-    return score;
+    return query.includes(token) ? score + 30 : score;
   }, 0);
 }
 
