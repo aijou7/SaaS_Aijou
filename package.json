@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit --incremental false",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm run lint && npm test",
-    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "audit:prod": "node scripts/audit-production.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -41,7 +41,7 @@
     "@vercel/blob": "^2.6.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.18.0",
-    "next": "16.2.10",
+    "next": "16.2.12",
     "pg": "^8.21.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -54,7 +54,7 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.2.12",
     "postcss": "^8.5.15",
     "prisma": "^7.9.0",
     "tailwindcss": "^4.3.1",
@@ -63,8 +63,10 @@
   },
   "overrides": {
     "next": {
-      ".": "16.2.10",
-      "postcss": "8.5.17"
-    }
+      ".": "16.2.12",
+      "postcss": "8.5.23",
+      "sharp": "0.35.3"
+    },
+    "find-my-way": "9.7.0"
   }
 }
