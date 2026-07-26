@@ -505,6 +505,7 @@ model AgentSettings {
 model WhatsAppSettings {
   id             String   @id @default(cuid())
   businessId     String   @unique
+  wabaId         String?
   phoneNumberId  String?
   accessToken    String?
   verifyToken    String?

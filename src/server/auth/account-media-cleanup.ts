@@ -35,18 +35,16 @@ const blobBatchSize = 100;
 
 export function buildReceiptMediaCleanupPlan(
   media: readonly PersistedReceiptMedia[],
-  cwd = process.cwd(),
+  cwd?: string,
 ): ReceiptMediaCleanupPlan {
   const blobTargets = new Set<string>();
   const localFiles = new Map<string, ReceiptMediaCleanupPlan["localFiles"][number]>();
+  const receiptsDirectory = cwd
+    ? resolve(cwd, "storage", "receipts")
+    : resolve(/* turbopackIgnore: true */ process.cwd(), "storage", "receipts");
 
   for (const item of media) {
-    const allowedDirectory = resolve(
-      /* turbopackIgnore: true */ cwd,
-      "storage",
-      "receipts",
-      item.businessId,
-    );
+    const allowedDirectory = resolve(receiptsDirectory, item.businessId);
     const storagePath = item.storagePath?.trim() ?? "";
 
     if (storagePath) {

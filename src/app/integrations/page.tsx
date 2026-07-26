@@ -72,6 +72,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
   const whatsAppWebhookUrl =
     whatsAppPage?.settings?.webhookUrl ?? `${appUrl}/api/webhooks/whatsapp`;
   const telegramFeedback = getTelegramFeedback(resolvedSearchParams);
+  const whatsAppFeedback = getWhatsAppFeedback(resolvedSearchParams);
 
   return (
     <AppShell
@@ -355,11 +356,22 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
         {selectedPlatform === "whatsapp" && whatsAppPage ? (
           <section className="platform-setup-card">
             <div className="feature-card-title">
-              <h2>WhatsApp Business setup</h2>
+              <div>
+                <h2>WhatsApp Business setup</h2>
+                <p className="muted">
+                  Credential diuji ke Meta dan webhook dipasang otomatis sebelum channel aktif.
+                </p>
+              </div>
               <span className={whatsAppPage.ready ? "status" : "status status-warning"}>
                 {whatsAppPage.ready ? "Connected" : "Draft"}
               </span>
             </div>
+            {whatsAppFeedback ? (
+              <div className="settings-note" role={whatsAppFeedback.isError ? "alert" : "status"}>
+                <strong>{whatsAppFeedback.title}</strong>
+                <p>{whatsAppFeedback.message}</p>
+              </div>
+            ) : null}
             {whatsAppPage.configurationIssue ? (
               <div className="settings-note" role="alert">
                 <strong>Credential perlu disimpan ulang</strong>
@@ -367,18 +379,32 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               </div>
             ) : null}
             <form className="form-grid" action={updateWhatsAppSettingsAction}>
+              <input name="returnTo" type="hidden" value="/integrations?platform=whatsapp" />
+              <label>
+                WhatsApp Business Account ID
+                <input
+                  name="wabaId"
+                  type="text"
+                  inputMode="numeric"
+                  defaultValue={whatsAppPage.settings?.wabaId ?? ""}
+                  required={Boolean(whatsAppPage.configurationIssue)}
+                  placeholder="123456789012345"
+                />
+              </label>
               <label>
                 Phone Number ID
                 <input
                   name="phoneNumberId"
                   type="text"
+                  inputMode="numeric"
                   defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
                   required={Boolean(whatsAppPage.configurationIssue)}
                 />
               </label>
-              <label>
+              <label className="span-2">
                 Webhook URL
-                <input name="webhookUrl" type="text" defaultValue={whatsAppWebhookUrl} />
+                <input name="webhookUrl" type="url" value={whatsAppWebhookUrl} readOnly />
+                <small>Dipasang otomatis sebagai callback khusus workspace ini.</small>
               </label>
               <label className="span-2">
                 Access Token
@@ -391,7 +417,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 />
               </label>
               <label>
-                Verify Token
+                Verify Token <small>(opsional)</small>
                 <input
                   name="verifyToken"
                   type="password"
@@ -399,6 +425,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.verifyTokenMasked ?? "Not set"}`}
                 />
+                <small>Kosongkan agar Aijou membuat token acak.</small>
               </label>
               <label>
                 App Secret
@@ -412,10 +439,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               </label>
               <label className="checkbox-label span-2">
                 <input name="isActive" type="checkbox" defaultChecked={whatsAppPage.settings?.isActive} />
-                Activate WhatsApp settings
+                Aktifkan dan verifikasi koneksi ke Meta
               </label>
               <button className="primary-button span-2" type="submit">
-                Save WhatsApp Business
+                Simpan &amp; tes koneksi Meta
               </button>
             </form>
           </section>
@@ -489,6 +516,41 @@ function getTelegramFeedback(searchParams: Record<string, string | string[] | un
   return {
     title: "Koneksi Telegram belum berhasil",
     message: errorMessages[error],
+    isError: true,
+  };
+}
+
+function getWhatsAppFeedback(searchParams: Record<string, string | string[] | undefined>) {
+  if (getSingleParam(searchParams.saved) === "1") {
+    const connected = getSingleParam(searchParams.connected) === "1";
+    return {
+      title: connected ? "WhatsApp terhubung" : "Draft WhatsApp tersimpan",
+      message: connected
+        ? "Token valid, nomor cocok dengan WABA, dan webhook workspace sudah diterima Meta."
+        : "Credential terenkripsi sudah disimpan, tetapi channel belum diaktifkan.",
+      isError: false,
+    };
+  }
+
+  const error = getSingleParam(searchParams.error);
+  const messages: Record<string, string> = {
+    invalid_token: "Access token ditolak Meta. Gunakan permanent System User Access Token terbaru.",
+    invalid_app_secret: "App Secret tidak cocok dengan Meta app yang menerbitkan access token.",
+    permission_missing:
+      "Token belum memiliki izin whatsapp_business_management dan whatsapp_business_messaging.",
+    invalid_waba: "WABA ID tidak ditemukan atau tidak dapat diakses oleh token ini.",
+    phone_mismatch: "Phone Number ID tidak terdaftar di WABA ID yang dimasukkan.",
+    webhook_failed:
+      "Meta mengenali akun, tetapi subscription webhook belum berhasil. Periksa izin token dan coba lagi.",
+    meta_unavailable: "Meta sedang tidak dapat dijangkau. Credential tetap Draft; coba lagi sebentar.",
+    incomplete: "Lengkapi WABA ID, Phone Number ID, access token, dan app secret.",
+    save_failed: "Pengaturan belum berhasil disimpan. Periksa input lalu coba lagi.",
+  };
+
+  if (!error || !messages[error]) return null;
+  return {
+    title: "WhatsApp belum terhubung",
+    message: messages[error],
     isError: true,
   };
 }

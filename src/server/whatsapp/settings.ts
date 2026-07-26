@@ -1,12 +1,14 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
 import {
   readCredentialSnapshot,
   requireCompleteCredentialReplacement,
 } from "@/server/integrations/credential-recovery";
+import { connectWhatsAppCloudApi } from "@/server/whatsapp/meta-connection";
 
 export type WhatsAppSettingsInput = {
+  wabaId?: string | null;
   phoneNumberId?: string | null;
   accessToken?: string | null;
   verifyToken?: string | null;
@@ -30,6 +32,7 @@ export async function getWhatsAppSettingsPage(userId: string) {
   const stored = await prisma.whatsAppSettings.findUnique({ where: { businessId: business.id } });
   const rawSettings = stored ?? {
     businessId: business.id,
+    wabaId: null,
     phoneNumberId: null,
     accessToken: null,
     verifyToken: null,
@@ -44,7 +47,7 @@ export async function getWhatsAppSettingsPage(userId: string) {
     settings = decryptStoredSettings(rawSettings);
   } catch {
     configurationIssue =
-      "Credential WhatsApp tidak dapat dibaca. Isi ulang Phone Number ID, access token, verify token, dan app secret.";
+      "Credential WhatsApp tidak dapat dibaca. Isi ulang WABA ID, Phone Number ID, access token, dan app secret.";
     settings = {
       ...rawSettings,
       accessToken: null,
@@ -60,8 +63,9 @@ export async function getWhatsAppSettingsPage(userId: string) {
     business,
     configurationIssue,
     settings: {
+      wabaId: settings.wabaId,
       phoneNumberId: settings.phoneNumberId,
-      webhookUrl: settings.webhookUrl,
+      webhookUrl: getWhatsAppWebhookUrl(),
       isActive: settings.isActive,
       lastConnectedAt: settings.lastConnectedAt?.toISOString() ?? null,
       accessTokenMasked: maskSecret(settings.accessToken),
@@ -88,27 +92,32 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
     },
   );
   const existing = credentialSnapshot.value;
+  const nextWabaId = cleanOptional(input.wabaId);
   const nextPhoneNumberId = cleanOptional(input.phoneNumberId);
-  const nextWebhookUrl = cleanOptional(input.webhookUrl);
+  const nextWebhookUrl = getWhatsAppWebhookUrl();
   const incomingAccessToken = cleanOptional(input.accessToken);
   const incomingVerifyToken = cleanOptional(input.verifyToken);
   const incomingAppSecret = cleanOptional(input.appSecret);
 
   requireCompleteCredentialReplacement(
     credentialSnapshot.recoveryRequired,
-    [nextPhoneNumberId, incomingAccessToken, incomingVerifyToken, incomingAppSecret],
-    "Credential WhatsApp lama tidak dapat dibaca. Isi ulang Phone Number ID, access token, verify token, dan app secret.",
+    [nextWabaId, nextPhoneNumberId, incomingAccessToken, incomingAppSecret],
+    "Credential WhatsApp lama tidak dapat dibaca. Isi ulang WABA ID, Phone Number ID, access token, dan app secret.",
   );
 
   const nextAccessToken = mergeSecret(existing.accessToken, incomingAccessToken, "access token");
-  const nextVerifyToken = mergeSecret(existing.verifyToken, incomingVerifyToken, "verify token");
+  const nextVerifyToken =
+    mergeSecret(existing.verifyToken, incomingVerifyToken, "verify token") ??
+    (input.isActive ? randomBytes(32).toString("base64url") : null);
   const nextAppSecret = mergeSecret(existing.appSecret, incomingAppSecret, "app secret");
+
+  if (nextWabaId && !/^\d{5,32}$/.test(nextWabaId)) {
+    throw new Error("WABA ID harus berupa angka yang valid.");
+  }
 
   if (nextPhoneNumberId && !/^\d{5,32}$/.test(nextPhoneNumberId)) {
     throw new Error("Phone Number ID harus berupa angka yang valid.");
   }
-
-  if (nextWebhookUrl) validateWebhookUrl(nextWebhookUrl);
 
   if (nextAccessToken && nextAccessToken.length < 20) {
     throw new Error("Access token WhatsApp terlihat tidak valid.");
@@ -122,23 +131,63 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
     throw new Error("App secret tidak valid.");
   }
 
-  const ready = Boolean(nextAccessToken && nextVerifyToken && nextAppSecret && nextPhoneNumberId);
+  const ready = Boolean(
+    nextAccessToken &&
+      nextVerifyToken &&
+      nextAppSecret &&
+      nextWabaId &&
+      nextPhoneNumberId,
+  );
 
-  return prisma.whatsAppSettings.update({
+  const draft = await prisma.whatsAppSettings.update({
     where: { businessId: business.id },
     data: {
+      wabaId: nextWabaId,
       phoneNumberId: nextPhoneNumberId,
       accessToken: encryptSecret(nextAccessToken, secretContext(business.id, "accessToken")),
       verifyToken: encryptSecret(nextVerifyToken, secretContext(business.id, "verifyToken")),
       appSecret: encryptSecret(nextAppSecret, secretContext(business.id, "appSecret")),
       webhookUrl: nextWebhookUrl,
-      isActive: Boolean(input.isActive && ready),
-      lastConnectedAt:
-        input.isActive && ready
-          ? new Date()
-          : credentialSnapshot.recoveryRequired
-            ? null
-            : existing.lastConnectedAt,
+      isActive: false,
+      lastConnectedAt: input.isActive ? null : existing.lastConnectedAt,
+    },
+  });
+
+  if (!input.isActive) {
+    return draft;
+  }
+
+  if (
+    !ready ||
+    !nextAccessToken ||
+    !nextVerifyToken ||
+    !nextAppSecret ||
+    !nextWabaId ||
+    !nextPhoneNumberId
+  ) {
+    throw new Error(
+      "Lengkapi WABA ID, Phone Number ID, access token, dan app secret sebelum mengaktifkan WhatsApp.",
+    );
+  }
+
+  const connection = await connectWhatsAppCloudApi({
+    accessToken: nextAccessToken,
+    appSecret: nextAppSecret,
+    wabaId: nextWabaId,
+    phoneNumberId: nextPhoneNumberId,
+    webhookUrl: nextWebhookUrl,
+    verifyToken: nextVerifyToken,
+  });
+
+  if (!connection.ok) {
+    throw new Error(connection.reason);
+  }
+
+  return prisma.whatsAppSettings.update({
+    where: { businessId: business.id },
+    data: {
+      isActive: true,
+      lastConnectedAt: new Date(),
     },
   });
 }
@@ -171,7 +220,13 @@ export async function isAnyVerifyTokenValid(token: string) {
   if (envVerifyToken && safeEqual(token, envVerifyToken)) return true;
 
   const settings = await prisma.whatsAppSettings.findMany({
-    where: { isActive: true, verifyToken: { not: null } },
+    where: {
+      verifyToken: { not: null },
+      OR: [
+        { isActive: true },
+        { updatedAt: { gte: new Date(Date.now() - 15 * 60_000) } },
+      ],
+    },
     select: {
       businessId: true,
       accessToken: true,
@@ -249,7 +304,13 @@ export async function getWhatsAppReadinessForBusiness(businessId: string) {
     return {
       ready: false,
       source: "not_configured",
-      checks: { accessToken: false, verifyToken: false, phoneNumberId: false, appSecret: false },
+      checks: {
+        accessToken: false,
+        verifyToken: false,
+        wabaId: false,
+        phoneNumberId: false,
+        appSecret: false,
+      },
     };
   }
 
@@ -261,7 +322,13 @@ export async function getWhatsAppReadinessForBusiness(businessId: string) {
     return {
       ready: false,
       source: "credential_error",
-      checks: { accessToken: false, verifyToken: false, phoneNumberId: Boolean(stored.phoneNumberId), appSecret: false },
+      checks: {
+        accessToken: false,
+        verifyToken: false,
+        wabaId: Boolean(stored.wabaId),
+        phoneNumberId: Boolean(stored.phoneNumberId),
+        appSecret: false,
+      },
     };
   }
 
@@ -271,6 +338,7 @@ export async function getWhatsAppReadinessForBusiness(businessId: string) {
     checks: {
       accessToken: Boolean(settings.accessToken),
       verifyToken: Boolean(settings.verifyToken),
+      wabaId: Boolean(settings.wabaId),
       phoneNumberId: Boolean(settings.phoneNumberId),
       appSecret: Boolean(settings.appSecret),
     },
@@ -279,6 +347,7 @@ export async function getWhatsAppReadinessForBusiness(businessId: string) {
 
 export function parseWhatsAppSettingsFormData(formData: FormData): WhatsAppSettingsInput {
   return {
+    wabaId: String(formData.get("wabaId") ?? ""),
     phoneNumberId: String(formData.get("phoneNumberId") ?? ""),
     accessToken: String(formData.get("accessToken") ?? ""),
     verifyToken: String(formData.get("verifyToken") ?? ""),
@@ -352,6 +421,7 @@ function emptyCredentials() {
 }
 
 function isSettingsReady(settings: {
+  wabaId: string | null;
   phoneNumberId: string | null;
   accessToken: string | null;
   verifyToken: string | null;
@@ -360,6 +430,7 @@ function isSettingsReady(settings: {
 }) {
   return Boolean(
     settings.isActive &&
+      settings.wabaId &&
       settings.phoneNumberId &&
       settings.accessToken &&
       settings.verifyToken &&
@@ -447,4 +518,28 @@ function validateWebhookUrl(value: string) {
   if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && isLocal)) {
     throw new Error("Webhook URL production wajib menggunakan HTTPS.");
   }
+}
+
+export function getWhatsAppWebhookUrl() {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    (process.env.NODE_ENV === "production" ? "" : "http://localhost:3000");
+
+  if (!appUrl) {
+    throw new Error("NEXT_PUBLIC_APP_URL belum dikonfigurasi untuk webhook WhatsApp.");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(appUrl);
+  } catch {
+    throw new Error("NEXT_PUBLIC_APP_URL tidak valid untuk webhook WhatsApp.");
+  }
+
+  url.pathname = "/api/webhooks/whatsapp";
+  url.search = "";
+  url.hash = "";
+  const webhookUrl = url.toString();
+  validateWebhookUrl(webhookUrl);
+  return webhookUrl;
 }

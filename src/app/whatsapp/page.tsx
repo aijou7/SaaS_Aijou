@@ -6,7 +6,13 @@ import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
-export default async function WhatsAppSettingsPage() {
+type WhatsAppSettingsPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function WhatsAppSettingsPage({
+  searchParams,
+}: WhatsAppSettingsPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -14,6 +20,8 @@ export default async function WhatsAppSettingsPage() {
   }
 
   const page = await getWhatsAppSettingsPage(session.userId);
+  const params = searchParams ? await searchParams : {};
+  const feedback = getWhatsAppFeedback(params);
   const webhookUrl =
     page.settings?.webhookUrl ??
     `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/webhooks/whatsapp`;
@@ -24,10 +32,19 @@ export default async function WhatsAppSettingsPage() {
         <p className="eyebrow">WhatsApp connection</p>
         <h1>Sambungin WhatsApp dari dashboard, tanpa buka code.</h1>
         <p>
-          Isi credential Meta WhatsApp Cloud API di sini. App akan pakai setting dashboard
-          lebih dulu, lalu fallback ke `.env` kalau belum ada.
+          Isi credential Meta WhatsApp Cloud API di sini. Aijou akan memvalidasi akun,
+          mencocokkan nomor, dan memasang webhook workspace secara otomatis.
         </p>
       </section>
+
+      {feedback ? (
+        <section className="section">
+          <div className="settings-note" role={feedback.isError ? "alert" : "status"}>
+            <strong>{feedback.title}</strong>
+            <p>{feedback.message}</p>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid" aria-label="WhatsApp settings summary">
         <div className="card">
@@ -35,7 +52,9 @@ export default async function WhatsAppSettingsPage() {
           <h2>Status</h2>
           <div className="metric">{page.ready ? "Ready" : "Draft"}</div>
           <p className="muted">
-            {page.settings?.isActive ? "Dashboard settings aktif." : "Belum aktif."}
+            {page.settings?.isActive
+              ? `Diverifikasi ${formatConnectionDate(page.settings.lastConnectedAt)}.`
+              : "Belum aktif atau belum lolos tes Meta."}
           </p>
         </div>
         <div className="card">
@@ -61,11 +80,24 @@ export default async function WhatsAppSettingsPage() {
             </div>
           ) : null}
           <form className="form-grid" action={updateWhatsAppSettingsAction}>
+            <input name="returnTo" type="hidden" value="/whatsapp" />
+            <label>
+              WhatsApp Business Account ID
+              <input
+                name="wabaId"
+                type="text"
+                inputMode="numeric"
+                defaultValue={page.settings?.wabaId ?? ""}
+                required={Boolean(page.configurationIssue)}
+                placeholder="123456789012345"
+              />
+            </label>
             <label>
               Phone Number ID
               <input
                 name="phoneNumberId"
                 type="text"
+                inputMode="numeric"
                 defaultValue={page.settings?.phoneNumberId ?? ""}
                 required={Boolean(page.configurationIssue)}
                 placeholder="1234567890"
@@ -73,7 +105,8 @@ export default async function WhatsAppSettingsPage() {
             </label>
             <label>
               Webhook URL
-              <input name="webhookUrl" type="text" defaultValue={webhookUrl} />
+              <input name="webhookUrl" type="url" value={webhookUrl} readOnly />
+              <small>Dipasang otomatis ke subscription WABA saat koneksi berhasil.</small>
             </label>
             <label className="span-2">
               Access Token
@@ -86,7 +119,7 @@ export default async function WhatsAppSettingsPage() {
               />
             </label>
             <label>
-              Verify Token
+              Verify Token <small>(opsional)</small>
               <input
                 name="verifyToken"
                 type="password"
@@ -94,6 +127,7 @@ export default async function WhatsAppSettingsPage() {
                 required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.verifyTokenMasked ?? "Not set"}`}
               />
+              <small>Kosongkan agar Aijou membuat token acak yang aman.</small>
             </label>
             <label>
               App Secret
@@ -107,10 +141,10 @@ export default async function WhatsAppSettingsPage() {
             </label>
             <label className="checkbox-label span-2">
               <input name="isActive" type="checkbox" defaultChecked={page.settings?.isActive} />
-              Activate dashboard WhatsApp settings
+              Aktifkan dan verifikasi koneksi ke Meta
             </label>
             <button className="primary-button span-2" type="submit">
-              Save WhatsApp settings
+              Simpan &amp; tes koneksi Meta
             </button>
           </form>
         </div>
@@ -122,26 +156,26 @@ export default async function WhatsAppSettingsPage() {
               <KeyRound size={18} aria-hidden="true" />
               <span>
                 <strong>1. Copy token dari Meta</strong>
-                <small>Access token, phone number ID, verify token, dan app secret.</small>
+                <small>Siapkan permanent access token, WABA ID, Phone Number ID, dan app secret.</small>
               </span>
             </div>
             <div className="checklist-item">
               <RadioTower size={18} aria-hidden="true" />
               <span>
                 <strong>2. Set callback URL</strong>
-                <small>Pakai URL webhook di form: `/api/webhooks/whatsapp`.</small>
+                <small>Aijou memasang callback HTTPS dan verify token otomatis ke WABA.</small>
               </span>
             </div>
             <div className="checklist-item">
               <PlugZap size={18} aria-hidden="true" />
               <span>
                 <strong>3. Activate</strong>
-                <small>Centang active setelah semua field lengkap, lalu cek Go Live.</small>
+                <small>Centang aktif lalu simpan. Status Ready hanya muncul setelah Meta menerima setup.</small>
               </span>
             </div>
           </div>
           <div className="settings-note">
-            <strong>Catatan security MVP</strong>
+            <strong>Security</strong>
             <p>
               Credential dienkripsi per workspace sebelum disimpan. Jangan pernah membagikan
               access token, verify token, app secret, atau encryption key lewat chat.
@@ -151,4 +185,54 @@ export default async function WhatsAppSettingsPage() {
       </section>
     </AppShell>
   );
+}
+
+function getWhatsAppFeedback(searchParams: Record<string, string | string[] | undefined>) {
+  const saved = getSingleParam(searchParams.saved);
+  if (saved === "1") {
+    const connected = getSingleParam(searchParams.connected) === "1";
+    return {
+      title: connected ? "WhatsApp terhubung" : "Draft WhatsApp tersimpan",
+      message: connected
+        ? "Token valid, nomor cocok dengan WABA, dan webhook workspace sudah diterima Meta."
+        : "Credential terenkripsi sudah disimpan, tetapi channel belum diaktifkan.",
+      isError: false,
+    };
+  }
+
+  const error = getSingleParam(searchParams.error);
+  const messages: Record<string, string> = {
+    invalid_token: "Access token ditolak Meta. Gunakan permanent System User Access Token terbaru.",
+    invalid_app_secret: "App Secret tidak cocok dengan Meta app yang menerbitkan access token.",
+    permission_missing:
+      "Token belum memiliki izin whatsapp_business_management dan whatsapp_business_messaging.",
+    invalid_waba: "WABA ID tidak ditemukan atau tidak dapat diakses oleh token ini.",
+    phone_mismatch: "Phone Number ID tidak terdaftar di WABA ID yang dimasukkan.",
+    webhook_failed:
+      "Meta mengenali akun, tetapi subscription webhook belum berhasil. Periksa izin token dan coba lagi.",
+    meta_unavailable: "Meta sedang tidak dapat dijangkau. Credential tetap Draft; coba lagi sebentar.",
+    incomplete: "Lengkapi WABA ID, Phone Number ID, access token, dan app secret.",
+    save_failed: "Pengaturan belum berhasil disimpan. Periksa input lalu coba lagi.",
+  };
+
+  if (!error || !messages[error]) return null;
+  return {
+    title: "WhatsApp belum terhubung",
+    message: messages[error],
+    isError: true,
+  };
+}
+
+function getSingleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function formatConnectionDate(value: string | null) {
+  if (!value) return "sekarang";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "sekarang";
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }

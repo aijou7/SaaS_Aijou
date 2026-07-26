@@ -1,4 +1,10 @@
 import { getWhatsAppCredentialsForBusiness } from "@/server/whatsapp/settings";
+import {
+  fetchWhatsAppGraph,
+  isWhatsAppAbortError,
+  readWhatsAppGraphResponse,
+  whatsAppGraphApiUrl,
+} from "@/server/whatsapp/graph-api";
 
 type SendTextMessageParams = {
   to: string;
@@ -11,8 +17,6 @@ type DownloadMediaParams = {
   businessId: string;
 };
 
-const defaultGraphApiVersion = "v21.0";
-const defaultRequestTimeoutMs = 10_000;
 const defaultMaxMediaBytes = 10 * 1024 * 1024;
 const maxWhatsAppTextLength = 4_096;
 
@@ -53,8 +57,8 @@ export async function sendWhatsAppTextMessage(params: SendTextMessageParams) {
   }
 
   try {
-    const response = await fetchWithTimeout(
-      graphApiUrl(`${encodeURIComponent(phoneNumberId)}/messages`),
+    const response = await fetchWhatsAppGraph(
+      whatsAppGraphApiUrl(`${encodeURIComponent(phoneNumberId)}/messages`),
       {
         method: "POST",
         headers: {
@@ -74,7 +78,7 @@ export async function sendWhatsAppTextMessage(params: SendTextMessageParams) {
       },
     );
 
-    const body = await readResponseBody(response);
+    const body = await readWhatsAppGraphResponse(response);
     const providerMessageId = extractProviderMessageId(body);
 
     if (!response.ok) {
@@ -108,7 +112,7 @@ export async function sendWhatsAppTextMessage(params: SendTextMessageParams) {
   } catch (error) {
     return {
       sent: false as const,
-      reason: isAbortError(error) ? "whatsapp_request_timeout" : "whatsapp_network_error",
+      reason: isWhatsAppAbortError(error) ? "whatsapp_request_timeout" : "whatsapp_network_error",
       providerMessageId: null,
     };
   }
@@ -127,7 +131,7 @@ export async function getWhatsAppMediaDownloadUrl(mediaId: string, businessId?: 
   let response: Response;
 
   try {
-    response = await fetchWithTimeout(graphApiUrl(encodeURIComponent(mediaId)), {
+    response = await fetchWhatsAppGraph(whatsAppGraphApiUrl(encodeURIComponent(mediaId)), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -183,7 +187,7 @@ export async function downloadWhatsAppMedia(params: DownloadMediaParams) {
   let response: Response;
 
   try {
-    response = await fetchWithTimeout(media.url, {
+    response = await fetchWhatsAppGraph(media.url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -191,7 +195,7 @@ export async function downloadWhatsAppMedia(params: DownloadMediaParams) {
   } catch (error) {
     return {
       downloaded: false,
-      reason: isAbortError(error) ? "media_download_timeout" : "media_download_failed",
+      reason: isWhatsAppAbortError(error) ? "media_download_timeout" : "media_download_failed",
     };
   }
 
@@ -270,16 +274,6 @@ export async function downloadWhatsAppMedia(params: DownloadMediaParams) {
   };
 }
 
-async function readResponseBody(response: Response) {
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    return response.json().catch(() => null);
-  }
-
-  return response.text();
-}
-
 async function readResponseBufferWithLimit(response: Response, maxBytes: number) {
   if (!response.body) return Buffer.alloc(0);
 
@@ -318,60 +312,6 @@ function extractProviderMessageId(body: unknown) {
   return typeof firstMessage.id === "string" ? firstMessage.id : null;
 }
 
-function graphApiUrl(path: string) {
-  const configuredVersion = process.env.WHATSAPP_GRAPH_API_VERSION?.trim();
-  const version =
-    configuredVersion && /^v?\d+\.\d+$/.test(configuredVersion)
-      ? configuredVersion.startsWith("v")
-        ? configuredVersion
-        : `v${configuredVersion}`
-      : defaultGraphApiVersion;
-  return `${graphApiBaseUrl()}/${version}/${path.replace(/^\/+/, "")}`;
-}
-
-function graphApiBaseUrl() {
-  const configured = process.env.WHATSAPP_GRAPH_API_BASE_URL?.trim().replace(/\/+$/, "");
-
-  if (!configured) {
-    return "https://graph.facebook.com";
-  }
-
-  try {
-    const url = new URL(configured);
-    const localDevelopmentHost =
-      process.env.NODE_ENV !== "production" &&
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1");
-
-    if (url.protocol === "https:" || (url.protocol === "http:" && localDevelopmentHost)) {
-      return url.toString().replace(/\/+$/, "");
-    }
-  } catch {
-    // Invalid configuration safely falls back to Meta's official endpoint.
-  }
-
-  return "https://graph.facebook.com";
-}
-
-async function fetchWithTimeout(input: string, init: RequestInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs());
-
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function requestTimeoutMs() {
-  const configured = Number(process.env.WHATSAPP_GRAPH_TIMEOUT_MS);
-  if (!Number.isFinite(configured)) {
-    return defaultRequestTimeoutMs;
-  }
-
-  return Math.min(30_000, Math.max(1_000, Math.round(configured)));
-}
-
 function configuredMaxMediaBytes() {
   const configured = Number(process.env.WHATSAPP_MAX_MEDIA_BYTES);
   if (!Number.isFinite(configured)) {
@@ -379,10 +319,6 @@ function configuredMaxMediaBytes() {
   }
 
   return Math.min(25 * 1024 * 1024, Math.max(1024, Math.round(configured)));
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
 }
 
 function normalizeRecipient(value: string) {

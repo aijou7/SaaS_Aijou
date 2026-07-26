@@ -153,6 +153,10 @@ BLOB_READ_WRITE_TOKEN="VERCEL_MANAGED_TOKEN"
 
 Tanpa token ini, production masih dapat memproses buffer receipt dalam request yang sama, tetapi file tidak persisten setelah proses serverless selesai.
 
+### Database migrations
+
+`vercel.json` menjalankan `npm run vercel:build`, yang mengeksekusi `prisma migrate deploy` sebelum build Next.js. Karena itu migration forward-only selalu diterapkan dengan `DATABASE_URL` milik environment deployment sebelum kode baru dipromosikan. Jangan mengganti build command Vercel kembali ke `npm run build` tanpa memindahkan langkah migration ke pipeline lain.
+
 ### WhatsApp Cloud API
 
 Credential utama disarankan disimpan per workspace dari halaman `/integrations` setelah `DATA_ENCRYPTION_KEY` production aktif. Environment berikut dapat dipakai untuk bootstrap workspace awal:
@@ -161,8 +165,9 @@ Credential utama disarankan disimpan per workspace dari halaman `/integrations` 
 WHATSAPP_VERIFY_TOKEN=""
 WHATSAPP_APP_SECRET=""
 WHATSAPP_ACCESS_TOKEN=""
+WHATSAPP_WABA_ID=""
 WHATSAPP_PHONE_NUMBER_ID=""
-WHATSAPP_GRAPH_API_VERSION="v21.0"
+WHATSAPP_GRAPH_API_VERSION="v25.0"
 WHATSAPP_GRAPH_API_BASE_URL="https://graph.facebook.com"
 WHATSAPP_GRAPH_TIMEOUT_MS="10000"
 WHATSAPP_MAX_MEDIA_BYTES="10485760"
@@ -170,6 +175,21 @@ WHATSAPP_DEFAULT_COUNTRY_CODE="62"
 ```
 
 Pin Graph API version yang masih didukung oleh Meta. Jangan memakai custom Graph API base URL di production kecuali memang ada kebutuhan yang sudah direview.
+
+Setup yang direkomendasikan dilakukan dari `/integrations?platform=whatsapp`:
+
+1. Buat permanent System User Access Token dengan permission `whatsapp_business_management` dan `whatsapp_business_messaging`.
+2. Isi WABA ID, Phone Number ID, access token, dan App Secret. Verify token boleh kosong; aplikasi akan membuat nilai acak.
+3. Centang aktif lalu simpan. Server memeriksa bahwa nomor memang berada di WABA tersebut, lalu memasang subscription WABA dengan callback workspace dan verify token.
+4. Status `Connected` hanya disimpan setelah Meta menerima validasi token, pencocokan nomor, dan subscription webhook.
+
+Callback canonical tidak dapat diarahkan ke domain sembarang dari form. Nilainya selalu:
+
+```text
+https://APP_DOMAIN/api/webhooks/whatsapp
+```
+
+App Secret tidak pernah dikirim sebagai plaintext ke Graph API. Server hanya mengirim HMAC `appsecret_proof` untuk memastikan token dan App Secret berasal dari Meta app yang sama, lalu memakai secret tersebut untuk memverifikasi signature `x-hub-signature-256` pada setiap webhook masuk.
 
 ### Telegram Bot API
 

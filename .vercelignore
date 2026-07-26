@@ -1,0 +1,12 @@
+# Local secrets and Vercel metadata must never be uploaded by `vercel deploy`.
+.env
+.env.*
+!.env.example
+.vercel
+
+# Build and development-only files.
+.git
+.next
+node_modules
+storage
+*.log

@@ -15,13 +15,11 @@ async function main() {
   const rotatePassword = process.env.SEED_ROTATE_OWNER_PASSWORD === "true";
   const refreshDemoData = process.env.SEED_REFRESH_DEMO_DATA === "true";
   const businessName = process.env.SEED_BUSINESS_NAME?.trim() || "IT Consultant";
+  const whatsAppWabaId = process.env.WHATSAPP_WABA_ID?.trim() || null;
   const whatsappNumber = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || undefined;
   const whatsAppAccessToken = process.env.WHATSAPP_ACCESS_TOKEN?.trim() || null;
   const whatsAppVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN?.trim() || null;
   const whatsAppAppSecret = process.env.WHATSAPP_APP_SECRET?.trim() || null;
-  const whatsAppReady = Boolean(
-    whatsappNumber && whatsAppAccessToken && whatsAppVerifyToken && whatsAppAppSecret,
-  );
 
   if (!isLocalDatabase && !configuredEmail) {
     throw new Error("SEED_OWNER_EMAIL must be explicitly set for a non-local database.");
@@ -107,11 +105,11 @@ async function main() {
     await seedAgentSettings(business.id);
     await seedWhatsAppSettings({
       businessId: business.id,
+      wabaId: whatsAppWabaId,
       whatsappNumber,
       accessToken: whatsAppAccessToken,
       verifyToken: whatsAppVerifyToken,
       appSecret: whatsAppAppSecret,
-      isReady: whatsAppReady,
     });
   }
 
@@ -218,13 +216,14 @@ async function seedAgentSettings(businessId: string) {
 
 async function seedWhatsAppSettings(params: {
   businessId: string;
+  wabaId: string | null;
   whatsappNumber?: string;
   accessToken: string | null;
   verifyToken: string | null;
   appSecret: string | null;
-  isReady: boolean;
 }) {
   const encrypted = {
+    ...(params.wabaId ? { wabaId: params.wabaId } : {}),
     ...(params.whatsappNumber ? { phoneNumberId: params.whatsappNumber } : {}),
     ...(params.accessToken
       ? {
@@ -250,7 +249,6 @@ async function seedWhatsAppSettings(params: {
           ),
         }
       : {}),
-    ...(params.isReady ? { isActive: true } : {}),
   };
 
   await prisma.whatsAppSettings.upsert({
@@ -258,6 +256,7 @@ async function seedWhatsAppSettings(params: {
     update: encrypted,
     create: {
       businessId: params.businessId,
+      wabaId: params.wabaId,
       phoneNumberId: params.whatsappNumber ?? null,
       accessToken: encryptSecret(
         params.accessToken,
@@ -271,7 +270,7 @@ async function seedWhatsAppSettings(params: {
         params.appSecret,
         whatsAppSecretContext(params.businessId, "appSecret"),
       ),
-      isActive: params.isReady,
+      isActive: false,
     },
   });
 }

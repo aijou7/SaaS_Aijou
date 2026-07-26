@@ -846,18 +846,30 @@ function PlatformsPanel({
             </div>
           ) : null}
           <form className="form-grid" action={updateWhatsAppSettingsAction}>
+            <input name="returnTo" type="hidden" value="/integrations?platform=whatsapp" />
+            <label>
+              WhatsApp Business Account ID
+              <input
+                name="wabaId"
+                type="text"
+                inputMode="numeric"
+                defaultValue={whatsAppPage.settings?.wabaId ?? ""}
+                required={Boolean(whatsAppPage.configurationIssue)}
+              />
+            </label>
             <label>
               Phone Number ID
               <input
                 name="phoneNumberId"
                 type="text"
+                inputMode="numeric"
                 defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
                 required={Boolean(whatsAppPage.configurationIssue)}
               />
             </label>
-            <label>
+            <label className="span-2">
               Webhook URL
-              <input name="webhookUrl" type="text" defaultValue={webhookUrl} />
+              <input name="webhookUrl" type="url" value={webhookUrl} readOnly />
             </label>
             <label className="span-2">
               Access Token
@@ -870,7 +882,7 @@ function PlatformsPanel({
               />
             </label>
             <label>
-              Verify Token
+              Verify Token (opsional)
               <input
                 name="verifyToken"
                 type="password"
@@ -891,14 +903,15 @@ function PlatformsPanel({
             </label>
             <label className="checkbox-label span-2">
               <input name="isActive" type="checkbox" defaultChecked={whatsAppPage.settings?.isActive} />
-              Activate WhatsApp settings
+              Aktifkan dan verifikasi koneksi ke Meta
             </label>
             <button className="primary-button span-2" type="submit">
-              Save WhatsApp Business
+              Simpan &amp; tes koneksi Meta
             </button>
           </form>
 
           <div className="platform-checklist">
+            <ChecklistRow done={Boolean(whatsAppPage.settings?.wabaId)} label="WABA ID" />
             <ChecklistRow done={Boolean(whatsAppPage.settings?.phoneNumberId)} label="Phone number ID" />
             <ChecklistRow done={Boolean(whatsAppPage.settings?.accessTokenMasked !== "Not set")} label="Access token" />
             <ChecklistRow done={Boolean(whatsAppPage.settings?.verifyTokenMasked !== "Not set")} label="Verify token" />
