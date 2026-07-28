@@ -94,7 +94,7 @@ export default async function WhatsAppSettingsPage({
                 autoComplete="off"
                 pattern="[0-9]{5,32}"
                 defaultValue={page.settings?.wabaId ?? ""}
-                required={Boolean(page.configurationIssue)}
+                required
                 placeholder="123456789012345"
               />
             </label>
@@ -107,7 +107,7 @@ export default async function WhatsAppSettingsPage({
                 autoComplete="off"
                 pattern="[0-9]{5,32}"
                 defaultValue={page.settings?.phoneNumberId ?? ""}
-                required={Boolean(page.configurationIssue)}
+                required
                 placeholder="1234567890"
               />
             </label>
@@ -126,7 +126,7 @@ export default async function WhatsAppSettingsPage({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(page.configurationIssue)}
+                required={!page.settings?.accessTokenSet}
                 placeholder={`Current: ${page.settings?.accessTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -154,9 +154,10 @@ export default async function WhatsAppSettingsPage({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(page.configurationIssue)}
+                required={!page.settings?.appSecretSet}
                 placeholder={`Current: ${page.settings?.appSecretMasked ?? "Not set"}`}
               />
+              <small>Ambil dari Meta for Developers, App settings, Basic, lalu App Secret.</small>
             </label>
             <label className="checkbox-label span-2">
               <input name="isActive" type="checkbox" defaultChecked={page.settings?.isActive} />

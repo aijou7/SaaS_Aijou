@@ -860,7 +860,7 @@ function PlatformsPanel({
                 autoComplete="off"
                 pattern="[0-9]{5,32}"
                 defaultValue={whatsAppPage.settings?.wabaId ?? ""}
-                required={Boolean(whatsAppPage.configurationIssue)}
+                required
               />
             </label>
             <label>
@@ -872,7 +872,7 @@ function PlatformsPanel({
                 autoComplete="off"
                 pattern="[0-9]{5,32}"
                 defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
-                required={Boolean(whatsAppPage.configurationIssue)}
+                required
               />
             </label>
             <label className="span-2">
@@ -889,7 +889,7 @@ function PlatformsPanel({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(whatsAppPage.configurationIssue)}
+                required={!whatsAppPage.settings?.accessTokenSet}
                 placeholder={`Current: ${whatsAppPage.settings?.accessTokenMasked ?? "Not set"}`}
               />
             </label>
@@ -916,7 +916,7 @@ function PlatformsPanel({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(whatsAppPage.configurationIssue)}
+                required={!whatsAppPage.settings?.appSecretSet}
                 placeholder={`Current: ${whatsAppPage.settings?.appSecretMasked ?? "Not set"}`}
               />
             </label>

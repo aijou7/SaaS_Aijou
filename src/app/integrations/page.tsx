@@ -393,7 +393,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   autoComplete="off"
                   pattern="[0-9]{5,32}"
                   defaultValue={whatsAppPage.settings?.wabaId ?? ""}
-                  required={Boolean(whatsAppPage.configurationIssue)}
+                  required
                   placeholder="123456789012345"
                 />
               </label>
@@ -406,7 +406,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   autoComplete="off"
                   pattern="[0-9]{5,32}"
                   defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
-                  required={Boolean(whatsAppPage.configurationIssue)}
+                  required
                 />
               </label>
               <label className="span-2">
@@ -424,7 +424,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   data-lpignore="true"
                   data-1p-ignore="true"
                   maxLength={4096}
-                  required={Boolean(whatsAppPage.configurationIssue)}
+                  required={!whatsAppPage.settings?.accessTokenSet}
                   placeholder={`Current: ${whatsAppPage.settings?.accessTokenMasked ?? "Not set"}`}
                 />
               </label>
@@ -452,7 +452,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   data-lpignore="true"
                   data-1p-ignore="true"
                   maxLength={4096}
-                  required={Boolean(whatsAppPage.configurationIssue)}
+                  required={!whatsAppPage.settings?.appSecretSet}
                   placeholder={`Current: ${whatsAppPage.settings?.appSecretMasked ?? "Not set"}`}
                 />
               </label>

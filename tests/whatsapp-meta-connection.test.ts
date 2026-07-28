@@ -91,6 +91,14 @@ describe("WhatsApp verify token migration", () => {
       assert.doesNotMatch(input[0], /\brequired=/);
     }
   });
+
+  test("classifies incomplete credentials before access-token errors", async () => {
+    const source = await readFile(new URL("../src/app/whatsapp/actions.ts", import.meta.url), "utf8");
+    const incomplete = source.indexOf('message.includes("lengkapi")');
+    const invalidToken = source.indexOf('message.includes("meta_invalid_token")');
+    assert.ok(incomplete >= 0);
+    assert.ok(invalidToken > incomplete);
+  });
 });
 
 describe("WhatsApp Meta connection", () => {

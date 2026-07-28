@@ -82,6 +82,10 @@ function getWhatsAppErrorCode(error: unknown) {
     return "credential_recovery";
   }
 
+  if (message.includes("lengkapi") || message.includes("app secret")) {
+    return "incomplete";
+  }
+
   if (message.includes("meta_invalid_token") || message.includes("access token")) {
     return "invalid_token";
   }
@@ -120,9 +124,6 @@ function getWhatsAppErrorCode(error: unknown) {
 
   if (message.includes("verify token")) {
     return "invalid_verify_token";
-  }
-  if (message.includes("lengkapi") || message.includes("app secret")) {
-    return "incomplete";
   }
 
   return "save_failed";

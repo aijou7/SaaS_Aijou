@@ -69,6 +69,8 @@ export async function getWhatsAppSettingsPage(userId: string) {
       webhookUrl: getWhatsAppWebhookUrl(),
       isActive: settings.isActive,
       lastConnectedAt: settings.lastConnectedAt?.toISOString() ?? null,
+      accessTokenSet: Boolean(settings.accessToken),
+      appSecretSet: Boolean(settings.appSecret),
       accessTokenMasked: maskSecret(settings.accessToken),
       verifyTokenMasked: maskSecret(settings.verifyToken),
       appSecretMasked: maskSecret(settings.appSecret),
