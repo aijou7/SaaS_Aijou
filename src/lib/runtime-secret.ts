@@ -29,10 +29,26 @@ export function areCriticalRuntimeSecretsReady(
   const auth = environment.AUTH_SECRET?.trim();
   const widget = environment.WIDGET_SIGNING_SECRET?.trim();
   const cron = environment.CRON_SECRET?.trim();
+  const dataEncryption = environment.DATA_ENCRYPTION_KEY?.trim();
   const values = [auth, widget, cron];
 
   return (
     values.every(isStrongRuntimeSecret) &&
-    new Set(values).size === values.length
+    new Set(values).size === values.length &&
+    isValidDataEncryptionKey(dataEncryption) &&
+    !values.includes(dataEncryption)
   );
+}
+
+export function isValidDataEncryptionKey(
+  value: string | null | undefined,
+): value is string {
+  const configured = value?.trim() ?? "";
+  if (!configured) return false;
+
+  const decoded = /^[a-f0-9]{64}$/i.test(configured)
+    ? Buffer.from(configured, "hex")
+    : Buffer.from(configured, "base64url");
+
+  return decoded.length === 32 && isStrongRuntimeSecret(configured);
 }
