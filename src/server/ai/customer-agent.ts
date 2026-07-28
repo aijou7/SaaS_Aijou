@@ -1,3 +1,9 @@
+import {
+  buildContextAwareFallback,
+  buildContextualCustomerReply,
+  buildDerivedConversationContext,
+  polishCustomerReply,
+} from "@/lib/customer-conversation";
 import { buildPublishedPriceReply } from "@/lib/customer-pricing";
 import { callGroqText } from "@/server/ai/groq";
 import type { AgentRuntimeSettings } from "@/server/agent/settings";
@@ -35,7 +41,24 @@ export async function buildCustomerServiceReplyAi(params: {
     return publishedPriceReply;
   }
 
-  const fallback = buildCustomerServiceReplyFallback(message);
+  const contextualReply = buildContextualCustomerReply({
+    message,
+    conversationContext,
+    agentName: settings.agentName,
+  });
+  if (contextualReply) {
+    return contextualReply;
+  }
+
+  const fallback = buildContextAwareFallback({
+    message,
+    conversationContext,
+    agentName: settings.agentName,
+  });
+  const derivedConversationContext = buildDerivedConversationContext(
+    message,
+    conversationContext,
+  );
   const result = await callGroqText({
     businessId: params.businessId,
     usageType: "CUSTOMER_REPLY",
@@ -46,8 +69,11 @@ export async function buildCustomerServiceReplyAi(params: {
       `Tone: ${settings.tone}.`,
       "Your job is to understand the customer's need, move the conversation toward a useful next step, and collect only the details that are still needed.",
       "Use natural, warm Indonesian. Write like a capable solution consultant, not a generic chatbot.",
-      "Read the conversation history before replying. Never repeat a welcome, business introduction, or a question the customer already answered.",
-      "Acknowledge the specific facts the customer gave. For complex projects, briefly summarize what is understood, explain the most sensible next step, then ask at most two high-impact follow-up questions.",
+      "Read the conversation history before replying. A short answer such as 'keduanya', 'iya', 'belum', or a date answers the immediately preceding assistant question; resolve it from that question instead of restarting.",
+      "Greet only on the very first assistant reply. Never repeat a welcome, business introduction, or a question the customer already answered.",
+      "Answer meta questions such as whether the customer is speaking to AI directly and honestly.",
+      "If the customer has no idea yet, propose a sensible starting structure based on the known project instead of asking them to explain the project again.",
+      "Acknowledge the specific facts the customer gave. For complex projects, briefly summarize what is understood, explain the most sensible next step, then ask at most one high-impact follow-up question.",
       "When a project involves a physical site or network, suggest a survey/design process before a final quote; do not invent an exact solution or final price.",
       "A published catalog price, price range, or official website 'mulai dari' price is approved public information. It is a starting price, not a final quote.",
       "When the customer asks the price of a matching item and a published price exists, answer that price directly in the first sentence. Do not refuse it and do not ask for budget/location before stating it.",
@@ -74,6 +100,9 @@ export async function buildCustomerServiceReplyAi(params: {
       "<active_product_catalog>",
       productContext,
       "</active_product_catalog>",
+      "<derived_conversation_context>",
+      derivedConversationContext,
+      "</derived_conversation_context>",
       "Keep the response under 110 words. Do not use headings, bullet points, or canned phrases unless the customer asks for them.",
     ]
       .filter(Boolean)
@@ -88,7 +117,11 @@ export async function buildCustomerServiceReplyAi(params: {
     ].join("\n"),
   });
 
-  return result.text;
+  return polishCustomerReply({
+    reply: result.text,
+    conversationContext,
+    fallback,
+  });
 }
 
 export function isHandoffRequest(message: string) {
@@ -113,14 +146,4 @@ export function inferCustomerIntent(message: string) {
   }
 
   return "customer_message";
-}
-
-function buildCustomerServiceReplyFallback(message: string) {
-  const normalized = message.toLowerCase();
-
-  if (/(harga|biaya|budget|quotation|penawaran)/.test(normalized)) {
-    return "Siap, untuk estimasi yang masuk akal kami perlu melihat scope-nya dulu. Boleh info lokasi, kebutuhan utamanya, dan target waktunya? Setelah itu tim kami bisa arahkan langkah berikutnya tanpa menebak-nebak.";
-  }
-
-  return "Halo, bisa saya bantu. Boleh ceritakan kebutuhan, target yang ingin dicapai, dan perkiraan waktunya?";
 }

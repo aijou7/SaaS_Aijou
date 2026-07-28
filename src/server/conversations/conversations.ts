@@ -436,7 +436,7 @@ async function simulateCustomerMessageForResolvedBusiness(
       products: productCatalog.items,
       conversationContext: messages
         .reverse()
-        .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Aijou"}: ${item.messageBody ?? ""}`)
+        .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Assistant"}: ${item.messageBody ?? ""}`)
         .join("\n"),
       settings,
     });
