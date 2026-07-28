@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
 import {
@@ -6,6 +6,7 @@ import {
   requireCompleteCredentialReplacement,
 } from "@/server/integrations/credential-recovery";
 import { connectWhatsAppCloudApi } from "@/server/whatsapp/meta-connection";
+import { resolveWhatsAppVerifyToken } from "@/server/whatsapp/verify-token";
 
 export type WhatsAppSettingsInput = {
   wabaId?: string | null;
@@ -106,9 +107,11 @@ export async function updateWhatsAppSettings(userId: string, input: WhatsAppSett
   );
 
   const nextAccessToken = mergeSecret(existing.accessToken, incomingAccessToken, "access token");
-  const nextVerifyToken =
-    mergeSecret(existing.verifyToken, incomingVerifyToken, "verify token") ??
-    (input.isActive ? randomBytes(32).toString("base64url") : null);
+  const nextVerifyToken = resolveWhatsAppVerifyToken({
+    existing: existing.verifyToken,
+    incoming: incomingVerifyToken,
+    isActive: Boolean(input.isActive),
+  });
   const nextAppSecret = mergeSecret(existing.appSecret, incomingAppSecret, "app secret");
 
   if (nextWabaId && !/^\d{5,32}$/.test(nextWabaId)) {

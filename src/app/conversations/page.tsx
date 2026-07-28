@@ -903,7 +903,6 @@ function PlatformsPanel({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(whatsAppPage.configurationIssue)}
                 placeholder={`Current: ${whatsAppPage.settings?.verifyTokenMasked ?? "Not set"}`}
               />
             </label>

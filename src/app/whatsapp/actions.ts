@@ -21,7 +21,14 @@ export async function updateWhatsAppSettingsAction(formData: FormData) {
   try {
     await updateWhatsAppSettings(session.userId, input);
   } catch (error) {
-    redirect(`${returnTo}${separator(returnTo)}error=${getWhatsAppErrorCode(error)}`);
+    const errorCode = getWhatsAppErrorCode(error);
+
+    console.error("whatsapp_settings_update_failed", {
+      errorCode,
+      errorName: error instanceof Error ? error.name : "unknown",
+    });
+
+    redirect(`${returnTo}${separator(returnTo)}error=${errorCode}`);
   }
 
   revalidateWhatsAppPages();
@@ -51,6 +58,29 @@ function separator(path: string) {
 
 function getWhatsAppErrorCode(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  const providerCode =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : "";
+
+  if (providerCode === "P2002") {
+    return "phone_in_use";
+  }
+
+  if (["P1001", "P1002", "P1008", "P1017"].includes(providerCode)) {
+    return "storage_unavailable";
+  }
+
+  if (message.includes("data_encryption_key")) {
+    return "encryption_unavailable";
+  }
+
+  if (message.includes("credential whatsapp lama")) {
+    return "credential_recovery";
+  }
 
   if (message.includes("meta_invalid_token") || message.includes("access token")) {
     return "invalid_token";
@@ -88,6 +118,9 @@ function getWhatsAppErrorCode(error: unknown) {
     return "meta_unavailable";
   }
 
+  if (message.includes("verify token")) {
+    return "invalid_verify_token";
+  }
   if (message.includes("lengkapi") || message.includes("app secret")) {
     return "incomplete";
   }

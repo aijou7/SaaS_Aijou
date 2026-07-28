@@ -140,7 +140,6 @@ export default async function WhatsAppSettingsPage({
                 data-lpignore="true"
                 data-1p-ignore="true"
                 maxLength={4096}
-                required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.verifyTokenMasked ?? "Not set"}`}
               />
               <small>Kosongkan agar Aijou membuat token acak yang aman.</small>
@@ -224,6 +223,12 @@ function getWhatsAppFeedback(searchParams: Record<string, string | string[] | un
   const messages: Record<string, string> = {
     invalid_token: "Access token ditolak Meta. Gunakan permanent System User Access Token terbaru.",
     invalid_app_secret: "App Secret tidak cocok dengan Meta app yang menerbitkan access token.",
+    invalid_verify_token: "Verify Token minimal 16 karakter. Kosongkan kolom agar Aijou membuat token acak yang aman.",
+    credential_recovery:
+      "Credential lama tidak dapat dibaca. Isi ulang WABA ID, Phone Number ID, access token, dan app secret; Verify Token boleh kosong.",
+    encryption_unavailable: "Konfigurasi enkripsi server belum siap. Hubungi admin workspace.",
+    phone_in_use: "Phone Number ID ini sudah digunakan oleh workspace lain.",
+    storage_unavailable: "Database sementara tidak dapat dijangkau. Coba lagi sebentar.",
     permission_missing:
       "Token belum memiliki izin whatsapp_business_management dan whatsapp_business_messaging.",
     invalid_waba: "WABA ID tidak ditemukan atau tidak dapat diakses oleh token ini.",

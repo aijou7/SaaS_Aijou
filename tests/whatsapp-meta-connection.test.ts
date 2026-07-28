@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, test } from "node:test";
 import { whatsAppGraphApiUrl } from "../src/server/whatsapp/graph-api";
 import { connectWhatsAppCloudApi } from "../src/server/whatsapp/meta-connection";
+import { resolveWhatsAppVerifyToken } from "../src/server/whatsapp/verify-token";
 
 const originalFetch = globalThis.fetch;
 const originalGraphVersion = process.env.WHATSAPP_GRAPH_API_VERSION;
@@ -10,6 +12,85 @@ const originalGraphVersion = process.env.WHATSAPP_GRAPH_API_VERSION;
 afterEach(() => {
   globalThis.fetch = originalFetch;
   restoreEnv("WHATSAPP_GRAPH_API_VERSION", originalGraphVersion);
+});
+
+describe("WhatsApp verify token migration", () => {
+  test("rotates a short legacy token when activating with blank input", () => {
+    let generated = 0;
+    const token = resolveWhatsAppVerifyToken({
+      existing: "verify-me",
+      incoming: "",
+      isActive: true,
+      generate: () => {
+        generated += 1;
+        return "generated-secure-verify-token";
+      },
+    });
+
+    assert.equal(token, "generated-secure-verify-token");
+    assert.equal(generated, 1);
+  });
+
+  test("preserves valid stored and explicitly supplied tokens", () => {
+    const neverGenerate = () => {
+      throw new Error("generator should not run");
+    };
+
+    assert.equal(
+      resolveWhatsAppVerifyToken({
+        existing: "existing-secure-verify-token",
+        incoming: "",
+        isActive: true,
+        generate: neverGenerate,
+      }),
+      "existing-secure-verify-token",
+    );
+    assert.equal(
+      resolveWhatsAppVerifyToken({
+        existing: "verify-me",
+        incoming: "customer-supplied-token",
+        isActive: true,
+        generate: neverGenerate,
+      }),
+      "customer-supplied-token",
+    );
+    assert.equal(
+      resolveWhatsAppVerifyToken({
+        existing: "existing-secure-verify-token",
+        incoming: "short",
+        isActive: true,
+        generate: neverGenerate,
+      }),
+      "short",
+    );
+  });
+
+  test("drops a short legacy token from an inactive draft", () => {
+    assert.equal(
+      resolveWhatsAppVerifyToken({
+        existing: "change-me",
+        incoming: "",
+        isActive: false,
+      }),
+      null,
+    );
+  });
+
+  test("keeps Verify Token optional across every settings form", async () => {
+    const sources = [
+      new URL("../src/app/whatsapp/page.tsx", import.meta.url),
+      new URL("../src/app/integrations/page.tsx", import.meta.url),
+      new URL("../src/app/conversations/page.tsx", import.meta.url),
+    ];
+
+    for (const file of sources) {
+      const source = await readFile(file, "utf8");
+      const input = source.match(/name="verifyToken"[\s\S]{0,500}?\/>/);
+
+      assert.ok(input, `Verify Token input missing in ${file.pathname}`);
+      assert.doesNotMatch(input[0], /\brequired=/);
+    }
+  });
 });
 
 describe("WhatsApp Meta connection", () => {
