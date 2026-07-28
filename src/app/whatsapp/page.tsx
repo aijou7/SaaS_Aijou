@@ -79,7 +79,11 @@ export default async function WhatsAppSettingsPage({
               {page.configurationIssue}
             </div>
           ) : null}
-          <form className="form-grid" action={updateWhatsAppSettingsAction}>
+          <form
+            className="form-grid"
+            action={updateWhatsAppSettingsAction}
+            autoComplete="off"
+          >
             <input name="returnTo" type="hidden" value="/whatsapp" />
             <label>
               WhatsApp Business Account ID
@@ -87,6 +91,8 @@ export default async function WhatsAppSettingsPage({
                 name="wabaId"
                 type="text"
                 inputMode="numeric"
+                autoComplete="off"
+                pattern="[0-9]{5,32}"
                 defaultValue={page.settings?.wabaId ?? ""}
                 required={Boolean(page.configurationIssue)}
                 placeholder="123456789012345"
@@ -98,6 +104,8 @@ export default async function WhatsAppSettingsPage({
                 name="phoneNumberId"
                 type="text"
                 inputMode="numeric"
+                autoComplete="off"
+                pattern="[0-9]{5,32}"
                 defaultValue={page.settings?.phoneNumberId ?? ""}
                 required={Boolean(page.configurationIssue)}
                 placeholder="1234567890"
@@ -113,6 +121,10 @@ export default async function WhatsAppSettingsPage({
               <input
                 name="accessToken"
                 type="password"
+                autoComplete="new-password"
+                spellCheck={false}
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={4096}
                 required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.accessTokenMasked ?? "Not set"}`}
@@ -123,6 +135,10 @@ export default async function WhatsAppSettingsPage({
               <input
                 name="verifyToken"
                 type="password"
+                autoComplete="new-password"
+                spellCheck={false}
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={4096}
                 required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.verifyTokenMasked ?? "Not set"}`}
@@ -134,6 +150,10 @@ export default async function WhatsAppSettingsPage({
               <input
                 name="appSecret"
                 type="password"
+                autoComplete="new-password"
+                spellCheck={false}
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={4096}
                 required={Boolean(page.configurationIssue)}
                 placeholder={`Current: ${page.settings?.appSecretMasked ?? "Not set"}`}

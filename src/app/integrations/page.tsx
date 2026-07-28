@@ -378,7 +378,11 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <p>{whatsAppPage.configurationIssue}</p>
               </div>
             ) : null}
-            <form className="form-grid" action={updateWhatsAppSettingsAction}>
+            <form
+              className="form-grid"
+              action={updateWhatsAppSettingsAction}
+              autoComplete="off"
+            >
               <input name="returnTo" type="hidden" value="/integrations?platform=whatsapp" />
               <label>
                 WhatsApp Business Account ID
@@ -386,6 +390,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   name="wabaId"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="off"
+                  pattern="[0-9]{5,32}"
                   defaultValue={whatsAppPage.settings?.wabaId ?? ""}
                   required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder="123456789012345"
@@ -397,6 +403,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   name="phoneNumberId"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="off"
+                  pattern="[0-9]{5,32}"
                   defaultValue={whatsAppPage.settings?.phoneNumberId ?? ""}
                   required={Boolean(whatsAppPage.configurationIssue)}
                 />
@@ -411,6 +419,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="accessToken"
                   type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   maxLength={4096}
                   required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.accessTokenMasked ?? "Not set"}`}
@@ -421,6 +433,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="verifyToken"
                   type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   maxLength={4096}
                   required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.verifyTokenMasked ?? "Not set"}`}
@@ -432,6 +448,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <input
                   name="appSecret"
                   type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   maxLength={4096}
                   required={Boolean(whatsAppPage.configurationIssue)}
                   placeholder={`Current: ${whatsAppPage.settings?.appSecretMasked ?? "Not set"}`}
