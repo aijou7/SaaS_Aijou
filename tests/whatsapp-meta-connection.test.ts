@@ -219,6 +219,65 @@ describe("WhatsApp Meta connection", () => {
     assert.equal(calls, 2);
   });
 
+  test("identifies missing WhatsApp scopes when Meta hides the WABA", async () => {
+    let calls = 0;
+    globalThis.fetch = async (input) => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse(
+          { error: { code: 100, message: "Unsupported get request" } },
+          400,
+        );
+      }
+
+      assert.match(String(input), /\/me\/permissions\?/);
+      return jsonResponse({
+        data: [
+          { permission: "whatsapp_business_management", status: "declined" },
+          { permission: "whatsapp_business_messaging", status: "granted" },
+        ],
+      });
+    };
+
+    const result = await connectWhatsAppCloudApi(validConnectionInput());
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "meta_permission_missing",
+      status: 400,
+    });
+    assert.equal(calls, 2);
+  });
+
+  test("preserves WABA diagnosis when required token scopes are granted", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse(
+          { error: { code: 100, message: "Unsupported get request" } },
+          400,
+        );
+      }
+
+      return jsonResponse({
+        data: [
+          { permission: "whatsapp_business_management", status: "granted" },
+          { permission: "whatsapp_business_messaging", status: "granted" },
+        ],
+      });
+    };
+
+    const result = await connectWhatsAppCloudApi(validConnectionInput());
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "meta_waba_not_found",
+      status: 400,
+    });
+    assert.equal(calls, 2);
+  });
+
   test("sends App Secret Proof while reading WABA phone numbers", async () => {
     let calls = 0;
     globalThis.fetch = async () => {

@@ -22,6 +22,11 @@ type PhoneNumberRecord = {
   quality_rating?: string;
 };
 
+type MetaPermissionRecord = {
+  permission?: string;
+  status?: string;
+};
+
 export type WhatsAppConnectionResult =
   | {
       ok: true;
@@ -77,9 +82,15 @@ export async function connectWhatsAppCloudApi(
     const phoneBody = await readWhatsAppGraphResponse(phoneResponse);
 
     if (!phoneResponse.ok) {
+      const mappedFailure = mapMetaFailure(phoneResponse.status, phoneBody, "meta_waba_not_found");
+      const reason =
+        mappedFailure === "meta_waba_not_found"
+          ? await refineWabaFailure(params.accessToken, appSecretProof)
+          : mappedFailure;
+      logMetaFailure("phone_numbers", phoneResponse.status, phoneBody, reason);
       return {
         ok: false,
-        reason: mapMetaFailure(phoneResponse.status, phoneBody, "meta_waba_not_found"),
+        reason,
         status: phoneResponse.status,
       };
     }
@@ -114,12 +125,14 @@ export async function connectWhatsAppCloudApi(
         subscriptionBody,
         "meta_webhook_subscription_failed",
       );
+      const reason =
+        mappedFailure === "meta_invalid_token"
+          ? "meta_app_secret_mismatch"
+          : mappedFailure;
+      logMetaFailure("subscription", subscriptionResponse.status, subscriptionBody, reason);
       return {
         ok: false,
-        reason:
-          mappedFailure === "meta_invalid_token"
-            ? "meta_app_secret_mismatch"
-            : mappedFailure,
+        reason,
         status: subscriptionResponse.status,
       };
     }
@@ -167,6 +180,92 @@ function isSuccessfulSubscriptionResponse(body: unknown) {
   if (!body || typeof body !== "object") return false;
   if ("success" in body && body.success === true) return true;
   return "data" in body && Array.isArray(body.data);
+}
+
+async function refineWabaFailure(
+  accessToken: string,
+  appSecretProof: string,
+): Promise<WhatsAppConnectionFailureReason> {
+  try {
+    const query = new URLSearchParams({ appsecret_proof: appSecretProof });
+    const response = await fetchWhatsAppGraph(
+      whatsAppGraphApiUrl(`me/permissions?${query.toString()}`),
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    const body = await readWhatsAppGraphResponse(response);
+
+    if (!response.ok) {
+      return mapMetaFailure(response.status, body, "meta_waba_not_found");
+    }
+
+    const granted = extractGrantedPermissions(body);
+    if (!granted) return "meta_waba_not_found";
+
+    const required = [
+      "whatsapp_business_management",
+      "whatsapp_business_messaging",
+    ];
+    return required.every((permission) => granted.has(permission))
+      ? "meta_waba_not_found"
+      : "meta_permission_missing";
+  } catch {
+    return "meta_waba_not_found";
+  }
+}
+
+function extractGrantedPermissions(body: unknown) {
+  if (!body || typeof body !== "object" || !("data" in body) || !Array.isArray(body.data)) {
+    return null;
+  }
+
+  const granted = new Set<string>();
+  for (const item of body.data) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as MetaPermissionRecord;
+    if (record.status === "granted" && record.permission) {
+      granted.add(record.permission);
+    }
+  }
+  return granted;
+}
+
+function logMetaFailure(
+  stage: "phone_numbers" | "subscription",
+  status: number,
+  body: unknown,
+  reason: WhatsAppConnectionFailureReason,
+) {
+  if (process.env.NODE_ENV !== "production") return;
+  const metaError = extractMetaError(body);
+  console.error("whatsapp_meta_request_failed", {
+    stage,
+    status,
+    reason,
+    metaCode: readMetaNumber(metaError, "code"),
+    metaSubcode: readMetaNumber(metaError, "error_subcode"),
+    metaType: readMetaText(metaError, "type"),
+  });
+}
+
+function extractMetaError(body: unknown): Record<string, unknown> | null {
+  if (!body || typeof body !== "object" || !("error" in body)) return null;
+  const error = body.error;
+  return error && typeof error === "object" ? error as Record<string, unknown> : null;
+}
+
+function readMetaNumber(error: Record<string, unknown> | null, field: string) {
+  const value = Number(error?.[field]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function readMetaText(error: Record<string, unknown> | null, field: string) {
+  const value = error?.[field];
+  return typeof value === "string" ? value.slice(0, 80) : null;
 }
 
 function mapMetaFailure(
