@@ -149,7 +149,7 @@ describe("WhatsApp Meta connection", () => {
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.phone.verifiedName, "Aijou");
-    assert.equal(requests.length, 2);
+    assert.equal(requests.length, 3);
     assert.match(requests[0].url, /\/v25\.0\/111111\/phone_numbers\?/);
     const expectedProof = createHmac("sha256", "matching-app-secret")
       .update("permanent-system-user-token")
@@ -163,7 +163,13 @@ describe("WhatsApp Meta connection", () => {
       new RegExp(`/v25\\.0/111111/subscribed_apps\\?appsecret_proof=${expectedProof}$`),
     );
     assert.equal(requests[1].init?.method, "POST");
-    assert.deepEqual(JSON.parse(String(requests[1].init?.body)), {
+    assert.equal(requests[1].init?.body, undefined);
+    assert.match(
+      requests[2].url,
+      new RegExp(`/v25\\.0/111111/subscribed_apps\\?appsecret_proof=${expectedProof}$`),
+    );
+    assert.equal(requests[2].init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requests[2].init?.body)), {
       override_callback_uri: "https://saa-s-aijou.vercel.app/api/webhooks/whatsapp",
       verify_token: "generated-verify-token",
     });
@@ -296,6 +302,37 @@ describe("WhatsApp Meta connection", () => {
       status: 400,
     });
     assert.equal(calls, 1);
+  });
+
+  test("does not report WABA missing when callback override returns code 100", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse({ data: [{ id: "222222" }] });
+      }
+      if (calls === 2) {
+        return jsonResponse({ success: true });
+      }
+      return jsonResponse(
+        {
+          error: {
+            code: 100,
+            message: "Before override the current callback uri, your app must be subscribed",
+          },
+        },
+        400,
+      );
+    };
+
+    const result = await connectWhatsAppCloudApi(validConnectionInput());
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "meta_webhook_subscription_failed",
+      status: 400,
+    });
+    assert.equal(calls, 3);
   });
 
   test("rejects an App Secret that does not match the token's Meta app", async () => {

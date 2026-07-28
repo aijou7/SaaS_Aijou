@@ -100,6 +100,37 @@ export async function connectWhatsAppCloudApi(
       return { ok: false, reason: "meta_phone_number_mismatch" };
     }
 
+    const initialSubscriptionUrl = whatsAppGraphApiUrl(
+      `${encodeURIComponent(params.wabaId)}/subscribed_apps?appsecret_proof=${appSecretProof}`,
+    );
+    const initialSubscriptionResponse = await fetchWhatsAppGraph(initialSubscriptionUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    const initialSubscriptionBody = await readWhatsAppGraphResponse(initialSubscriptionResponse);
+
+    if (!initialSubscriptionResponse.ok) {
+      const reason = mapMetaFailure(
+        initialSubscriptionResponse.status,
+        initialSubscriptionBody,
+        "meta_webhook_subscription_failed",
+      );
+      logMetaFailure(
+        "subscription",
+        initialSubscriptionResponse.status,
+        initialSubscriptionBody,
+        reason,
+      );
+      return { ok: false, reason, status: initialSubscriptionResponse.status };
+    }
+
+    if (!isSuccessfulSubscriptionResponse(initialSubscriptionBody)) {
+      return { ok: false, reason: "meta_invalid_response", status: initialSubscriptionResponse.status };
+    }
+
     const subscriptionResponse = await fetchWhatsAppGraph(
       whatsAppGraphApiUrl(
         `${encodeURIComponent(params.wabaId)}/subscribed_apps?appsecret_proof=${appSecretProof}`,
@@ -279,7 +310,8 @@ function mapMetaFailure(
   if (status === 403 || errorCode === 10 || errorCode === 200) {
     return "meta_permission_missing" as const;
   }
-  if (status === 404 || errorCode === 100) return "meta_waba_not_found" as const;
+  if (status === 404) return "meta_waba_not_found" as const;
+  if (errorCode === 100) return fallback;
   return fallback;
 }
 
