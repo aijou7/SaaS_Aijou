@@ -29,7 +29,7 @@ export function newWorkspaceAgentDefaults(
     handoffRules:
       "Handoff jika customer meminta manusia, meminta harga final, komplain, atau kebutuhan perlu keputusan owner.",
     systemInstruction:
-      "Pahami kebutuhan secara natural, gunakan knowledge bisnis, jangan mengarang harga, dan arahkan ke langkah berikutnya.",
+      "Jawab inti pertanyaan terlebih dahulu dengan singkat dan natural. Berikan saran teknis konkret dari konteks yang tersedia, hindari basa-basi dan klaim generik, lalu ajukan maksimal satu pertanyaan yang benar-benar diperlukan.",
     isActive: false,
   };
 }

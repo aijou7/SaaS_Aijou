@@ -29,6 +29,40 @@ describe("customer conversation continuity", () => {
     assert.doesNotMatch(reply ?? "", /^halo/i);
   });
 
+  test("keeps a greeting short and human", () => {
+    const reply = buildContextualCustomerReply({
+      message: "halo bro",
+      agentName: "Aijou",
+    });
+
+    assert.equal(reply, "Halo, ada yang bisa saya bantu?");
+  });
+
+  test("answers a broad website request with a concrete starter scope", () => {
+    const reply = buildContextualCustomerReply({
+      message: "saya mau buat website",
+      conversationContext:
+        "Customer: halo\nAssistant: Halo, ada yang bisa saya bantu?",
+      agentName: "Aijou",
+    });
+
+    assert.match(reply ?? "", /website responsif/i);
+    assert.match(reply ?? "", /company profile, penjualan, atau portal internal/i);
+    assert.doesNotMatch(reply ?? "", /langkah yang tepat|visibilitas bisnis/i);
+    assert.equal((reply?.match(/\?/g) ?? []).length, 1);
+  });
+
+  test("answers a dashboard request with a useful technical baseline", () => {
+    const reply = buildContextualCustomerReply({
+      message: "Saya butuh custom dashboard",
+      agentName: "Aijou",
+    });
+
+    assert.match(reply ?? "", /KPI utama/i);
+    assert.match(reply ?? "", /role-based access/i);
+    assert.equal((reply?.match(/\?/g) ?? []).length, 1);
+  });
+
   test("proposes a starting point when the customer has no idea", () => {
     const reply = buildContextualCustomerReply({
       message: "aku gapunya ide",
@@ -37,8 +71,8 @@ describe("customer conversation continuity", () => {
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /mulai dari nol/i);
-    assert.match(reply ?? "", /beranda.*profil perusahaan.*produk atau layanan/i);
+    assert.match(reply ?? "", /untuk versi awal/i);
+    assert.match(reply ?? "", /beranda.*profil.*produk atau layanan/i);
     assert.doesNotMatch(reply ?? "", /^halo/i);
   });
 
@@ -113,7 +147,21 @@ describe("customer conversation continuity", () => {
       fallback: "Konteksnya tetap saya catat.",
     });
 
-    assert.equal(reply, "Saya paham targetnya.");
+    assert.equal(reply, "Konteksnya tetap saya catat.");
+  });
+
+  test("removes generic marketing filler and keeps the useful answer", () => {
+    const reply = polishCustomerReply({
+      reply:
+        "Membuat website adalah langkah yang tepat untuk meningkatkan visibilitas bisnis Anda. Untuk versi awal, gunakan struktur Beranda, Layanan, Portofolio, dan Kontak. Apakah websitenya untuk company profile atau penjualan? Pertanyaan kedua yang tidak perlu?",
+      fallback: "Bisa, saya bantu petakan websitenya.",
+    });
+
+    assert.equal(
+      reply,
+      "Untuk versi awal, gunakan struktur Beranda, Layanan, Portofolio, dan Kontak. Apakah websitenya untuk company profile atau penjualan?",
+    );
+    assert.doesNotMatch(reply, /visibilitas|langkah yang tepat/i);
   });
 
   test("exposes durable facts to the model prompt", () => {

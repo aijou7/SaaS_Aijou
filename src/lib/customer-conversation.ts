@@ -4,6 +4,7 @@ type ConversationFacts = {
   hasAssistantReply: boolean;
   latestAssistantMessage: string | null;
   project:
+    | "website"
     | "website company profile"
     | "custom dashboard"
     | "WiFi/jaringan"
@@ -44,6 +45,14 @@ export function buildContextualCustomerReply(params: {
   const facts = deriveFacts(params.message, params.conversationContext);
 
   if (
+    /^(?:halo|hai|hi|hello|pagi|siang|sore|malam)(?:\s+(?:bro|kak|min|admin))?$/.test(
+      normalized,
+    )
+  ) {
+    return "Halo, ada yang bisa saya bantu?";
+  }
+
+  if (
     /(?:yang\s+)?(?:balas|jawab|ngobrol).*(?:ai|bot)|(?:ini|kamu|anda).*(?:ai|bot)/.test(
       normalized,
     )
@@ -56,16 +65,41 @@ export function buildContextualCustomerReply(params: {
       normalized,
     )
   ) {
-    if (facts.project === "website company profile") {
+    if (
+      facts.project === "website" ||
+      facts.project === "website company profile"
+    ) {
       const industry = facts.industry
         ? ` untuk perusahaan ${facts.industry}`
         : "";
-      return `Tidak masalah, konsepnya bisa kita mulai dari nol. Untuk website company profile${industry}, arah awal yang aman adalah beranda, profil perusahaan, produk atau layanan, keunggulan dan kredibilitas, lalu kontak. Setelah itu visualnya disesuaikan dengan karakter brand. Apakah perusahaan sudah punya logo dan panduan warna?`;
+      return `Tidak masalah. Untuk versi awal${industry}, saya sarankan website responsif berisi Beranda, Profil, Produk atau Layanan, Portofolio atau Kredibilitas, dan Kontak/WhatsApp. Apakah logo dan materi profil perusahaannya sudah siap?`;
     }
     if (facts.project === "custom dashboard") {
       return "Tidak masalah, kita bisa mulai dari nol. Langkah pertama cukup tentukan siapa yang memakai dashboard dan keputusan apa yang perlu mereka ambil; dari situ data, tampilan, dan fitur prioritasnya bisa dipetakan. Siapa pengguna utamanya: owner, manajemen, atau tim operasional?";
     }
     return "Tidak masalah, kita bisa mulai dari nol. Ceritakan hasil akhir yang ingin dicapai atau masalah yang paling mengganggu sekarang; dari situ saya bantu susun pilihan yang masuk akal.";
+  }
+
+  if (
+    /^(?:(?:saya|aku|kami)\s+)?(?:mau|ingin|butuh|perlu)\s+(?:buat|bikin|bangun|membuat|membangun)\s+(?:(?:sebuah|satu)\s+)?(?:website|web)\b/.test(
+      normalized,
+    )
+  ) {
+    if (/(?:toko\s*online|e-?commerce|jualan|checkout)/.test(normalized)) {
+      return "Bisa. Untuk versi awal, saya sarankan katalog, detail produk, keranjang/checkout, pembayaran, pengelolaan pesanan, dan notifikasi WhatsApp. Produk dan stoknya sekarang dicatat di mana?";
+    }
+    if (facts.project === "website company profile") {
+      return "Bisa. Untuk versi awal, saya sarankan website responsif dengan Beranda, Profil Perusahaan, Produk atau Layanan, Kredibilitas, dan Kontak/WhatsApp. Apakah logo dan materi profil perusahaannya sudah siap?";
+    }
+    return "Bisa. Untuk versi awal, saya sarankan website responsif yang ringan, mudah dikelola, dan punya jalur kontak yang jelas. Tujuan utamanya company profile, penjualan, atau portal internal?";
+  }
+
+  if (
+    /^(?:(?:saya|aku|kami)\s+)?(?:mau|ingin|butuh|perlu)\s+(?:(?:buat|bikin|bangun|membuat|membangun)\s+)?(?:custom\s+)?dashboard\b/.test(
+      normalized,
+    )
+  ) {
+    return "Bisa. Untuk MVP, saya sarankan mulai dari KPI utama, filter laporan, role-based access, export, dan satu integrasi data paling penting. Datanya sekarang tersimpan di Excel, database, atau aplikasi lain?";
   }
 
   if (
@@ -101,7 +135,9 @@ export function buildContextualCustomerReply(params: {
     const project =
       facts.project === "website company profile"
         ? "website company profile versi fokus"
-        : facts.project;
+        : facts.project === "website"
+          ? "website versi fokus"
+          : facts.project;
     return `Target satu bulan cukup realistis untuk ${project}, selama scope, materi, dan keputusan desain dikunci sejak awal. Preview desain bisa diprioritaskan di minggu pertama, lalu pengerjaan dan revisi berjalan setelah arahnya disetujui. Estimasi final tetap perlu dikonfirmasi tim setelah scope-nya lengkap.`;
   }
 
@@ -177,6 +213,9 @@ export function polishCustomerReply(params: {
       .trim();
   }
 
+  reply = removeLowValueLead(reply);
+  reply = compactReply(reply);
+
   return !reply || previous.some((text) => similarity(text, reply) >= 0.88)
     ? params.fallback
     : reply;
@@ -207,6 +246,8 @@ function deriveFacts(
       )
     ) {
       project = "website company profile";
+    } else if (/\b(?:website|web)\b/.test(text)) {
+      project = "website";
     } else if (/custom\s*dashboard|dashboard\s*(?:custom|khusus)?/.test(text)) {
       project = "custom dashboard";
     } else if (
@@ -296,6 +337,57 @@ function extractQuestions(text: string) {
   return text
     .split(/(?<=[.!?])\s+/)
     .filter((sentence) => sentence.includes("?"));
+}
+
+function removeLowValueLead(value: string) {
+  const sentences = value.split(/(?<=[.!?])\s+/).filter(Boolean);
+  let removed = 0;
+  while (
+    sentences.length > 0 &&
+    removed < 2 &&
+    isLowValueLeadSentence(sentences[0])
+  ) {
+    sentences.shift();
+    removed += 1;
+  }
+  return sentences.join(" ").trim();
+}
+
+function isLowValueLeadSentence(sentence: string) {
+  const text = normalize(sentence);
+  return (
+    /^(?:tentu|baik|oke|siap)$/.test(text) ||
+    /^(?:saya|kami) (?:paham|mengerti)(?: bahwa)?\b/.test(text) ||
+    /^(?:membuat|membangun|memiliki) (?:sebuah )?(?:website|web|dashboard|aplikasi|software)\b.*\b(?:adalah|merupakan) (?:sebuah )?(?:langkah|pilihan) (?:yang )?(?:tepat|baik|bagus)\b/.test(
+      text,
+    ) ||
+    /^(?:website|web|dashboard|aplikasi|software|hal ini) .*\b(?:dapat|bisa) membantu (?:meningkatkan|memperkuat|mengembangkan)\b/.test(
+      text,
+    )
+  );
+}
+
+function compactReply(value: string) {
+  const sentences = value.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const kept: string[] = [];
+  let wordCount = 0;
+  let hasQuestion = false;
+
+  for (const sentence of sentences) {
+    const isQuestion = sentence.includes("?");
+    if (isQuestion && hasQuestion) continue;
+
+    const sentenceWords = sentence.trim().split(/\s+/).filter(Boolean).length;
+    if (kept.length >= 4 || (kept.length > 0 && wordCount + sentenceWords > 90)) {
+      break;
+    }
+
+    kept.push(sentence.trim());
+    wordCount += sentenceWords;
+    hasQuestion ||= isQuestion;
+  }
+
+  return kept.join(" ").trim();
 }
 
 function similarity(left: string, right: string) {
