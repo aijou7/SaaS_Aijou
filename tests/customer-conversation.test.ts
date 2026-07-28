@@ -55,6 +55,21 @@ describe("customer conversation continuity", () => {
     assert.doesNotMatch(reply ?? "", /apakah websitenya untuk/i);
   });
 
+  test("resolves 'keduanya' from a logo-and-color question", () => {
+    const reply = buildContextualCustomerReply({
+      message: "keduanya",
+      conversationContext: [
+        "Customer: saya butuh website company profile",
+        "Assistant: Apakah perusahaan sudah punya logo dan panduan warna?",
+      ].join("\n"),
+      agentName: "Aijou",
+    });
+
+    assert.match(reply ?? "", /logo dan panduan warna sudah ada/i);
+    assert.doesNotMatch(reply ?? "", /dua fungsi/i);
+    assert.doesNotMatch(reply ?? "", /sekaligus memperkenalkan produk/i);
+  });
+
   test("answers one-month feasibility using the known project", () => {
     const reply = buildContextualCustomerReply({
       message: "1 bulan bisa?",

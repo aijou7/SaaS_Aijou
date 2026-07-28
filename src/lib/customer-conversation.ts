@@ -74,10 +74,19 @@ export function buildContextualCustomerReply(params: {
     ) &&
     facts.latestAssistantMessage?.includes("?")
   ) {
-    if (facts.project === "website company profile") {
+    const previousQuestion = normalize(facts.latestAssistantMessage);
+    if (
+      facts.project === "website company profile" &&
+      isWebsiteGoalQuestion(previousQuestion)
+    ) {
       const industry = facts.industry ? ` ${facts.industry}` : "";
       return `Siap, berarti websitenya perlu menjalankan dua fungsi: membangun profil dan kredibilitas perusahaan${industry} sekaligus memperkenalkan produk atau layanan. Arah awalnya bisa mencakup beranda, profil, layanan, keunggulan, insight, dan kontak. Berikutnya kita tinggal menentukan prioritas konten dan gaya visualnya.`;
     }
+
+    if (/logo.*warna|warna.*logo/.test(previousQuestion)) {
+      return "Siap, berarti logo dan panduan warna sudah ada. Itu cukup untuk mulai menyusun arah visual; berikutnya materi profil perusahaan dan daftar produk atau layanan bisa disiapkan untuk preview.";
+    }
+
     return "Siap, keduanya saya catat. Dua kebutuhan itu tetap menjadi satu scope, lalu kita prioritaskan bagian yang wajib masuk versi awal supaya pembahasannya tidak kembali dari nol.";
   }
 
@@ -185,7 +194,6 @@ function deriveFacts(
   let project: ConversationFacts["project"] = null;
   let industry: string | null = null;
   let wantsPreview = false;
-  let wantsBothWebsiteGoals = false;
   let timeline: string | null = null;
 
   for (const rawText of customerTexts) {
@@ -213,18 +221,27 @@ function deriveFacts(
     wantsPreview ||= /\b(?:preview|mockup|desain awal|design awal|contoh desain)\b/.test(
       text,
     );
-    wantsBothWebsiteGoals ||=
-      /^(?:ingin\s+)?(?:dua[- ]duanya|keduanya|semuanya|dua[- ]dua nya)/.test(
-        text,
-      );
     if (/\b(?:1|satu)\s*bulan\b/.test(text)) timeline = "satu bulan";
     else if (/\bbulan\s+depan\b/.test(text)) timeline = "bulan depan";
   }
 
   const assistantTurns = turns.filter((turn) => turn.role === "assistant");
+  const latestAssistantMessage = assistantTurns.at(-1)?.text ?? null;
+  const contextualTurns = [...turns];
+  if (normalize(contextualTurns.at(-1)?.text ?? "") !== normalize(message)) {
+    contextualTurns.push({ role: "customer", text: message });
+  }
+  const wantsBothWebsiteGoals = contextualTurns.some((turn, index) => {
+    if (turn.role !== "customer" || !isBothAnswer(turn.text)) return false;
+    const previousTurn = contextualTurns[index - 1];
+    return (
+      previousTurn?.role === "assistant" &&
+      isWebsiteGoalQuestion(normalize(previousTurn.text))
+    );
+  });
   return {
     hasAssistantReply: assistantTurns.length > 0,
-    latestAssistantMessage: assistantTurns.at(-1)?.text ?? null,
+    latestAssistantMessage,
     project,
     industry,
     wantsPreview,
@@ -253,6 +270,21 @@ function parseConversation(context?: string) {
   }
   if (current) turns.push(current);
   return turns;
+}
+
+function isBothAnswer(text: string) {
+  return /^(?:ingin\s+)?(?:dua[- ]duanya|keduanya|semuanya|dua[- ]dua nya)(?:\s+(?:aja|deh))?$/.test(
+    normalize(text),
+  );
+}
+
+function isWebsiteGoalQuestion(text: string) {
+  const mentionsProfile = /\b(?:informasi|profil|profile|kredibilitas)\b/.test(
+    text,
+  );
+  const mentionsPromotion =
+    /\b(?:promosi|mempromosikan|produk|layanan|marketing)\b/.test(text);
+  return mentionsProfile && mentionsPromotion;
 }
 
 function extractQuestions(text: string) {
