@@ -55,9 +55,17 @@ export async function connectWhatsAppCloudApi(
   params: ConnectWhatsAppParams,
 ): Promise<WhatsAppConnectionResult> {
   try {
+    const appSecretProof = createHmac("sha256", params.appSecret)
+      .update(params.accessToken)
+      .digest("hex");
+    const phoneQuery = new URLSearchParams({
+      fields: "id,display_phone_number,verified_name,quality_rating",
+      limit: "100",
+      appsecret_proof: appSecretProof,
+    });
     const phoneResponse = await fetchWhatsAppGraph(
       whatsAppGraphApiUrl(
-        `${encodeURIComponent(params.wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&limit=100`,
+        `${encodeURIComponent(params.wabaId)}/phone_numbers?${phoneQuery.toString()}`,
       ),
       {
         headers: {
@@ -81,9 +89,6 @@ export async function connectWhatsAppCloudApi(
       return { ok: false, reason: "meta_phone_number_mismatch" };
     }
 
-    const appSecretProof = createHmac("sha256", params.appSecret)
-      .update(params.accessToken)
-      .digest("hex");
     const subscriptionResponse = await fetchWhatsAppGraph(
       whatsAppGraphApiUrl(
         `${encodeURIComponent(params.wabaId)}/subscribed_apps?appsecret_proof=${appSecretProof}`,
@@ -170,6 +175,7 @@ function mapMetaFailure(
   fallback: WhatsAppConnectionFailureReason,
 ) {
   const errorCode = extractMetaErrorCode(body);
+  if (isAppSecretProofFailure(body)) return "meta_app_secret_mismatch" as const;
   if (status === 401 || errorCode === 190) return "meta_invalid_token" as const;
   if (status === 403 || errorCode === 10 || errorCode === 200) {
     return "meta_permission_missing" as const;
@@ -184,6 +190,13 @@ function extractMetaErrorCode(body: unknown) {
   if (!error || typeof error !== "object" || !("code" in error)) return null;
   const code = Number(error.code);
   return Number.isFinite(code) ? code : null;
+}
+
+function isAppSecretProofFailure(body: unknown) {
+  if (!body || typeof body !== "object" || !("error" in body)) return false;
+  const error = body.error;
+  if (!error || typeof error !== "object" || !("message" in error)) return false;
+  return String(error.message).toLowerCase().includes("appsecret_proof");
 }
 
 function cleanMetaText(value: string | undefined) {

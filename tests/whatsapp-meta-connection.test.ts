@@ -154,6 +154,10 @@ describe("WhatsApp Meta connection", () => {
     const expectedProof = createHmac("sha256", "matching-app-secret")
       .update("permanent-system-user-token")
       .digest("hex");
+    assert.equal(
+      new URL(requests[0].url).searchParams.get("appsecret_proof"),
+      expectedProof,
+    );
     assert.match(
       requests[1].url,
       new RegExp(`/v25\\.0/111111/subscribed_apps\\?appsecret_proof=${expectedProof}$`),
@@ -213,6 +217,26 @@ describe("WhatsApp Meta connection", () => {
       status: 403,
     });
     assert.equal(calls, 2);
+  });
+
+  test("sends App Secret Proof while reading WABA phone numbers", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return jsonResponse(
+        { error: { code: 100, message: "Invalid appsecret_proof provided" } },
+        400,
+      );
+    };
+
+    const result = await connectWhatsAppCloudApi(validConnectionInput());
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "meta_app_secret_mismatch",
+      status: 400,
+    });
+    assert.equal(calls, 1);
   });
 
   test("rejects an App Secret that does not match the token's Meta app", async () => {
