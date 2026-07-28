@@ -74,7 +74,10 @@ export function buildContextualCustomerReply(params: {
     ) &&
     facts.latestAssistantMessage?.includes("?")
   ) {
-    const previousQuestion = normalize(facts.latestAssistantMessage);
+    const previousQuestion = normalize(
+      extractQuestions(facts.latestAssistantMessage).at(-1) ??
+        facts.latestAssistantMessage,
+    );
     if (
       facts.project === "website company profile" &&
       isWebsiteGoalQuestion(previousQuestion)
@@ -236,7 +239,9 @@ function deriveFacts(
     const previousTurn = contextualTurns[index - 1];
     return (
       previousTurn?.role === "assistant" &&
-      isWebsiteGoalQuestion(normalize(previousTurn.text))
+      isWebsiteGoalQuestion(
+        normalize(extractQuestions(previousTurn.text).at(-1) ?? previousTurn.text),
+      )
     );
   });
   return {
@@ -289,7 +294,7 @@ function isWebsiteGoalQuestion(text: string) {
 
 function extractQuestions(text: string) {
   return text
-    .split(/(?<=\?)\s+/)
+    .split(/(?<=[.!?])\s+/)
     .filter((sentence) => sentence.includes("?"));
 }
 

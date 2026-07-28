@@ -60,7 +60,7 @@ describe("customer conversation continuity", () => {
       message: "keduanya",
       conversationContext: [
         "Customer: saya butuh website company profile",
-        "Assistant: Apakah perusahaan sudah punya logo dan panduan warna?",
+        "Assistant: Untuk website company profile, struktur awalnya mencakup profil, produk, dan layanan. Apakah perusahaan sudah punya logo dan panduan warna?",
       ].join("\n"),
       agentName: "Aijou",
     });
