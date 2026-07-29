@@ -77,7 +77,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <p className="muted">
               {isInvite
                 ? "Selesaikan data owner untuk menerima undangan ini."
-                : "Tidak perlu kartu kredit. Setelah mengisi data, buka email verifikasi untuk mengaktifkan akses."}
+                : "Tidak perlu kartu kredit. Setelah mengisi data, masukkan OTP dari email untuk mengaktifkan akses."}
             </p>
           </div>
 

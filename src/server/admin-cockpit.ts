@@ -1,7 +1,11 @@
 import { BackgroundJobStatus, UserStatus } from "@/generated/prisma-beta/client";
+import { isLoginOtpEnabled } from "@/lib/auth-flags";
 import { prisma } from "@/lib/prisma";
 import { getAdminFeedback, requirePlatformAdmin } from "@/server/feedback";
-import { isTransactionalEmailConfigured } from "@/server/email";
+import {
+  getTransactionalEmailProvider,
+  isTransactionalEmailConfigured,
+} from "@/server/email";
 
 export async function getAdminCockpit(userId: string) {
   await requirePlatformAdmin(userId);
@@ -78,6 +82,8 @@ export async function getAdminCockpit(userId: string) {
     totalUsers,
     activeUsers,
     emailConfigured: isTransactionalEmailConfigured(),
+    emailProvider: getTransactionalEmailProvider(),
+    loginOtpEnabled: isLoginOtpEnabled(),
   };
 }
 
@@ -117,4 +123,3 @@ export async function replayFailedJobAsAdmin(adminUserId: string, jobId: string)
     },
   });
 }
-

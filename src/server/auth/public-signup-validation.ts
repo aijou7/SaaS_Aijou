@@ -1,3 +1,5 @@
+import { validatePasswordStrength } from "@/lib/password";
+
 export class PublicSignupError extends Error {
   constructor(
     message: string,
@@ -18,6 +20,7 @@ export type PublicSignupInput = {
   email: string;
   phoneNumber?: string;
   businessName: string;
+  password: string;
 };
 
 export type NormalizedPublicSignupInput = {
@@ -25,6 +28,7 @@ export type NormalizedPublicSignupInput = {
   email: string;
   phoneNumber: string | null;
   businessName: string;
+  password: string;
 };
 
 export const publicSignupRateRules = [
@@ -60,8 +64,10 @@ export function normalizePublicSignupInput(
     "Nama bisnis",
   );
   const phoneNumber = normalizePhone(input.phoneNumber);
+  const passwordError = validatePasswordStrength(input.password, email);
+  if (passwordError) throw new PublicSignupError(passwordError);
 
-  return { name, email, phoneNumber, businessName };
+  return { name, email, phoneNumber, businessName, password: input.password };
 }
 
 function cleanRequiredText(

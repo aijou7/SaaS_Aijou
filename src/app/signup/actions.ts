@@ -34,6 +34,10 @@ export async function signupPublicBetaAction(
   if (!isTransactionalEmailConfigured()) {
     return { error: verificationDeliveryError };
   }
+  const password = String(formData.get("password") ?? "");
+  if (password !== String(formData.get("confirmPassword") ?? "")) {
+    return { error: "Konfirmasi password tidak sama." };
+  }
 
   let user: Awaited<ReturnType<typeof createPublicBetaAccount>>;
   try {
@@ -44,6 +48,7 @@ export async function signupPublicBetaAction(
         email: String(formData.get("email") ?? ""),
         phoneNumber: String(formData.get("phoneNumber") ?? ""),
         businessName: String(formData.get("businessName") ?? ""),
+        password,
       },
       { clientIp: getClientIpFromHeaders(requestHeaders) },
     );
@@ -51,9 +56,10 @@ export async function signupPublicBetaAction(
     return { error: getSafePublicSignupError(error) };
   }
 
+  let challengeId = "";
   try {
     const delivery = await sendVerificationEmailForUser(user.userId);
-    if (!delivery.sent) {
+    if (!delivery.sent || !delivery.challengeId) {
       console.error("public_signup_verification_delivery_failed", {
         userId: user.userId,
         configured: delivery.configured,
@@ -62,12 +68,14 @@ export async function signupPublicBetaAction(
       await discardFailedPublicSignup(user.userId);
       return { error: verificationDeliveryError };
     }
+    challengeId = delivery.challengeId;
   } catch (error) {
     console.error("public_signup_verification_failed", { userId: user.userId, error });
     await discardFailedPublicSignup(user.userId);
     return { error: verificationDeliveryError };
   }
-  redirect("/verify-email?sent=1");
+
+  redirect(`/verify-email?challenge=${encodeURIComponent(challengeId)}&sent=1`);
 }
 
 export async function signupWithInviteAction(

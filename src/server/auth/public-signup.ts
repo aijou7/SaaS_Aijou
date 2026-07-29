@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { UserRole, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -39,11 +39,9 @@ export async function createPublicBetaAccount(
   await enforcePublicSignupRateLimit(context.clientIp, normalized.email);
 
   // Hash before attempting the insert so an existing email and a new email
-  // have roughly the same expensive password-work path.
-  // The public flow proves email ownership before accepting a real password.
-  // Keep a random, unusable provisional hash so a signup attacker cannot pick
-  // credentials for somebody else's address.
-  const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
+  // have roughly the same expensive password-work path. The account remains
+  // unusable until the mailbox OTP is proven.
+  const passwordHash = await hashPassword(normalized.password);
 
   try {
     return await prisma.$transaction(async (tx) => {

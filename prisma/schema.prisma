@@ -43,6 +43,7 @@ enum FeedbackStatus {
 
 enum AuthTokenPurpose {
   EMAIL_VERIFICATION
+  LOGIN_OTP
   PASSWORD_RESET
 }
 

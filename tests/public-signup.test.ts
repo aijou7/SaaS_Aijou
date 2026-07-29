@@ -30,12 +30,14 @@ describe("public beta signup", () => {
         email: " OWNER@Example.COM ",
         phoneNumber: "+62 812-3456-7890",
         businessName: "  Aijou   Studio ",
+        password: "AijouAman2026",
       }),
       {
         name: "Aijou Owner",
         email: "owner@example.com",
         phoneNumber: "6281234567890",
         businessName: "Aijou Studio",
+        password: "AijouAman2026",
       },
     );
   });
@@ -47,6 +49,7 @@ describe("public beta signup", () => {
           name: "A",
           email: "not-an-email",
           businessName: "X",
+          password: "AijouAman2026",
         }),
       PublicSignupError,
     );

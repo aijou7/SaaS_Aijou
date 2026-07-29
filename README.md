@@ -16,7 +16,7 @@ Status proyek saat ini adalah **beta terbatas dengan pendaftaran mandiri** melal
 - Orders/transaksi, katalog produk, CSV export, receipt review, serta OCR vision untuk JPEG, PNG, dan WebP.
 - Xendit payment sessions yang dikonfigurasi terpisah untuk setiap workspace.
 - Role workspace owner/admin/agent/viewer dengan invite, perubahan akses, dan pembatasan data finansial.
-- Pendaftaran beta mandiri yang tetap kompatibel dengan invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
+- Pendaftaran beta mandiri dengan OTP email 6 digit, OTP login untuk perangkat baru, trusted-device 30 hari, serta kompatibilitas invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
 
 Chat widget memulai identitas sesi baru setelah 24 jam. Percakapan lama tetap tersimpan di dashboard untuk histori owner; yang di-reset adalah session dan konteks pengunjung, bukan penghapusan record database.
 
@@ -90,6 +90,7 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 
 - Database: `DATABASE_URL` dan opsi pool/timeout.
 - Security: `AUTH_SECRET`, `WIDGET_SIGNING_SECRET`, `DATA_ENCRYPTION_KEY`, dan `CRON_SECRET`.
+- Email auth: Cloudflare Email Service memakai `EMAIL_PROVIDER`, `EMAIL_FROM`, `CLOUDFLARE_ACCOUNT_ID`, dan `CLOUDFLARE_EMAIL_API_TOKEN`. Resend tetap didukung sebagai fallback. OTP login perangkat baru baru aktif ketika `LOGIN_OTP_ENABLED=true`.
 - Durable jobs: `QSTASH_TOKEN` direkomendasikan di production agar worker tetap dibangunkan setelah request serverless selesai.
 - Canonical URL: `NEXT_PUBLIC_APP_URL`.
 - Bootstrap: `SEED_OWNER_*`, `SEED_BUSINESS_NAME`, `SEED_ROTATE_OWNER_PASSWORD`, dan `SEED_REFRESH_DEMO_DATA`.
@@ -99,6 +100,8 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 - Telegram: hanya timeout request provider; bot token disimpan per workspace dari dashboard.
 
 `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte. Simpan backup aman atas key ini. Jangan menggantinya setelah credential terenkripsi tersimpan sebelum ada proses re-encryption.
+
+Domain `aijoutek.pro` harus sudah di-onboard pada Cloudflare Email Service > Email Sending. Gunakan sender khusus seperti `Aijou AI <otp@aijoutek.pro>`. Token Cloudflare hanya membutuhkan permission **Email Sending: Edit**; jangan gunakan Global API Key. Signup tetap tertutup otomatis jika provider email belum lengkap agar akun tidak terjebak tanpa OTP.
 
 Telegram dan Xendit dikonfigurasi per workspace dari dashboard. Bot token Telegram dan credential Xendit tidak perlu dan tidak boleh ditaruh dalam shared environment variable.
 

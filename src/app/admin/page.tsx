@@ -33,7 +33,14 @@ export default async function AdminPage() {
         <Metric icon={<Users size={22} />} label="Tester" value={String(page.totalUsers)} detail={`${page.activeUsers} aktif 30 hari`} />
         <Metric icon={<Activity size={22} />} label="AI request 30 hari" value={String(page.usage._sum.totalAiRequests ?? 0)} detail={`${Math.round(page.usage._avg.latencyMs ?? 0)} ms rata-rata`} />
         <Metric icon={<AlertTriangle size={22} />} label="Queue" value={String(page.pendingJobs)} detail={`${page.failedJobs.length} dead-letter`} />
-        <Metric icon={<MailCheck size={22} />} label="Email" value={page.emailConfigured ? "Ready" : "Setup"} detail="Resend transactional" />
+        <Metric
+          icon={<MailCheck size={22} />}
+          label="Email"
+          value={page.emailConfigured ? "Ready" : "Setup"}
+          detail={page.emailConfigured
+            ? `${page.emailProvider === "cloudflare" ? "Cloudflare" : "Resend"} · login OTP ${page.loginOtpEnabled ? "aktif" : "belum aktif"}`
+            : "Provider transactional belum lengkap"}
+        />
       </section>
 
       <section className="section">

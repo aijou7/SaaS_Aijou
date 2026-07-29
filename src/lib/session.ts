@@ -196,7 +196,7 @@ function createSignature(value: string) {
   return createHmac("sha256", getAuthSecret()).update(value).digest("base64url");
 }
 
-function getAuthSecret() {
+export function getAuthSecret() {
   const secret = process.env.AUTH_SECRET?.trim();
 
   if (secret) {

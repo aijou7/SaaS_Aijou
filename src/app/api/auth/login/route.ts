@@ -13,7 +13,18 @@ import {
   RequestBodyTooLargeError,
   validateMutationRequest,
 } from "@/lib/request-security";
-import { createSessionCookie } from "@/lib/session";
+import {
+  getTrustedDeviceCookieName,
+  verifyTrustedDeviceToken,
+} from "@/lib/trusted-device";
+import { isLoginOtpEnabled } from "@/lib/auth-flags";
+import {
+  AccountLifecycleError,
+  sendLoginOtpForUser,
+  sendVerificationEmailForUser,
+} from "@/server/auth/account-lifecycle";
+import { completeLogin } from "@/server/auth/login-completion";
+import { isTransactionalEmailConfigured } from "@/server/email";
 
 export async function POST(request: NextRequest) {
   const securityError = validateMutationRequest(request, "urlencoded");
@@ -87,43 +98,98 @@ export async function POST(request: NextRequest) {
   // This keeps email enumeration closed while giving the legitimate owner a
   // useful recovery path instead of pretending that a correct password failed.
   if (!user.emailVerifiedAt) {
+    try {
+      const delivery = await sendVerificationEmailForUser(user.id, true);
+      if (delivery.sent && delivery.challengeId) {
+        await recordLoginSuccess(email, clientIp);
+        if (!(request.headers.get("accept")?.includes("text/html") ?? false)) {
+          return NextResponse.json(
+            {
+              requiresEmailVerification: true,
+              challengeId: delivery.challengeId,
+            },
+            { status: 202, headers: noStoreHeaders },
+          );
+        }
+        const verifyUrl = new URL("/verify-email", request.url);
+        verifyUrl.searchParams.set("challenge", delivery.challengeId);
+        verifyUrl.searchParams.set("sent", "1");
+        return NextResponse.redirect(verifyUrl, {
+          status: 303,
+          headers: noStoreHeaders,
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof AccountLifecycleError)) throw error;
+    }
     return loginFailure(
       request,
       "email_unverified",
-      "Email belum diverifikasi.",
+      "Email belum diverifikasi dan kode baru belum dapat dikirim.",
       403,
       {},
       nextPath,
     );
   }
 
-  const deletionCancelled = user.status === "DELETION_PENDING";
-  const now = new Date();
-  const activated = await prisma.user.updateMany({
-    where: {
-      id: user.id,
-      passwordHash: user.passwordHash,
-      status: user.status,
-    },
-    data: {
-      lastLoginAt: now,
-      lastSeenAt: now,
-      ...(deletionCancelled
-        ? { status: "ACTIVE", deletionRequestedAt: null }
-        : {}),
-    },
-  });
-  if (activated.count !== 1) {
-    return loginFailure(request, "invalid_credentials", "Invalid credentials.", 401, {}, nextPath);
+  const trustedDevice = verifyTrustedDeviceToken(
+    request.cookies.get(getTrustedDeviceCookieName())?.value,
+    user,
+  );
+  if (
+    !trustedDevice &&
+    isLoginOtpEnabled() &&
+    isTransactionalEmailConfigured()
+  ) {
+    try {
+      const delivery = await sendLoginOtpForUser(user.id);
+      if (!delivery.sent || !delivery.challengeId) {
+        await recordLoginSuccess(email, clientIp);
+        return loginFailure(
+          request,
+          "otp_delivery_failed",
+          "Kode login belum dapat dikirim.",
+          503,
+          {},
+          nextPath,
+        );
+      }
+      await recordLoginSuccess(email, clientIp);
+      if (!(request.headers.get("accept")?.includes("text/html") ?? false)) {
+        return NextResponse.json(
+          { requiresOtp: true, challengeId: delivery.challengeId },
+          { status: 202, headers: noStoreHeaders },
+        );
+      }
+      const verifyUrl = new URL("/login/verify", request.url);
+      verifyUrl.searchParams.set("challenge", delivery.challengeId);
+      if (nextPath) verifyUrl.searchParams.set("next", nextPath);
+      return NextResponse.redirect(verifyUrl, {
+        status: 303,
+        headers: noStoreHeaders,
+      });
+    } catch (error) {
+      await recordLoginSuccess(email, clientIp);
+      return loginFailure(
+        request,
+        error instanceof AccountLifecycleError && error.code === "RATE_LIMITED"
+          ? "otp_rate_limited"
+          : "otp_delivery_failed",
+        "Kode login belum dapat dikirim.",
+        error instanceof AccountLifecycleError && error.code === "RATE_LIMITED" ? 429 : 503,
+        {},
+        nextPath,
+      );
+    }
   }
 
-  await recordLoginSuccess(email, clientIp);
-  await createSessionCookie({
-    userId: user.id,
-    passwordHash: user.passwordHash,
-  });
-
-  const destination = deletionCancelled ? "/dashboard?deletionCancelled=1" : nextPath ?? "/dashboard";
+  const completion = await completeLogin(user, clientIp, false);
+  if (!completion.completed) {
+    return loginFailure(request, "invalid_credentials", "Invalid credentials.", 401, {}, nextPath);
+  }
+  const destination = completion.deletionCancelled
+    ? "/dashboard?deletionCancelled=1"
+    : nextPath ?? "/dashboard";
   return NextResponse.redirect(new URL(destination, request.url), {
     status: 303,
     headers: noStoreHeaders,
@@ -132,7 +198,13 @@ export async function POST(request: NextRequest) {
 
 function loginFailure(
   request: NextRequest,
-  code: "email_unverified" | "invalid_credentials" | "invalid_request" | "rate_limited",
+  code:
+    | "email_unverified"
+    | "invalid_credentials"
+    | "invalid_request"
+    | "otp_delivery_failed"
+    | "otp_rate_limited"
+    | "rate_limited",
   message: string,
   status: number,
   extraHeaders: Record<string, string> = {},

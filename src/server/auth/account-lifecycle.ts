@@ -1,4 +1,10 @@
-import { createHash, randomBytes } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  timingSafeEqual,
+} from "node:crypto";
 import {
   AuthTokenPurpose,
   BackgroundJobStatus,
@@ -6,6 +12,7 @@ import {
   UserStatus,
 } from "@/generated/prisma-beta/client";
 import {
+  clearDurableRateLimit,
   consumeDurableRateLimit,
   type DurableRateRule,
 } from "@/lib/durable-rate-limit";
@@ -30,6 +37,17 @@ const verificationRules = [
   { scope: "email-verification:user:15m", max: 3, windowMs: 15 * 60_000 },
   { scope: "email-verification:user:24h", max: 10, windowMs: 24 * 60 * 60_000 },
 ] as const satisfies readonly DurableRateRule[];
+const loginOtpDeliveryRules = [
+  { scope: "login-otp:user:15m", max: 4, windowMs: 15 * 60_000 },
+  { scope: "login-otp:user:24h", max: 20, windowMs: 24 * 60 * 60_000 },
+] as const satisfies readonly DurableRateRule[];
+const otpChallengeAttemptRules = [
+  { scope: "auth-otp:challenge:10m", max: 5, windowMs: 10 * 60_000 },
+] as const satisfies readonly DurableRateRule[];
+const otpIpAttemptRules = [
+  { scope: "auth-otp:ip:15m", max: 60, windowMs: 15 * 60_000 },
+] as const satisfies readonly DurableRateRule[];
+const otpTtlMs = 10 * 60_000;
 
 export class AccountLifecycleError extends Error {
   constructor(readonly code: string, message: string) {
@@ -150,23 +168,22 @@ export async function sendVerificationEmailForUser(userId: string, enforceLimit 
       sent: false,
       configured: false,
       error: null,
+      challengeId: null,
     };
   }
 
-  const token = await issueToken(user.id, AuthTokenPurpose.EMAIL_VERIFICATION, 24 * 60 * 60_000);
-  const url = `${getPublicAppUrl()}/verify-email?token=${encodeURIComponent(token.value)}`;
+  const token = await issueOtpToken(user.id, AuthTokenPurpose.EMAIL_VERIFICATION);
   const delivery = await deliverIssuedTokenEmail(token, {
     to: user.email,
-    subject: "Verifikasi email Aijou AI",
-    idempotencyKey: `verify-email-${token.id}`,
-    text: `Halo ${user.name}, verifikasi email dan tentukan password final Aijou AI lewat link ini (berlaku 24 jam):\n\n${url}`,
-    html: emailTemplate({
+    subject: `${token.value} adalah kode verifikasi Aijou AI`,
+    idempotencyKey: `verify-email-otp-${token.id}`,
+    text: `Kode verifikasi Aijou AI kamu: ${token.value}\n\nKode berlaku 10 menit dan hanya bisa dipakai sekali. Jangan berikan kode ini kepada siapa pun.`,
+    html: otpEmailTemplate({
       title: "Verifikasi email kamu",
       greeting: `Halo ${user.name},`,
-      message: "Buktikan kepemilikan email dan tentukan password final untuk mengaktifkan akses workspace.",
-      actionLabel: "Verifikasi dan buat password",
-      actionUrl: url,
-      footnote: "Link berlaku 24 jam dan hanya bisa dipakai sekali.",
+      message: "Masukkan kode berikut di halaman Aijou untuk mengaktifkan workspace.",
+      code: token.value,
+      footnote: "Kode berlaku 10 menit dan hanya bisa dipakai sekali. Jangan berikan kepada siapa pun.",
     }),
   });
   return {
@@ -174,7 +191,197 @@ export async function sendVerificationEmailForUser(userId: string, enforceLimit 
     sent: delivery.sent,
     configured: delivery.configured,
     error: delivery.error,
+    challengeId: delivery.sent ? token.id : null,
   };
+}
+
+export async function resendVerificationOtp(
+  challengeId: string,
+  clientIp: string,
+) {
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.EMAIL_VERIFICATION);
+  if (!token) {
+    throw new AccountLifecycleError("INVALID_OTP", "Sesi verifikasi tidak valid atau kedaluwarsa.");
+  }
+  await consumeOtpAttemptLimit(`resend:${challengeId}`, clientIp);
+  return sendVerificationEmailForUser(token.userId, true);
+}
+
+export async function verifyEmailWithOtp(
+  challengeId: string,
+  code: string,
+  clientIp: string,
+) {
+  await consumeOtpAttemptLimit(challengeId, clientIp);
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.EMAIL_VERIFICATION);
+  if (!token || !otpHashMatches(token.tokenHash, challengeId, code)) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode salah atau sudah kedaluwarsa.");
+  }
+
+  const now = new Date();
+  const verifiedUser = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.authToken.updateMany({
+      where: {
+        id: token.id,
+        tokenHash: token.tokenHash,
+        purpose: AuthTokenPurpose.EMAIL_VERIFICATION,
+        usedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { usedAt: now },
+    });
+    if (claimed.count !== 1) {
+      throw new AccountLifecycleError("INVALID_OTP", "Kode sudah dipakai atau kedaluwarsa.");
+    }
+    const verified = await tx.user.updateMany({
+      where: {
+        id: token.userId,
+        emailVerifiedAt: null,
+        status: { in: [UserStatus.ACTIVE, UserStatus.DELETION_PENDING] },
+      },
+      data: { emailVerifiedAt: now },
+    });
+    if (verified.count !== 1) {
+      throw new AccountLifecycleError("INVALID_OTP", "Email sudah diverifikasi atau akun tidak aktif.");
+    }
+    await tx.authToken.updateMany({
+      where: {
+        userId: token.userId,
+        purpose: AuthTokenPurpose.EMAIL_VERIFICATION,
+        usedAt: null,
+      },
+      data: { usedAt: now },
+    });
+    return tx.user.findUniqueOrThrow({
+      where: { id: token.userId },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+      },
+    });
+  });
+  await clearDurableRateLimit(challengeId, otpChallengeAttemptRules);
+  return verifiedUser;
+}
+
+export async function sendLoginOtpForUser(userId: string, enforceLimit = true) {
+  if (enforceLimit) {
+    const limit = await consumeDurableRateLimit(userId, loginOtpDeliveryRules);
+    if (!limit.allowed) {
+      throw new AccountLifecycleError("RATE_LIMITED", "Terlalu sering meminta kode login.");
+    }
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      emailVerifiedAt: true,
+      status: true,
+    },
+  });
+  if (
+    !user ||
+    !user.emailVerifiedAt ||
+    !isAccountRecoveryAllowed(user.status)
+  ) {
+    throw new AccountLifecycleError("ACCOUNT_UNAVAILABLE", "Akun tidak dapat menerima kode login.");
+  }
+
+  const token = await issueOtpToken(user.id, AuthTokenPurpose.LOGIN_OTP);
+  const delivery = await deliverIssuedTokenEmail(token, {
+    to: user.email,
+    subject: `${token.value} adalah kode login Aijou AI`,
+    idempotencyKey: `login-otp-${token.id}`,
+    text: `Kode login Aijou AI kamu: ${token.value}\n\nKode berlaku 10 menit dan hanya bisa dipakai sekali. Jika bukan kamu yang mencoba masuk, abaikan email ini.`,
+    html: otpEmailTemplate({
+      title: "Konfirmasi login baru",
+      greeting: `Halo ${user.name},`,
+      message: "Ada percobaan login dari perangkat yang belum dipercaya. Masukkan kode berikut untuk melanjutkan.",
+      code: token.value,
+      footnote: "Kode berlaku 10 menit. Jika bukan kamu yang mencoba masuk, abaikan email ini.",
+    }),
+  });
+  return {
+    sent: delivery.sent,
+    configured: delivery.configured,
+    error: delivery.error,
+    challengeId: delivery.sent ? token.id : null,
+  };
+}
+
+export async function resendLoginOtp(challengeId: string, clientIp: string) {
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.LOGIN_OTP);
+  if (!token) {
+    throw new AccountLifecycleError("INVALID_OTP", "Sesi login tidak valid atau kedaluwarsa.");
+  }
+  await consumeOtpAttemptLimit(`resend:${challengeId}`, clientIp);
+  return sendLoginOtpForUser(token.userId, true);
+}
+
+export async function verifyLoginOtp(
+  challengeId: string,
+  code: string,
+  clientIp: string,
+) {
+  await consumeOtpAttemptLimit(challengeId, clientIp);
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.LOGIN_OTP);
+  if (!token || !otpHashMatches(token.tokenHash, challengeId, code)) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode salah atau sudah kedaluwarsa.");
+  }
+  const now = new Date();
+  const claimed = await prisma.authToken.updateMany({
+    where: {
+      id: token.id,
+      tokenHash: token.tokenHash,
+      purpose: AuthTokenPurpose.LOGIN_OTP,
+      usedAt: null,
+      expiresAt: { gt: now },
+    },
+    data: { usedAt: now },
+  });
+  if (claimed.count !== 1) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode sudah dipakai atau kedaluwarsa.");
+  }
+  await prisma.authToken.updateMany({
+    where: {
+      userId: token.userId,
+      purpose: AuthTokenPurpose.LOGIN_OTP,
+      usedAt: null,
+    },
+    data: { usedAt: now },
+  });
+  const user = await prisma.user.findUnique({
+    where: { id: token.userId },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      status: true,
+      emailVerifiedAt: true,
+    },
+  });
+  if (!user?.emailVerifiedAt || !isAccountRecoveryAllowed(user.status)) {
+    throw new AccountLifecycleError("ACCOUNT_UNAVAILABLE", "Akun tidak dapat digunakan.");
+  }
+  await clearDurableRateLimit(challengeId, otpChallengeAttemptRules);
+  return user;
+}
+
+export async function getOtpChallengeInfo(
+  challengeId: string,
+  purpose: AuthTokenPurpose,
+) {
+  const token = await getUsableOtpToken(challengeId, purpose);
+  return token
+    ? {
+        maskedEmail: maskEmail(token.user.email),
+        expiresAt: token.expiresAt,
+      }
+    : null;
 }
 
 export async function verifyEmailWithToken(tokenValue: string, newPassword: string) {
@@ -670,6 +877,67 @@ async function issueToken(
   return { id: issued.id, userId, purpose, value, previousTokenIds: issued.previousTokenIds };
 }
 
+async function issueOtpToken(
+  userId: string,
+  purpose: AuthTokenPurpose,
+): Promise<IssuedAuthToken> {
+  const id = randomBytes(24).toString("base64url");
+  const value = randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const tokenHash = hashOtp(id, value);
+  const issued = await prisma.$transaction(async (tx) => {
+    const previous = await tx.authToken.findMany({
+      where: { userId, purpose, usedAt: null },
+      select: { id: true },
+    });
+    await tx.authToken.create({
+      data: {
+        id,
+        userId,
+        purpose,
+        tokenHash,
+        expiresAt: new Date(Date.now() + otpTtlMs),
+      },
+    });
+    return { previousTokenIds: previous.map((token) => token.id) };
+  });
+  return { id, userId, purpose, value, previousTokenIds: issued.previousTokenIds };
+}
+
+async function getUsableOtpToken(
+  challengeId: string,
+  purpose: AuthTokenPurpose,
+) {
+  if (!isPlausibleOtpChallenge(challengeId)) return null;
+  return prisma.authToken.findFirst({
+    where: {
+      id: challengeId,
+      purpose,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    select: {
+      id: true,
+      userId: true,
+      tokenHash: true,
+      expiresAt: true,
+      user: { select: { email: true } },
+    },
+  });
+}
+
+async function consumeOtpAttemptLimit(challengeId: string, clientIp: string) {
+  const [challengeLimit, ipLimit] = await Promise.all([
+    consumeDurableRateLimit(challengeId || "invalid", otpChallengeAttemptRules),
+    consumeDurableRateLimit((clientIp || "unknown").slice(0, 64), otpIpAttemptRules),
+  ]);
+  if (!challengeLimit.allowed || !ipLimit.allowed) {
+    throw new AccountLifecycleError(
+      "RATE_LIMITED",
+      "Terlalu banyak percobaan kode. Minta kode baru atau tunggu sebentar.",
+    );
+  }
+}
+
 async function deliverIssuedTokenEmail(
   token: IssuedAuthToken,
   message: Parameters<typeof sendTransactionalEmail>[0],
@@ -728,6 +996,40 @@ function hashToken(value: string) {
   return createHash("sha256").update(value.trim()).digest("hex");
 }
 
+function hashOtp(challengeId: string, code: string) {
+  return createHmac("sha256", otpSecret())
+    .update(`${challengeId}\0${code.trim()}`)
+    .digest("hex");
+}
+
+function otpHashMatches(expectedHash: string, challengeId: string, code: string) {
+  if (!/^\d{6}$/.test(code)) return false;
+  const actual = Buffer.from(hashOtp(challengeId, code));
+  const expected = Buffer.from(expectedHash);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function otpSecret() {
+  const secret =
+    process.env.AUTH_OTP_SECRET?.trim() ||
+    process.env.AUTH_SECRET?.trim();
+  if (secret && (process.env.NODE_ENV !== "production" || Buffer.byteLength(secret) >= 32)) {
+    return secret;
+  }
+  if (process.env.NODE_ENV !== "production") return "dev-only-auth-otp-secret-change-me";
+  throw new Error("AUTH_OTP_SECRET or a strong AUTH_SECRET is required.");
+}
+
+function isPlausibleOtpChallenge(value: string) {
+  return /^[A-Za-z0-9_-]{32}$/.test(value);
+}
+
+function maskEmail(value: string) {
+  const [local = "", domain = ""] = value.split("@");
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${"*".repeat(Math.max(2, Math.min(6, local.length - visible.length)))}@${domain}`;
+}
+
 function normalizeEmail(value: string) {
   const email = value.trim().toLowerCase();
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
@@ -748,4 +1050,19 @@ function emailTemplate(params: {
   const url = escapeEmailHtml(params.actionUrl);
   const footnote = escapeEmailHtml(params.footnote);
   return `<!doctype html><html><body style="margin:0;background:#f4f1ea;color:#171a17;font-family:Arial,sans-serif"><div style="max-width:560px;margin:32px auto;background:#fff;padding:32px;border-radius:18px"><p style="font-size:13px;color:#5f746a">AIJOU AI</p><h1 style="font-size:28px">${title}</h1><p>${greeting}</p><p style="line-height:1.6">${message}</p><p style="margin:28px 0"><a href="${url}" style="background:#183f35;color:#fff;padding:13px 18px;border-radius:10px;text-decoration:none">${label}</a></p><p style="font-size:13px;color:#66706b">${footnote}</p></div></body></html>`;
+}
+
+function otpEmailTemplate(params: {
+  title: string;
+  greeting: string;
+  message: string;
+  code: string;
+  footnote: string;
+}) {
+  const title = escapeEmailHtml(params.title);
+  const greeting = escapeEmailHtml(params.greeting);
+  const message = escapeEmailHtml(params.message);
+  const code = escapeEmailHtml(params.code);
+  const footnote = escapeEmailHtml(params.footnote);
+  return `<!doctype html><html><body style="margin:0;background:#f4f1ea;color:#171a17;font-family:Arial,sans-serif"><div style="max-width:560px;margin:32px auto;background:#fff;padding:32px;border-radius:18px"><p style="font-size:13px;color:#5f746a">AIJOU AI</p><h1 style="font-size:28px">${title}</h1><p>${greeting}</p><p style="line-height:1.6">${message}</p><div style="margin:28px 0;padding:18px;background:#eef6f2;border-radius:12px;font-size:34px;font-weight:700;letter-spacing:10px;text-align:center">${code}</div><p style="font-size:13px;color:#66706b">${footnote}</p></div></body></html>`;
 }

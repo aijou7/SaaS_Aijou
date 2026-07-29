@@ -89,15 +89,25 @@ DATABASE_READ_RETRY_MAX_DELAY_MS="800"
 DATABASE_IDLE_TIMEOUT_MS="10000"
 
 AUTH_SECRET="RANDOM_MINIMUM_32_BYTES"
+# Opsional, tetapi direkomendasikan agar hash OTP memakai key terpisah.
+AUTH_OTP_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
+# Aktifkan hanya setelah email OTP berhasil diuji dari Production.
+LOGIN_OTP_ENABLED="false"
+# Aktifkan hanya setelah email OTP berhasil diuji dari Production.
+LOGIN_OTP_ENABLED="false"
 WIDGET_SIGNING_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
 DATA_ENCRYPTION_KEY="32_RANDOM_BYTES_AS_BASE64URL_OR_64_HEX"
 CRON_SECRET="DIFFERENT_RANDOM_MINIMUM_32_BYTES"
 
 NEXT_PUBLIC_APP_URL="https://app.example.com"
 
-# Wajib untuk signup publik, verifikasi email, dan reset password.
-RESEND_API_KEY="RESEND_API_KEY_PRODUCTION"
-EMAIL_FROM="Aijou AI <noreply@YOUR_VERIFIED_DOMAIN>"
+# Wajib untuk OTP signup, OTP login perangkat baru, dan reset password.
+EMAIL_PROVIDER="cloudflare"
+EMAIL_FROM="Aijou AI <otp@aijoutek.pro>"
+CLOUDFLARE_ACCOUNT_ID="CLOUDFLARE_ACCOUNT_ID"
+CLOUDFLARE_EMAIL_API_TOKEN="TOKEN_WITH_EMAIL_SENDING_EDIT"
+# Opsional sebagai fallback rollout.
+RESEND_API_KEY=""
 
 # Opsional: default pendaftaran publik adalah aktif. Gunakan false sebagai kill switch.
 PUBLIC_SIGNUP_ENABLED="true"
@@ -123,11 +133,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Ketentuan penting:
 
-- `AUTH_SECRET` dan `WIDGET_SIGNING_SECRET` minimal 32 byte dan harus berbeda.
+- `AUTH_SECRET`, `AUTH_OTP_SECRET`, dan `WIDGET_SIGNING_SECRET` minimal 32 byte dan sebaiknya berbeda.
 - `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte.
 - `CRON_SECRET` harus sama dengan secret yang dipakai Vercel Cron untuk bearer authorization.
 - `NEXT_PUBLIC_APP_URL` harus canonical HTTPS origin tanpa trailing path. Setelah custom domain berubah, update nilai ini lalu redeploy.
-- `RESEND_API_KEY` dan `EMAIL_FROM` wajib tersedia sebelum signup publik dibuka. Sender/domain pada `EMAIL_FROM` harus sudah terverifikasi di Resend; jika belum siap, halaman signup akan fail-closed dan tidak membuat workspace publik.
+- Cloudflare Email Sending harus sudah meng-onboard `aijoutek.pro`. API token hanya membutuhkan permission `Email Sending: Edit`.
+- `EMAIL_PROVIDER=cloudflare`, `EMAIL_FROM`, `CLOUDFLARE_ACCOUNT_ID`, dan `CLOUDFLARE_EMAIL_API_TOKEN` wajib tersedia sebelum signup publik dibuka. Jika belum siap, halaman signup fail-closed dan login perangkat yang sudah mempunyai trusted-device tetap dapat dipakai.
+- OTP berlaku 10 menit, maksimal lima percobaan per challenge, dan perangkat yang dipilih user dipercaya selama 30 hari atau sampai password berubah.
+- Deploy pertama dengan `LOGIN_OTP_ENABLED=false`. Setelah satu OTP uji benar-benar diterima dari Production, ubah ke `true` lalu redeploy. Guard ini mencegah seluruh owner terkunci ketika provider email belum siap.
+- Deploy pertama dengan `LOGIN_OTP_ENABLED=false`. Setelah satu OTP uji benar-benar diterima dari Production, ubah ke `true` lalu redeploy. Guard ini mencegah seluruh owner terkunci ketika provider email belum siap.
 - `PUBLIC_SIGNUP_ENABLED=false` mengembalikan `/signup` ke mode invite-only tanpa perubahan kode.
 - `SIGNUP_GUARD_SECRET` sebaiknya berupa secret acak tersendiri; IP dan email pada counter anti-spam hanya disimpan sebagai HMAC.
 - Simpan backup aman `DATA_ENCRYPTION_KEY`. Jangan rotate langsung setelah credential terenkripsi tersimpan.

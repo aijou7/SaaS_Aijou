@@ -114,9 +114,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 function formatLoginError(value: string) {
   const messages: Record<string, string> = {
     email_unverified:
-      "Email belum diverifikasi. Buka link terbaru di inbox, atau gunakan Lupa password untuk mengambil alih akun dengan aman.",
+      "Email belum diverifikasi. Selesaikan OTP pendaftaran, atau gunakan Lupa password untuk mengambil alih akun dengan aman.",
     invalid_credentials: "Email atau password salah. Periksa kembali lalu coba lagi.",
     invalid_request: "Permintaan login tidak valid. Muat ulang halaman lalu coba lagi.",
+    otp_delivery_failed: "Kode keamanan belum dapat dikirim. Coba lagi beberapa saat.",
+    otp_expired: "Sesi kode login sudah berakhir. Masukkan email dan password untuk meminta kode baru.",
+    otp_rate_limited: "Terlalu sering meminta kode login. Tunggu beberapa menit lalu coba lagi.",
     rate_limited: "Terlalu banyak percobaan login. Tunggu sebentar lalu coba lagi.",
   };
 

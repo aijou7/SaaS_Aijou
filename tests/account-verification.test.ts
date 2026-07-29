@@ -17,7 +17,7 @@ describe("account verification safety", () => {
     assert.doesNotMatch(publicAction, /createSessionCookie/);
     assert.match(publicAction, /sendVerificationEmailForUser/);
     assert.match(publicAction, /discardFailedPublicSignup/);
-    assert.match(publicAction, /redirect\("\/verify-email\?sent=1"\)/);
+    assert.match(publicAction, /\/verify-email\?challenge=/);
   });
 
   test("both cookie sessions and password login require a verified email", async () => {
@@ -30,25 +30,37 @@ describe("account verification safety", () => {
     assert.match(session, /!user\.emailVerifiedAt/);
     assert.match(login, /emailVerifiedAt:\s*true/);
     assert.match(login, /!user\.emailVerifiedAt/);
+    assert.match(login, /sendVerificationEmailForUser\(user\.id, true\)/);
+    assert.match(login, /requiresEmailVerification:\s*true/);
   });
 
-  test("email verification replaces the provisional password atomically", async () => {
-    const lifecycle = await source("../src/server/auth/account-lifecycle.ts");
+  test("signup stores a real password but OTP verification activates email atomically", async () => {
+    const [signup, lifecycle] = await Promise.all([
+      source("../src/server/auth/public-signup.ts"),
+      source("../src/server/auth/account-lifecycle.ts"),
+    ]);
     const verification = lifecycle.slice(
-      lifecycle.indexOf("export async function verifyEmailWithToken"),
-      lifecycle.indexOf("export async function requestAccountDeletion"),
+      lifecycle.indexOf("export async function verifyEmailWithOtp"),
+      lifecycle.indexOf("export async function sendLoginOtpForUser"),
     );
 
-    assert.match(verification, /verifyEmailWithToken\(tokenValue: string, newPassword: string\)/);
-    assert.match(verification, /validatePasswordStrength\(newPassword, token\.user\.email\)/);
-    assert.match(verification, /data:\s*\{ emailVerifiedAt: now, passwordHash \}/);
+    assert.match(signup, /hashPassword\(normalized\.password\)/);
+    assert.match(verification, /verifyEmailWithOtp/);
+    assert.match(verification, /data:\s*\{ emailVerifiedAt: now \}/);
+    assert.match(verification, /tokenHash:\s*token\.tokenHash/);
     assert.match(verification, /purpose:\s*AuthTokenPurpose\.EMAIL_VERIFICATION/);
+  });
+
+  test("successful signup OTP starts a session and trusts the verified device", async () => {
+    const action = await source("../src/app/verify-email/actions.ts");
+    assert.match(action, /completeLogin\(user, clientIp, true\)/);
+    assert.doesNotMatch(action, /createSessionCookie/);
   });
 
   test("failed delivery deletes only the newly-issued token", async () => {
     const lifecycle = await source("../src/server/auth/account-lifecycle.ts");
     const issue = lifecycle.slice(
-      lifecycle.indexOf("async function issueToken"),
+      lifecycle.indexOf("async function issueOtpToken"),
       lifecycle.indexOf("async function deliverIssuedTokenEmail"),
     );
     const settlement = lifecycle.slice(
