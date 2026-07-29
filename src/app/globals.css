@@ -5603,3 +5603,143 @@ sup {
     grid-template-columns: 1fr;
   }
 }
+.notification-bell {
+  position: relative;
+}
+
+.notification-count {
+  align-items: center;
+  background: #e24b3f;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 800;
+  height: 17px;
+  justify-content: center;
+  min-width: 17px;
+  padding: 0 3px;
+  position: absolute;
+  right: -6px;
+  top: -6px;
+}
+
+.notification-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-row {
+  align-items: center;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #dfe5e1);
+  border-radius: 14px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 16px;
+  text-align: left;
+  width: 100%;
+}
+
+.notification-row.unread {
+  background: #f0f7f4;
+  border-color: #9fc5b7;
+}
+
+.notification-row span:nth-child(2) {
+  display: grid;
+  gap: 4px;
+}
+
+.notification-row small,
+.notification-row time {
+  color: var(--muted, #66706b);
+  font-size: 12px;
+}
+
+.notification-row-icon {
+  align-items: center;
+  background: #e8f1ed;
+  border-radius: 10px;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.team-access-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.team-access-form select {
+  min-width: 100px;
+}
+
+.chat-media-preview {
+  border-radius: 12px;
+  display: block;
+  height: auto;
+  margin: 8px 0;
+  max-height: 320px;
+  max-width: min(100%, 420px);
+  object-fit: contain;
+}
+
+.chat-media-unavailable,
+.message-delivery {
+  color: var(--muted, #66706b);
+  display: block;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.message-delivery.failed {
+  color: #b33a2e;
+}
+
+.whatsapp-template-panel {
+  background: #f8faf9;
+  border: 1px solid var(--line, #dfe5e1);
+  border-radius: 14px;
+  margin-top: 12px;
+  padding: 14px;
+}
+
+.whatsapp-template-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.whatsapp-template-panel form {
+  margin-top: 14px;
+}
+
+.conversation-panel-loading {
+  opacity: 0.62;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.conversation-assignment {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.conversation-assignment label {
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  min-width: 220px;
+}

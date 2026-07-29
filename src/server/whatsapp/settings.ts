@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { WorkspaceRole } from "@/generated/prisma-beta/client";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
 import {
@@ -7,6 +8,7 @@ import {
 } from "@/server/integrations/credential-recovery";
 import { connectWhatsAppCloudApi } from "@/server/whatsapp/meta-connection";
 import { resolveWhatsAppVerifyToken } from "@/server/whatsapp/verify-token";
+import { requireWorkspaceAccess } from "@/server/workspace-access";
 
 export type WhatsAppSettingsInput = {
   wabaId?: string | null;
@@ -26,6 +28,15 @@ export async function getWhatsAppSettingsPage(userId: string) {
       business: null,
       configurationIssue: null,
       settings: null,
+      diagnostics: {
+        lastInboundAt: null,
+        lastOutboundAt: null,
+        lastOutboundStatus: null,
+        lastOutboundError: null,
+        failedMessagesLast24h: 0,
+        lastWebhookError: null,
+        lastWebhookErrorAt: null,
+      },
       ready: false,
     };
   }
@@ -59,6 +70,45 @@ export async function getWhatsAppSettingsPage(userId: string) {
     console.error("whatsapp_credentials_decrypt_failed", { businessId: business.id });
   }
   const ready = !configurationIssue && isSettingsReady(settings);
+  const [lastInbound, lastOutbound, failedLast24h, lastFailedJob] =
+    await Promise.all([
+      prisma.whatsAppMessage.findFirst({
+        where: {
+          conversation: { businessId: business.id, channel: "WHATSAPP" },
+          senderType: "CUSTOMER",
+        },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+      prisma.whatsAppMessage.findFirst({
+        where: {
+          conversation: { businessId: business.id, channel: "WHATSAPP" },
+          senderType: { in: ["AI", "USER"] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          createdAt: true,
+          deliveryStatus: true,
+          deliveryError: true,
+        },
+      }),
+      prisma.whatsAppMessage.count({
+        where: {
+          conversation: { businessId: business.id, channel: "WHATSAPP" },
+          deliveryStatus: { in: ["FAILED", "UNKNOWN"] },
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) },
+        },
+      }),
+      prisma.backgroundJob.findFirst({
+        where: {
+          businessId: business.id,
+          type: "WHATSAPP_WEBHOOK",
+          status: "FAILED",
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { lastError: true, updatedAt: true },
+      }),
+    ]);
 
   return {
     business,
@@ -75,6 +125,15 @@ export async function getWhatsAppSettingsPage(userId: string) {
       verifyTokenMasked: maskSecret(settings.verifyToken),
       appSecretMasked: maskSecret(settings.appSecret),
       verifyTokenSet: Boolean(settings.verifyToken),
+    },
+    diagnostics: {
+      lastInboundAt: lastInbound?.createdAt.toISOString() ?? null,
+      lastOutboundAt: lastOutbound?.createdAt.toISOString() ?? null,
+      lastOutboundStatus: lastOutbound?.deliveryStatus ?? null,
+      lastOutboundError: lastOutbound?.deliveryError ?? null,
+      failedMessagesLast24h: failedLast24h,
+      lastWebhookError: lastFailedJob?.lastError ?? null,
+      lastWebhookErrorAt: lastFailedJob?.updatedAt.toISOString() ?? null,
     },
     ready,
   };
@@ -377,19 +436,30 @@ async function ensureWhatsAppSettings(businessId: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: {
+      OR: [
+        { userId },
+        {
+          memberships: {
+            some: {
+              userId,
+              isActive: true,
+              role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
+            },
+          },
+        },
+      ],
+    },
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
-  }
-
-  return business;
+  const access = await requireWorkspaceAccess(userId, [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+  ]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 function decryptStoredSettings<T extends {

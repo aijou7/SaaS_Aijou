@@ -37,6 +37,7 @@ export type WhatsAppIncomingMessage = {
     id?: string;
     mime_type?: string;
     sha256?: string;
+    caption?: string;
   };
 };
 
@@ -95,6 +96,7 @@ export function compactWhatsAppMessagePayload(message: ExtractedWhatsAppMessage)
             id: clean(message.image.id, 160),
             mimeType: clean(message.image.mime_type, 120),
             sha256: clean(message.image.sha256, 128),
+            caption: clean(message.image.caption, 1_000),
           }
         : null,
   };

@@ -23,10 +23,10 @@ describe("safe internal navigation", () => {
 });
 
 describe("team management feature gate", () => {
-  test("is disabled by default and only accepts an explicit true value", () => {
-    assert.equal(isTeamManagementEnabled(undefined), false);
+  test("is enabled by default and supports an explicit emergency rollback", () => {
+    assert.equal(isTeamManagementEnabled(undefined), true);
     assert.equal(isTeamManagementEnabled("false"), false);
-    assert.equal(isTeamManagementEnabled("1"), false);
+    assert.equal(isTeamManagementEnabled("1"), true);
     assert.equal(isTeamManagementEnabled(" true "), true);
   });
 });

@@ -7,8 +7,8 @@ import {
 } from "@/lib/request-security";
 import {
   enqueueTelegramWebhook,
-  processPendingJobs,
 } from "@/server/jobs/background-jobs";
+import { wakeAndDrainJobs } from "@/server/jobs/durable-wakeup";
 import {
   isValidTelegramWebhookKey,
   telegramSecretHeader,
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest, context: TelegramWebhookRouteCo
       updateId: String(updateId),
     });
     after(async () => {
-      await processPendingJobs(2);
+      await wakeAndDrainJobs(2);
     });
 
     return NextResponse.json(

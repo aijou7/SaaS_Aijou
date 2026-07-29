@@ -17,7 +17,11 @@ describe("production performance guardrails", () => {
       readFile(new URL("../src/app/conversations/page.tsx", import.meta.url), "utf8"),
     ]);
 
-    assert.match(sessionSource, /business:\s*user\.businesses\[0\]\s*\?\?\s*null/);
+    assert.match(sessionSource, /const ownedBusiness = user\.businesses\[0\] \?\? null/);
+    assert.match(
+      sessionSource,
+      /business:\s*ownedBusiness\s*\?\?\s*memberWorkspace\?\.business\s*\?\?\s*null/,
+    );
     assert.match(pageSource, /getConversationsInboxForBusiness\(business,\s*inboxFilters\)/);
     assert.match(pageSource, /Promise\.all\(\[/);
     assert.match(pageSource, /liveState=\{inbox\.liveState\}/);
@@ -46,19 +50,20 @@ describe("production performance guardrails", () => {
     assert.match(source, /getInboxLiveStateForBusiness\(session\.business\.id\)/);
   });
 
-  test("prefetches only the conversation a user intends to open", async () => {
+  test("prefetches and caches only the conversation a user intends to open", async () => {
     const [pageSource, linkSource] = await Promise.all([
       readFile(new URL("../src/app/conversations/page.tsx", import.meta.url), "utf8"),
       readFile(
-        new URL("../src/components/intent-prefetch-link.tsx", import.meta.url),
+        new URL("../src/components/fast-conversation-link.tsx", import.meta.url),
         "utf8",
       ),
     ]);
 
-    assert.match(pageSource, /<IntentPrefetchLink/);
+    assert.match(pageSource, /<FastConversationLink/);
     assert.doesNotMatch(pageSource, /key=\{conversation\.id\}\s+prefetch/);
-    assert.match(linkSource, /prefetch=\{false\}/);
-    assert.match(linkSource, /router\.prefetch\(String\(href\)\)/);
+    assert.match(linkSource, /const detailCache = new Map/);
+    assert.match(linkSource, /onMouseEnter=\{\(\) => void load\(\)\}/);
+    assert.match(linkSource, /window\.history\.pushState/);
   });
 
   test("reuses the inbox briefly without hiding live updates", async () => {

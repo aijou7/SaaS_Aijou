@@ -8,6 +8,7 @@ import {
   createTeamInvite,
   getSafeTeamAccessError,
   revokeTeamInvite,
+  updateTeamMemberAccess,
 } from "@/server/team-access";
 
 export type TeamInviteActionState = {
@@ -61,4 +62,24 @@ export async function revokeTeamInviteAction(formData: FormData) {
 
   revalidatePath("/team");
   redirect("/team?revoked=1");
+}
+
+export async function updateTeamMemberAccessAction(formData: FormData) {
+  if (!isTeamManagementEnabled()) redirect("/dashboard");
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  try {
+    await updateTeamMemberAccess(session.userId, {
+      membershipId: String(formData.get("membershipId") ?? ""),
+      role: String(formData.get("role") ?? ""),
+      isActive: formData.get("isActive") === "on",
+    });
+  } catch (error) {
+    redirect(`/team?error=${encodeURIComponent(getSafeTeamAccessError(error))}`);
+  }
+
+  revalidatePath("/team");
+  revalidatePath("/conversations");
+  redirect("/team?memberUpdated=1");
 }

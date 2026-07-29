@@ -24,6 +24,7 @@ import {
   type ExtractedWhatsAppMessage,
   type WhatsAppWebhookPayload,
 } from "@/server/whatsapp/payload";
+import { downloadWhatsAppMedia } from "@/server/whatsapp/client";
 import {
   findBusinessForQueuedWhatsApp,
   findBusinessForWhatsAppMessage,
@@ -162,7 +163,7 @@ async function processOwnerTextMessage(
     storage,
     text,
   });
-  const reply =
+  let reply =
     action.reply ??
     (isStoredMessage(storage) && storage.duplicate
       ? await findLoggedReply(storage.messageId)
@@ -256,7 +257,7 @@ async function processOwnerImageMessage(
     providerMediaId: message.image?.id,
     storage,
   });
-  const reply =
+  let reply =
     action.reply ??
     (isStoredMessage(storage) && storage.duplicate
       ? await findLoggedReply(storage.messageId)
@@ -287,7 +288,7 @@ async function processCustomerMediaMessage(
   message: ExtractedWhatsAppMessage,
   business: ResolvedBusiness,
 ) {
-  const reply =
+  let reply =
     "File-nya sudah saya terima. Tambahkan sedikit konteks tentang isi file atau bagian yang ingin dibahas, nanti saya lanjutkan dari sana.";
   const storage = await persistMessage({
     business,
@@ -317,6 +318,27 @@ async function processCustomerMediaMessage(
       reply: null,
       storage,
     });
+  }
+
+  if (message.type === "image" && message.image?.id && storage.mediaFileId) {
+    const download = await downloadWhatsAppMedia({
+      businessId: business.id,
+      mediaId: message.image.id,
+    });
+    if (download.downloaded) {
+      await prisma.mediaFile.update({
+        where: { id: storage.mediaFileId },
+        data: {
+          storagePath: download.storagePath,
+          fileUrl: download.fileUrl,
+          mimeType: download.mimeType ?? message.image.mime_type,
+          fileSize: download.fileSize,
+        },
+      });
+      reply = message.image.caption
+        ? "Gambar dan keterangannya sudah masuk. Tim kami bisa melihat detailnya dari inbox."
+        : "Gambarnya sudah masuk dan bisa dilihat tim kami. Tambahkan bagian yang ingin dicek supaya kami bisa lanjut lebih tepat.";
+    }
   }
 
   const delivery = await sendAutomatedWhatsAppReply({

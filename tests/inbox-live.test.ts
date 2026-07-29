@@ -9,9 +9,9 @@ import {
 
 describe("operator inbox live refresh helpers", () => {
   test("backs off quiet and failed polling without exceeding one minute", () => {
-    assert.equal(getInboxPollDelayMs({ unchangedPolls: 0, failedPolls: 0 }), 4_000);
-    assert.equal(getInboxPollDelayMs({ unchangedPolls: 1, failedPolls: 0 }), 8_000);
-    assert.equal(getInboxPollDelayMs({ unchangedPolls: 20, failedPolls: 0 }), 30_000);
+    assert.equal(getInboxPollDelayMs({ unchangedPolls: 0, failedPolls: 0 }), 2_000);
+    assert.equal(getInboxPollDelayMs({ unchangedPolls: 1, failedPolls: 0 }), 5_000);
+    assert.equal(getInboxPollDelayMs({ unchangedPolls: 20, failedPolls: 0 }), 15_000);
     assert.equal(getInboxPollDelayMs({ unchangedPolls: 0, failedPolls: 1 }), 5_000);
     assert.equal(getInboxPollDelayMs({ unchangedPolls: 0, failedPolls: 99 }), 60_000);
   });

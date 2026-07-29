@@ -1,6 +1,9 @@
 import { Clock3, Mail, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { revokeTeamInviteAction } from "@/app/team/actions";
+import {
+  revokeTeamInviteAction,
+  updateTeamMemberAccessAction,
+} from "@/app/team/actions";
 import { TeamInviteForm } from "@/app/team/team-invite-form";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/session";
@@ -16,7 +19,11 @@ import {
 import { getWorkspaceAccess } from "@/server/workspace-access";
 
 type TeamPageProps = {
-  searchParams: Promise<{ revoked?: string; error?: string }>;
+  searchParams: Promise<{
+    revoked?: string;
+    memberUpdated?: string;
+    error?: string;
+  }>;
 };
 
 export default async function TeamPage({ searchParams }: TeamPageProps) {
@@ -70,6 +77,12 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
         <div className="settings-note" role="status">
           <strong>Undangan dicabut</strong>
           <p>Link tersebut tidak dapat digunakan lagi.</p>
+        </div>
+      ) : null}
+      {params.memberUpdated === "1" ? (
+        <div className="settings-note" role="status">
+          <strong>Akses anggota diperbarui</strong>
+          <p>Role dan status baru langsung berlaku pada request berikutnya.</p>
         </div>
       ) : null}
       {actionError ? (
@@ -133,6 +146,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                 <th>Status</th>
                 <th>Terakhir aktif</th>
                 <th>Bergabung</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -150,6 +164,44 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                   </td>
                   <td>{formatDate(member.user.lastSeenAt)}</td>
                   <td>{formatDate(member.createdAt)}</td>
+                  <td>
+                    {member.role === "OWNER" ||
+                    !canManageWorkspaceRole(
+                      managerRole,
+                      member.role as WorkspaceRoleValue,
+                    ) ? (
+                      <small>—</small>
+                    ) : (
+                      <form
+                        action={updateTeamMemberAccessAction}
+                        className="team-access-form"
+                      >
+                        <input
+                          name="membershipId"
+                          type="hidden"
+                          value={member.id}
+                        />
+                        <select name="role" defaultValue={member.role}>
+                          {managerRole === "OWNER" ? (
+                            <option value="ADMIN">Admin</option>
+                          ) : null}
+                          <option value="AGENT">Agent</option>
+                          <option value="VIEWER">Viewer</option>
+                        </select>
+                        <label className="checkbox-label">
+                          <input
+                            name="isActive"
+                            type="checkbox"
+                            defaultChecked={member.isActive}
+                          />
+                          Aktif
+                        </label>
+                        <button className="small-outline-button" type="submit">
+                          Simpan
+                        </button>
+                      </form>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

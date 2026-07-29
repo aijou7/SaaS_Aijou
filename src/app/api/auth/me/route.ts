@@ -13,7 +13,10 @@ export async function GET() {
     {
       user: {
         id: session.userId,
+        name: session.name,
         email: session.email,
+        role: session.role,
+        business: session.business,
       },
     },
     { headers: noStoreHeaders },

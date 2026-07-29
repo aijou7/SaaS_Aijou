@@ -1,6 +1,14 @@
-import { LeadStatus, Prisma } from "@/generated/prisma-beta/client";
+import {
+  LeadStatus,
+  Prisma,
+  WorkspaceRole,
+} from "@/generated/prisma-beta/client";
 import { callGroqJson } from "@/server/ai/groq";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import {
+  requireWorkspaceAccess,
+  workspaceAccessWhere,
+} from "@/server/workspace-access";
 
 type LeadSummary = {
   customerName: string | null;
@@ -214,7 +222,7 @@ type LeadSummaryCountsRow = {
 
 export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {}) {
   const business = await prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 
@@ -387,14 +395,12 @@ export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {
 }
 
 export async function updateLead(userId: string, leadId: string, formData: FormData) {
-  const business = await prisma.business.findFirst({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!business) {
-    throw new Error("Business belum dibuat.");
-  }
+  const access = await requireWorkspaceAccess(userId, [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.AGENT,
+  ]);
+  const business = { id: access.businessId };
 
   const status = String(formData.get("status") ?? LeadStatus.NEW);
   const ownerNotes = String(formData.get("ownerNotes") ?? "");

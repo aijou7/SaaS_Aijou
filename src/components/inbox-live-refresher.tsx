@@ -28,6 +28,7 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
     useState<LiveConnectionState>("live");
   const [manuallyPaused, setManuallyPaused] = useState(false);
   const [notice, setNotice] = useState("");
+  const [displayState, setDisplayState] = useState(initialState);
 
   useEffect(() => {
     if (!notice) return;
@@ -118,6 +119,7 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
           );
 
           knownState = nextState;
+          setDisplayState(nextState);
           unchangedPolls = 0;
           setNotice(
             addedHumanQueue > 0
@@ -125,6 +127,11 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
               : addedUnread > 0
                 ? `${addedUnread} pesan baru masuk.`
                 : "Inbox diperbarui.",
+          );
+          window.dispatchEvent(
+            new CustomEvent("aijou:inbox-state-changed", {
+              detail: nextState,
+            }),
           );
           scheduleRefresh();
         } else {
@@ -203,7 +210,7 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
     ? "paused"
     : connectionState;
   const statusLabel = getConnectionLabel(displayedConnectionState);
-  const pendingHuman = initialState.humanNeededCount;
+  const pendingHuman = displayState.humanNeededCount;
 
   return (
     <div

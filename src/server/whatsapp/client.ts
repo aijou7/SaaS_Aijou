@@ -17,6 +17,14 @@ type DownloadMediaParams = {
   businessId: string;
 };
 
+type SendTemplateMessageParams = {
+  to: string;
+  templateName: string;
+  languageCode?: string;
+  bodyParameters?: string[];
+  businessId: string;
+};
+
 const defaultMaxMediaBytes = 10 * 1024 * 1024;
 const maxWhatsAppTextLength = 4_096;
 
@@ -113,6 +121,124 @@ export async function sendWhatsAppTextMessage(params: SendTextMessageParams) {
     return {
       sent: false as const,
       reason: isWhatsAppAbortError(error) ? "whatsapp_request_timeout" : "whatsapp_network_error",
+      providerMessageId: null,
+    };
+  }
+}
+
+export async function sendWhatsAppTemplateMessage(
+  params: SendTemplateMessageParams,
+) {
+  const credentials = await getWhatsAppCredentialsForBusiness(
+    params.businessId,
+  );
+  const recipient = normalizeRecipient(params.to);
+  const templateName = params.templateName.trim().toLowerCase();
+  const languageCode = (params.languageCode || "id").trim();
+  const bodyParameters = (params.bodyParameters ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!credentials.accessToken || !credentials.phoneNumberId) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_credentials_missing",
+      providerMessageId: null,
+    };
+  }
+  if (!recipient) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_recipient_invalid",
+      providerMessageId: null,
+    };
+  }
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_template_name_invalid",
+      providerMessageId: null,
+    };
+  }
+  if (!/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(languageCode)) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_template_language_invalid",
+      providerMessageId: null,
+    };
+  }
+  if (
+    bodyParameters.length > 10 ||
+    bodyParameters.some((value) => value.length > 1_024)
+  ) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_template_parameters_invalid",
+      providerMessageId: null,
+    };
+  }
+
+  try {
+    const response = await fetchWhatsAppGraph(
+      whatsAppGraphApiUrl(
+        `${encodeURIComponent(credentials.phoneNumberId)}/messages`,
+      ),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${credentials.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: recipient,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: languageCode },
+            ...(bodyParameters.length > 0
+              ? {
+                  components: [
+                    {
+                      type: "body",
+                      parameters: bodyParameters.map((text) => ({
+                        type: "text",
+                        text,
+                      })),
+                    },
+                  ],
+                }
+              : {}),
+          },
+        }),
+      },
+    );
+    const body = await readWhatsAppGraphResponse(response);
+    const providerMessageId = extractProviderMessageId(body);
+    if (!response.ok || !providerMessageId) {
+      return {
+        sent: false as const,
+        status: response.status,
+        reason: !response.ok
+          ? "whatsapp_graph_api_rejected"
+          : "whatsapp_provider_message_id_missing",
+        providerMessageId: null,
+        body,
+      };
+    }
+    return {
+      sent: true as const,
+      status: response.status,
+      providerMessageId,
+      body,
+    };
+  } catch (error) {
+    return {
+      sent: false as const,
+      reason: isWhatsAppAbortError(error)
+        ? "whatsapp_request_timeout"
+        : "whatsapp_network_error",
       providerMessageId: null,
     };
   }

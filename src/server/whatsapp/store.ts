@@ -181,7 +181,8 @@ export async function storeIncomingWhatsAppMessage(params: {
             senderType: role === "OWNER_FINANCE" ? SenderType.USER : SenderType.CUSTOMER,
             messageType:
               params.message.type === "image" ? MessageType.IMAGE : MessageType.TEXT,
-            messageBody: params.message.text?.body,
+            messageBody:
+              params.message.text?.body ?? params.message.image?.caption,
             mediaFileId: mediaFile?.id,
             rawPayload: params.payload,
             intent: params.intent,

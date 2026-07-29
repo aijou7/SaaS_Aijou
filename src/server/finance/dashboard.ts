@@ -4,6 +4,7 @@ import {
   LeadStatus,
   TransactionStatus,
   TransactionType,
+  WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 
@@ -22,7 +23,20 @@ type DashboardAggregateRow = {
 
 export async function getFinanceDashboardSnapshot(userId: string) {
   const business = await prisma.business.findFirst({
-    where: { userId },
+    where: {
+      OR: [
+        { userId },
+        {
+          memberships: {
+            some: {
+              userId,
+              isActive: true,
+              role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
+            },
+          },
+        },
+      ],
+    },
     select: {
       id: true,
       businessName: true,

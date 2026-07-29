@@ -184,6 +184,7 @@ model User {
   teamInvitesAccepted   TeamInvite[]           @relation("TeamInviteAcceptor")
   assignedConversations WhatsAppConversation[] @relation("ConversationAssignee")
   sentMessages          WhatsAppMessage[]      @relation("MessageHumanSender")
+  notifications         WorkspaceNotification[]
   transactions          Transaction[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
@@ -227,6 +228,7 @@ model Business {
   paymentSettings      PaymentSettings?
   paymentSessions      PaymentSession[]
   backgroundJobs       BackgroundJob[]
+  notifications        WorkspaceNotification[]
   agentSettings        AgentSettings?
   whatsAppSettings     WhatsAppSettings?
   telegramSettings     TelegramSettings?
@@ -806,6 +808,28 @@ model BackgroundJob {
   @@index([status, runAfter])
   @@index([businessId, type, createdAt])
   @@map("background_jobs")
+}
+
+model WorkspaceNotification {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String
+  type        String
+  title       String
+  body        String
+  href        String?
+  dedupeKey   String   @unique
+  readAt      DateTime?
+  emailedAt   DateTime?
+  emailError  String?
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, readAt, createdAt])
+  @@index([businessId, type, createdAt])
+  @@map("workspace_notifications")
 }
 
 model ConfirmationSession {

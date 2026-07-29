@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import {
+  assignConversation,
   resolveConversation,
   sendOwnerConversationReply,
+  sendOwnerWhatsAppTemplate,
   setConversationTakeover,
   updateConversationOwnerNotes,
 } from "@/server/conversations/conversations";
@@ -35,6 +37,22 @@ export async function sendOwnerReplyAction(formData: FormData) {
   revalidateConversationPages(conversationId);
 }
 
+export async function sendWhatsAppTemplateAction(formData: FormData) {
+  const session = await getRequiredSession();
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const parameters = String(formData.get("bodyParameters") ?? "")
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  await sendOwnerWhatsAppTemplate(session.userId, conversationId, {
+    templateName: String(formData.get("templateName") ?? ""),
+    languageCode: String(formData.get("languageCode") ?? "id"),
+    bodyParameters: parameters,
+  });
+  revalidateConversationPages(conversationId);
+}
+
 export async function resolveConversationAction(formData: FormData) {
   const session = await getRequiredSession();
   const conversationId = String(formData.get("conversationId") ?? "");
@@ -49,6 +67,14 @@ export async function updateConversationNotesAction(formData: FormData) {
   const ownerNotes = String(formData.get("ownerNotes") ?? "");
 
   await updateConversationOwnerNotes(session.userId, conversationId, ownerNotes);
+  revalidateConversationPages(conversationId);
+}
+
+export async function assignConversationAction(formData: FormData) {
+  const session = await getRequiredSession();
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const assignee = String(formData.get("assigneeUserId") ?? "").trim();
+  await assignConversation(session.userId, conversationId, assignee || null);
   revalidateConversationPages(conversationId);
 }
 

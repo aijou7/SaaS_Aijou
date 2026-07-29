@@ -1,6 +1,10 @@
-import { Prisma } from "@/generated/prisma-beta/client";
+import { Prisma, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
+import {
+  requireWorkspaceAccess,
+  workspaceAccessWhere,
+} from "@/server/workspace-access";
 
 const defaultQuickReplies = [
   {
@@ -221,19 +225,18 @@ function parseQuickReplyFormData(formData: FormData): QuickReplyInput {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
-  }
-
-  return business;
+  const access = await requireWorkspaceAccess(userId, [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.AGENT,
+  ]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 function cleanOptional(value: string) {

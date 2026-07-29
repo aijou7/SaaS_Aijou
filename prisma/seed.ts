@@ -73,11 +73,11 @@ async function main() {
   const businessDefaults = {
     businessName,
     businessType: "IT consultant",
-    serviceArea: "Jakarta, Depok, Tangerang, dan remote support",
+    serviceArea: "Lombok, Nusa Tenggara Barat, dan remote support",
     operatingHours: "Senin-Sabtu 09.00-18.00",
     mainServices:
       "Instalasi jaringan LAN/WiFi, setup router, troubleshooting jaringan, IT support, setup server ringan, dan konsultasi infrastruktur IT.",
-    address: "Jakarta area",
+    address: "Lombok, Nusa Tenggara Barat",
   };
   const business = existingBusiness
     ? refreshDemoData

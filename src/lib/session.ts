@@ -74,6 +74,7 @@ export async function getSession() {
     where: { id: payload.userId },
     select: {
       id: true,
+      name: true,
       email: true,
       emailVerifiedAt: true,
       passwordHash: true,
@@ -84,6 +85,20 @@ export async function getSession() {
         select: {
           id: true,
           businessName: true,
+        },
+      },
+      memberships: {
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+        select: {
+          role: true,
+          business: {
+            select: {
+              id: true,
+              businessName: true,
+            },
+          },
         },
       },
     },
@@ -115,11 +130,16 @@ export async function getSession() {
     });
   }
 
+  const ownedBusiness = user.businesses[0] ?? null;
+  const memberWorkspace = user.memberships[0] ?? null;
+
   return {
     userId: user.id,
+    name: user.name,
     email: user.email,
     exp: payload.exp,
-    business: user.businesses[0] ?? null,
+    role: ownedBusiness ? ("OWNER" as const) : memberWorkspace?.role ?? null,
+    business: ownedBusiness ?? memberWorkspace?.business ?? null,
   };
 }
 

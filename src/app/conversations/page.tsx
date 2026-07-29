@@ -19,9 +19,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { updateAgentSettingsAction } from "@/app/agent/actions";
 import {
+  assignConversationAction,
   releaseConversationAction,
   resolveConversationAction,
   sendOwnerReplyAction,
+  sendWhatsAppTemplateAction,
   takeoverConversationAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
@@ -29,6 +31,8 @@ import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
+import { FastConversationLink } from "@/components/fast-conversation-link";
+import { LiveConversationDetail } from "@/components/live-conversation-detail";
 import { ConversationStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
@@ -40,6 +44,7 @@ import {
   getConversationsInboxForBusiness,
 } from "@/server/conversations/conversations";
 import type { InboxLiveState } from "@/lib/inbox-live";
+import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 import {
   getActiveQuickRepliesForBusiness,
   getActiveQuickRepliesForUser,
@@ -222,22 +227,36 @@ function ChatInboxView({
       </aside>
 
       <main className="chat-stage">
-        {!selectedConversation ? (
-          <WelcomeChecklist />
-        ) : (
-          <ConversationDetailPanel
-            historyUrl={buildInboxPageUrl({
-              conversationId: selectedConversation.id,
-              history: Math.min(500, historyLimit + 50),
-              page: inbox.pagination.page,
-              q,
-              status,
-              unread,
-            })}
-            quickReplies={quickReplies}
-            selectedConversation={selectedConversation}
-          />
-        )}
+        <LiveConversationDetail
+          initialDetail={selectedConversation}
+          key={[
+            selectedConversation?.id ?? "empty",
+            selectedConversation?.status ?? "",
+            selectedConversation?.assignedToUser?.id ?? "",
+            selectedConversation?.messages.at(-1)?.id ?? "",
+            selectedConversation?.messages.at(-1)?.deliveryStatus ?? "",
+            selectedConversation?.ownerNotes ?? "",
+          ].join(":")}
+          initialPanel={
+            !selectedConversation ? (
+              <WelcomeChecklist />
+            ) : (
+              <ConversationDetailPanel
+                historyUrl={buildInboxPageUrl({
+                  conversationId: selectedConversation.id,
+                  history: Math.min(500, historyLimit + 50),
+                  page: inbox.pagination.page,
+                  q,
+                  status,
+                  unread,
+                })}
+                quickReplies={quickReplies}
+                selectedConversation={selectedConversation}
+              />
+            )
+          }
+          quickReplies={quickReplies}
+        />
       </main>
     </section>
   );
@@ -265,8 +284,9 @@ function ConversationTicketList({
         </div>
       ) : (
         inbox.conversations.map((conversation) => (
-          <IntentPrefetchLink
+          <FastConversationLink
             className={selectedConversationId === conversation.id ? "chat-ticket active" : "chat-ticket"}
+            conversationId={conversation.id}
             href={buildInboxPageUrl({
               conversationId: conversation.id,
               q,
@@ -275,7 +295,6 @@ function ConversationTicketList({
               page: inbox.pagination.page,
             })}
             key={conversation.id}
-            scroll={false}
           >
             <div className="ticket-heading">
               <strong>{conversation.contactName}</strong>
@@ -302,7 +321,7 @@ function ConversationTicketList({
               ) : null}
               <span className="count-badge">{conversation.messageCount}</span>
             </div>
-          </IntentPrefetchLink>
+          </FastConversationLink>
         ))
       )}
     </div>
@@ -354,6 +373,27 @@ function ConversationDetailPanel({
           </button>
         </form>
       </div>
+
+      <form className="conversation-assignment" action={assignConversationAction}>
+        <input name="conversationId" type="hidden" value={selectedConversation.id} />
+        <label>
+          Ditangani oleh
+          <select
+            name="assigneeUserId"
+            defaultValue={selectedConversation.assignedToUser?.id ?? ""}
+          >
+            <option value="">Belum ditugaskan</option>
+            {selectedConversation.assignableUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="small-outline-button" type="submit">
+          Simpan assignment
+        </button>
+      </form>
 
       {selectedConversation.lead ? (
         <div className="card">
@@ -431,10 +471,80 @@ function ConversationDetailPanel({
         {selectedConversation.messages.map((message) => (
           <div className={`chat-bubble ${bubbleClassForSender(message.senderType)}`} key={message.id}>
             <small>{formatConversationStatus(message.senderType)}</small>
+            {message.media ? (
+              message.media.available ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="chat-media-preview"
+                  src={message.media.url}
+                  alt="Lampiran gambar customer"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="chat-media-unavailable">
+                  Lampiran belum tersimpan permanen
+                </span>
+              )
+            ) : null}
             <p>{message.messageBody}</p>
+            {message.senderType !== "CUSTOMER" &&
+            message.senderType !== "SYSTEM" ? (
+              <span
+                className={
+                  message.deliveryStatus === "FAILED" ||
+                  message.deliveryStatus === "UNKNOWN"
+                    ? "message-delivery failed"
+                    : "message-delivery"
+                }
+                title={message.deliveryError ?? undefined}
+              >
+                {formatDeliveryStatus(message.deliveryStatus)}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
+
+      {selectedConversation.channel === "WHATSAPP" &&
+      !isWhatsAppCustomerCareWindowOpen(
+        selectedConversation.lastCustomerMessageAt,
+      ) ? (
+        <details className="whatsapp-template-panel">
+          <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
+          <form className="form-grid" action={sendWhatsAppTemplateAction}>
+            <input
+              name="conversationId"
+              type="hidden"
+              value={selectedConversation.id}
+            />
+            <label>
+              Nama template Meta
+              <input
+                name="templateName"
+                type="text"
+                pattern="[a-z0-9_]{1,512}"
+                placeholder="follow_up_customer"
+                required
+              />
+            </label>
+            <label>
+              Bahasa
+              <input name="languageCode" type="text" defaultValue="id" required />
+            </label>
+            <label className="span-2">
+              Parameter body <small>(satu nilai per baris)</small>
+              <textarea
+                name="bodyParameters"
+                placeholder={"Nama customer\nNama layanan"}
+                rows={3}
+              />
+            </label>
+            <button className="primary-button span-2" type="submit">
+              Kirim approved template
+            </button>
+          </form>
+        </details>
+      ) : null}
 
       <div className="quick-reply-strip" aria-label="Quick replies">
         {quickReplies.length > 0 ? (
@@ -1302,6 +1412,21 @@ function bubbleClassForSender(senderType: string) {
   }
 
   return "customer";
+}
+
+function formatDeliveryStatus(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: "Menunggu dikirim",
+    SENDING: "Mengirim",
+    ACCEPTED: "Terkirim",
+    DELIVERED: "Diterima",
+    READ: "Dibaca",
+    FAILED: "Gagal",
+    UNKNOWN: "Status belum pasti",
+    SUPPRESSED: "Tidak dikirim",
+    STORED: "Tersimpan",
+  };
+  return labels[status] ?? status;
 }
 
 function formatEstimateRange(min?: string | null, max?: string | null) {

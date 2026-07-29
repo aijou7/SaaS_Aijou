@@ -5,6 +5,7 @@ import {
   polishCustomerReply,
 } from "@/lib/customer-conversation";
 import { buildPublishedPriceReply } from "@/lib/customer-pricing";
+import { evaluateAiResponseQuality } from "@/lib/ai-response-quality";
 import { callGroqText } from "@/server/ai/groq";
 import type { AgentRuntimeSettings } from "@/server/agent/settings";
 import type { ActiveProductCatalogItem } from "@/server/products/catalog";
@@ -122,11 +123,23 @@ export async function buildCustomerServiceReplyAi(params: {
     ].join("\n"),
   });
 
-  return polishCustomerReply({
+  const polished = polishCustomerReply({
     reply: result.text,
     conversationContext,
     fallback,
   });
+  const quality = evaluateAiResponseQuality({
+    reply: polished,
+    conversationContext,
+  });
+  return quality.passed
+    ? polished
+    : polishCustomerReply({
+        reply: fallback,
+        conversationContext,
+        fallback:
+          "Konteksnya sudah saya catat. Tim kami bisa lanjut dari detail terakhir tanpa mengulang dari awal.",
+      });
 }
 
 export function isHandoffRequest(message: string) {

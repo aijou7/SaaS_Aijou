@@ -8,8 +8,8 @@ import {
 } from "@/lib/request-security";
 import {
   enqueueWhatsAppWebhook,
-  processPendingJobs,
 } from "@/server/jobs/background-jobs";
+import { wakeAndDrainJobs } from "@/server/jobs/durable-wakeup";
 import type { WhatsAppWebhookPayload } from "@/server/whatsapp/payload";
 import {
   getWhatsAppWebhookPhoneNumberId,
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       payloadDigest: createHash("sha256").update(rawBody).digest("hex"),
     });
     after(async () => {
-      await processPendingJobs(2);
+      await wakeAndDrainJobs(2);
     });
 
     return NextResponse.json(

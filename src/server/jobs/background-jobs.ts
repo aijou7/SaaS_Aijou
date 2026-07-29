@@ -8,6 +8,10 @@ import {
   normalizeJobBatchLimit,
   orderTenantFairCandidates,
 } from "@/server/jobs/job-scheduling";
+import {
+  deliverHumanTakeoverNotifications,
+  humanTakeoverNotificationJob,
+} from "@/server/notifications/notifications";
 
 const leadRefreshJob = "LEAD_REFRESH";
 const whatsAppWebhookJob = "WHATSAPP_WEBHOOK";
@@ -367,6 +371,11 @@ async function executeJob(type: string, payload: Prisma.JsonValue, businessId: s
     if (!jsonObject(payload)) throw new Error("Queued Telegram payload is invalid.");
     const { processQueuedTelegramWebhook } = await import("@/server/telegram/processor");
     await processQueuedTelegramWebhook(payload, businessId);
+    return;
+  }
+
+  if (type === humanTakeoverNotificationJob) {
+    await deliverHumanTakeoverNotifications(businessId, payload);
     return;
   }
 

@@ -96,7 +96,7 @@ export default async function BusinessProfilePage() {
                 name="serviceArea"
                 type="text"
                 defaultValue={page.business?.serviceArea ?? ""}
-                placeholder="Jakarta, Depok, Tangerang"
+                placeholder="Lombok, Nusa Tenggara Barat, dan remote support"
               />
             </label>
             <label>

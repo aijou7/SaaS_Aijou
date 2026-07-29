@@ -18,7 +18,7 @@ export const emptyInboxLiveState: InboxLiveState = {
   closedCount: 0,
 };
 
-const activePollDelaysMs = [4_000, 8_000, 15_000, 30_000] as const;
+const activePollDelaysMs = [2_000, 5_000, 10_000, 15_000] as const;
 const failedPollDelaysMs = [5_000, 10_000, 20_000, 40_000, 60_000] as const;
 
 export function inboxLiveStateChanged(

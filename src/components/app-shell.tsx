@@ -1,7 +1,6 @@
 import {
   Activity,
   BadgeCheck,
-  Bell,
   Bot,
   BriefcaseBusiness,
   Building2,
@@ -19,7 +18,6 @@ import {
   Settings,
   Tags,
   TrendingUp,
-  UserCircle,
   Users,
   WalletCards,
   Zap,
@@ -28,6 +26,11 @@ import {
 import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
+import { NotificationBell } from "@/components/notification-bell";
+import {
+  WorkspaceUserChip,
+  WorkspaceUserSummary,
+} from "@/components/workspace-user";
 import { isTeamManagementEnabled } from "@/lib/team-feature";
 
 type ModuleKey =
@@ -156,6 +159,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   telegram: "integrations",
   whatsapp: "integrations",
   readiness: "integrations",
+  notifications: "inbox",
 };
 
 type AppShellProps = {
@@ -221,15 +225,8 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <Link className="top-icon-button" href="/setup" aria-label="Help" data-tooltip="Help">
             <CircleHelp size={17} aria-hidden="true" />
           </Link>
-          <Link className="top-icon-button" href="/ai-activity" aria-label="Notifications" data-tooltip="AI activity">
-            <Bell size={17} aria-hidden="true" />
-          </Link>
-          <Link className="user-chip" href="/account" aria-label="Buka keamanan akun">
-            <span className="avatar-dot">
-              <UserCircle size={20} aria-hidden="true" />
-            </span>
-            <strong>Owner</strong>
-          </Link>
+          <NotificationBell />
+          <WorkspaceUserChip />
         </div>
       </header>
 
@@ -267,16 +264,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
             </nav>
 
             <div className="settings-footer">
-              <div className="footer-user">
-                <span className="avatar-dot">
-                  <UserCircle size={22} aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>owner</strong>
-                  <small>Workspace owner</small>
-                </div>
-                <span className="online-badge">Online</span>
-              </div>
+              <WorkspaceUserSummary />
               <form action="/api/auth/logout" method="post">
                 <button className="sidebar-logout" type="submit">
                   <LogOut size={15} aria-hidden="true" />

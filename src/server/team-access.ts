@@ -258,6 +258,90 @@ export async function revokeTeamInvite(actorUserId: string, inviteId: string) {
   });
 }
 
+export async function updateTeamMemberAccess(
+  actorUserId: string,
+  input: {
+    membershipId: string;
+    role: string;
+    isActive: boolean;
+  },
+) {
+  const access = await requireWorkspaceAccess(actorUserId, teamManagerRoles);
+  const nextRole = parseWorkspaceRole(input.role);
+  if (!input.membershipId || input.membershipId.length > 180) {
+    throw new TeamAccessError("INVALID_MEMBER", "Anggota tidak valid.");
+  }
+  if (!nextRole || nextRole === "OWNER") {
+    throw new TeamAccessError(
+      "INVALID_ROLE",
+      "Ownership tidak dapat dipindahkan dari menu anggota.",
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const [actorRole, business, membership] = await Promise.all([
+      getActorRoleInTransaction(tx, access.businessId, actorUserId),
+      tx.business.findUnique({
+        where: { id: access.businessId },
+        select: { userId: true },
+      }),
+      tx.workspaceMembership.findFirst({
+        where: {
+          id: input.membershipId,
+          businessId: access.businessId,
+        },
+        select: { id: true, userId: true, role: true, isActive: true },
+      }),
+    ]);
+
+    if (!actorRole || !business || !membership) {
+      throw new TeamAccessError("MEMBER_NOT_FOUND", "Anggota tidak ditemukan.");
+    }
+    if (membership.userId === business.userId) {
+      throw new TeamAccessError(
+        "OWNER_IMMUTABLE",
+        "Akses owner utama tidak dapat dinonaktifkan.",
+      );
+    }
+    if (
+      !canManageWorkspaceRole(
+        actorRole,
+        membership.role as WorkspaceRoleValue,
+      ) ||
+      !canManageWorkspaceRole(actorRole, nextRole)
+    ) {
+      throw new TeamAccessError(
+        "FORBIDDEN",
+        "Kamu tidak memiliki izin mengubah anggota tersebut.",
+      );
+    }
+    if (membership.userId === actorUserId && !input.isActive) {
+      throw new TeamAccessError(
+        "SELF_DEACTIVATE",
+        "Kamu tidak dapat menonaktifkan akses sendiri.",
+      );
+    }
+
+    await tx.workspaceMembership.update({
+      where: { id: membership.id },
+      data: {
+        role: nextRole as WorkspaceRole,
+        isActive: input.isActive,
+      },
+    });
+
+    if (!input.isActive) {
+      await tx.whatsAppConversation.updateMany({
+        where: {
+          businessId: access.businessId,
+          assignedToUserId: membership.userId,
+        },
+        data: { assignedToUserId: null },
+      });
+    }
+  });
+}
+
 export async function inspectTeamInvite(rawToken: string) {
   const invite = await findUsableTeamInvite(rawToken);
   if (!invite) return null;

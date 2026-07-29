@@ -16,6 +16,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "tsx --test tests/*.test.ts",
+    "eval:ai": "tsx --test tests/ai-quality-regression.test.ts tests/customer-conversation.test.ts tests/customer-agent-pricing.test.ts",
     "check": "npm run typecheck && npm run lint && npm test",
     "audit:prod": "node scripts/audit-production.mjs",
     "prisma:generate": "prisma generate",

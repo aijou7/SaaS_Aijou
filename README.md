@@ -8,12 +8,14 @@ Status proyek saat ini adalah **beta terbatas dengan pendaftaran mandiri** melal
 
 - AI customer-service dengan agent name, tone, instruction, knowledge base, dan product context yang dapat dikustomisasi.
 - Widget chat lintas domain dengan exact-origin allowlist, workspace key, signed session, history saat refresh, dan reset konteks setelah sesi 24 jam berakhir.
-- Inbox gabungan untuk website, WhatsApp, dan Telegram, unread state, quick replies, owner reply, serta human takeover.
-- WhatsApp Cloud API inbound/outbound, webhook signature verification, delivery status, idempotency, media validation, dan owner-only finance commands.
+- Inbox gabungan untuk website, WhatsApp, dan Telegram, perpindahan chat ber-cache, unread state, quick replies, assignment agent, serta human takeover.
+- Notifikasi human takeover di dashboard dan email untuk owner, admin, serta agent aktif.
+- WhatsApp Cloud API inbound/outbound, approved template di luar jendela customer-care 24 jam, webhook signature verification, delivery status, idempotency, dan penyimpanan media privat.
 - Telegram Bot API untuk private text chat, automatic HTTPS webhook registration, AI reply, serta human takeover dari inbox yang sama.
 - Lead qualification, follow-up state, background lead refresh, proposal draft, editor, dan print view.
 - Orders/transaksi, katalog produk, CSV export, receipt review, serta OCR vision untuk JPEG, PNG, dan WebP.
 - Xendit payment sessions yang dikonfigurasi terpisah untuk setiap workspace.
+- Role workspace owner/admin/agent/viewer dengan invite, perubahan akses, dan pembatasan data finansial.
 - Pendaftaran beta mandiri yang tetap kompatibel dengan invite, account/profile, password rotation, encrypted integration credentials, security headers, health check, dan CI checks.
 
 Chat widget memulai identitas sesi baru setelah 24 jam. Percakapan lama tetap tersimpan di dashboard untuk histori owner; yang di-reset adalah session dan konteks pengunjung, bukan penghapusan record database.
@@ -88,6 +90,7 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 
 - Database: `DATABASE_URL` dan opsi pool/timeout.
 - Security: `AUTH_SECRET`, `WIDGET_SIGNING_SECRET`, `DATA_ENCRYPTION_KEY`, dan `CRON_SECRET`.
+- Durable jobs: `QSTASH_TOKEN` direkomendasikan di production agar worker tetap dibangunkan setelah request serverless selesai.
 - Canonical URL: `NEXT_PUBLIC_APP_URL`.
 - Bootstrap: `SEED_OWNER_*`, `SEED_BUSINESS_NAME`, `SEED_ROTATE_OWNER_PASSWORD`, dan `SEED_REFRESH_DEMO_DATA`.
 - AI: `GROQ_API_KEY`, `GROQ_MODEL`, dan `GROQ_VISION_MODEL`.
@@ -98,6 +101,8 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte. Simpan backup aman atas key ini. Jangan menggantinya setelah credential terenkripsi tersimpan sebelum ada proses re-encryption.
 
 Telegram dan Xendit dikonfigurasi per workspace dari dashboard. Bot token Telegram dan credential Xendit tidak perlu dan tidak boleh ditaruh dalam shared environment variable.
+
+Queue pekerjaan disimpan lebih dulu di PostgreSQL. Tanpa QStash, webhook tetap mencoba memproses batch kecil dan cron harian memulihkan job tertunda. Dengan `QSTASH_TOKEN`, setiap enqueue juga menjadwalkan wake-up eksternal yang durable ke `/api/cron/jobs`.
 
 `NEXT_PUBLIC_APP_URL` wajib berupa canonical HTTPS origin agar aplikasi dapat mendaftarkan webhook Telegram yang dapat dijangkau Telegram. Untuk lokal tanpa HTTPS publik, UI dan data dapat diuji tetapi webhook Telegram tidak akan menerima update dari internet.
 
@@ -171,6 +176,7 @@ npm.cmd run prisma:generate
 npm.cmd run typecheck
 npm.cmd run lint
 npm.cmd test
+npm.cmd run eval:ai
 npm.cmd run audit:prod
 npm.cmd run build
 ```

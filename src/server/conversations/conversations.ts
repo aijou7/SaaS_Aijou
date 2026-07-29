@@ -14,6 +14,7 @@ import {
   ProcessingStatus,
   SenderType,
   UserStatus,
+  WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { emptyInboxLiveState } from "@/lib/inbox-live";
@@ -23,9 +24,12 @@ import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
 import {
   enqueueLeadRefresh,
-  processPendingJobs,
 } from "@/server/jobs/background-jobs";
-import { sendWhatsAppTextMessage } from "@/server/whatsapp/client";
+import { wakeAndDrainJobs } from "@/server/jobs/durable-wakeup";
+import {
+  sendWhatsAppTemplateMessage,
+  sendWhatsAppTextMessage,
+} from "@/server/whatsapp/client";
 import { deliverStoredTelegramTextMessage } from "@/server/telegram/delivery";
 import { normalizeTelegramChatId } from "@/server/telegram/payload";
 import {
@@ -36,6 +40,12 @@ import {
   shouldSuppressAiDelivery,
 } from "@/server/conversations/takeover-safety";
 import { buildSnapshotSafeMarkReadMutation } from "@/server/conversations/read-state";
+import { enqueueHumanTakeoverNotifications } from "@/server/notifications/notifications";
+import {
+  requireWorkspaceAccess,
+  getWorkspaceAccess,
+  workspaceAccessWhere,
+} from "@/server/workspace-access";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -266,8 +276,11 @@ export async function getConversationDetailForBusiness(
       channel: true,
       status: true,
       lastMessageAt: true,
+      lastCustomerMessageAt: true,
       ownerLastReadAt: true,
       ownerNotes: true,
+      assignedToUserId: true,
+      assignedToUser: { select: { id: true, name: true } },
       resolvedAt: true,
       unreadCount: true,
       contact: {
@@ -286,6 +299,18 @@ export async function getConversationDetailForBusiness(
           messageType: true,
           messageBody: true,
           intent: true,
+          deliveryStatus: true,
+          deliveryError: true,
+          deliveredAt: true,
+          mediaFileId: true,
+          mediaFile: {
+            select: {
+              mimeType: true,
+              fileSize: true,
+              storagePath: true,
+              fileUrl: true,
+            },
+          },
           createdAt: true,
         },
       },
@@ -311,6 +336,21 @@ export async function getConversationDetailForBusiness(
           status: true,
           ownerNotes: true,
           updatedAt: true,
+        },
+      },
+      business: {
+        select: {
+          user: { select: { id: true, name: true } },
+          memberships: {
+            where: {
+              isActive: true,
+              role: { in: [WorkspaceRole.ADMIN, WorkspaceRole.AGENT] },
+              user: { status: UserStatus.ACTIVE },
+            },
+            select: {
+              user: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       _count: {
@@ -355,8 +395,18 @@ export async function getConversationDetailForBusiness(
     channel: conversation.channel,
     status: conversation.status,
     lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
+    lastCustomerMessageAt:
+      conversation.lastCustomerMessageAt?.toISOString() ?? null,
     ownerLastReadAt: conversation.ownerLastReadAt?.toISOString() ?? null,
     ownerNotes: conversation.ownerNotes,
+    assignedToUser: conversation.assignedToUser,
+    assignableUsers: [
+      conversation.business.user,
+      ...conversation.business.memberships.map((membership) => membership.user),
+    ].filter(
+      (user, index, users) =>
+        users.findIndex((candidate) => candidate.id === user.id) === index,
+    ),
     resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
     contactName: conversation.contact?.displayName ?? conversation.contact?.phoneNumber ?? "Unknown",
     contactPhone: conversation.contact?.phoneNumber ?? "-",
@@ -371,6 +421,19 @@ export async function getConversationDetailForBusiness(
       messageType: message.messageType,
       messageBody: message.messageBody ?? "",
       intent: message.intent,
+      deliveryStatus: message.deliveryStatus,
+      deliveryError: message.deliveryError,
+      deliveredAt: message.deliveredAt?.toISOString() ?? null,
+      media: message.mediaFileId
+        ? {
+            url: `/api/inbox/messages/${encodeURIComponent(message.id)}/media`,
+            mimeType: message.mediaFile?.mimeType ?? null,
+            fileSize: message.mediaFile?.fileSize ?? null,
+            available: Boolean(
+              message.mediaFile?.storagePath || message.mediaFile?.fileUrl,
+            ),
+          }
+        : null,
       createdAt: message.createdAt.toISOString(),
     })),
     lead: conversation.leads[0]
@@ -585,12 +648,32 @@ async function simulateCustomerMessageForResolvedBusiness(
       },
     });
 
+    const enteredHumanQueue =
+      finalStatus === ConversationStatus.HUMAN_NEEDED &&
+      lockedConversation.status !== ConversationStatus.HUMAN_NEEDED;
+    if (enteredHumanQueue) {
+      await enqueueHumanTakeoverNotifications(tx, {
+        businessId: business.id,
+        conversationId: conversation.id,
+        triggerId: customerMessage.id,
+        contactName: contact.displayName ?? contact.phoneNumber,
+        reason: handoffRequested
+          ? "Customer meminta berbicara dengan manusia."
+          : "AI tidak aktif atau membutuhkan bantuan operator.",
+      });
+    }
+
     await tx.whatsAppMessage.update({
       where: { id: customerMessage.id },
       data: { processingStatus: ProcessingStatus.PROCESSED },
     });
 
-    return { aiMessageId, aiReply: finalReply, status: finalStatus };
+    return {
+      aiMessageId,
+      aiReply: finalReply,
+      status: finalStatus,
+      enteredHumanQueue,
+    };
   });
 
   await queueLeadRefresh(business.id, conversation.id, input.leadSource);
@@ -612,8 +695,8 @@ export async function setConversationTakeover(userId: string, conversationId: st
   const status = takeover ? ConversationStatus.HUMAN_NEEDED : ConversationStatus.OPEN;
 
   await prisma.$transaction(async (tx) => {
-    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT "id"
+    const lockedRows = await tx.$queryRaw<Array<{ id: string; status: ConversationStatus }>>`
+      SELECT "id", "status"
       FROM "whatsapp_conversations"
       WHERE "id" = ${conversationId} AND "businessId" = ${business.id}
       FOR UPDATE
@@ -644,7 +727,7 @@ export async function setConversationTakeover(userId: string, conversationId: st
       });
     }
 
-    await tx.whatsAppMessage.create({
+    const systemMessage = await tx.whatsAppMessage.create({
       data: {
         conversationId,
         providerMessageId: `system-${crypto.randomUUID()}`,
@@ -655,7 +738,35 @@ export async function setConversationTakeover(userId: string, conversationId: st
         processingStatus: ProcessingStatus.PROCESSED,
       },
     });
+
+    if (
+      takeover &&
+      lockedRows[0].status !== ConversationStatus.HUMAN_NEEDED
+    ) {
+      const conversation = await tx.whatsAppConversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          contact: { select: { displayName: true, phoneNumber: true } },
+        },
+      });
+      await enqueueHumanTakeoverNotifications(tx, {
+        businessId: business.id,
+        conversationId,
+        triggerId: systemMessage.id,
+        contactName:
+          conversation?.contact?.displayName ??
+          conversation?.contact?.phoneNumber ??
+          "Customer",
+        reason: "Percakapan diambil alih oleh operator.",
+      });
+    }
   });
+
+  if (takeover) {
+    after(async () => {
+      await wakeAndDrainJobs(2);
+    });
+  }
 }
 
 export async function resolveConversation(userId: string, conversationId: string) {
@@ -1353,19 +1464,154 @@ async function upsertConversation(params: {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
-async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
+export async function assignConversation(
+  userId: string,
+  conversationId: string,
+  assigneeUserId: string | null,
+) {
+  const access = await getWorkspaceAccess(userId);
+  const operatorRoles: WorkspaceRole[] = [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.AGENT,
+  ];
+  if (!access || !operatorRoles.includes(access.role)) {
+    throw new Error("Kamu tidak memiliki izin untuk assignment.");
+  }
+  if (access.role === WorkspaceRole.AGENT && assigneeUserId !== userId) {
+    throw new Error("Agent hanya dapat mengambil assignment untuk dirinya sendiri.");
   }
 
-  return business;
+  if (assigneeUserId) {
+    const assignee = await prisma.business.findFirst({
+      where: {
+        id: access.businessId,
+        OR: [
+          { userId: assigneeUserId },
+          {
+            memberships: {
+              some: {
+                userId: assigneeUserId,
+                isActive: true,
+                role: { in: [WorkspaceRole.ADMIN, WorkspaceRole.AGENT] },
+                user: { status: UserStatus.ACTIVE },
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!assignee) throw new Error("Anggota assignment tidak aktif.");
+  }
+
+  const updated = await prisma.whatsAppConversation.updateMany({
+    where: { id: conversationId, businessId: access.businessId },
+    data: { assignedToUserId: assigneeUserId || null },
+  });
+  if (updated.count !== 1) throw new Error("Conversation tidak ditemukan.");
+}
+
+export async function sendOwnerWhatsAppTemplate(
+  userId: string,
+  conversationId: string,
+  input: {
+    templateName: string;
+    languageCode?: string;
+    bodyParameters?: string[];
+  },
+) {
+  const business = await requireBusinessForUser(userId);
+  const conversation = await prisma.whatsAppConversation.findFirst({
+    where: {
+      id: conversationId,
+      businessId: business.id,
+      channel: "WHATSAPP",
+    },
+    select: {
+      id: true,
+      contact: { select: { phoneNumber: true } },
+    },
+  });
+  if (!conversation?.contact?.phoneNumber) {
+    throw new Error("Percakapan WhatsApp atau nomor customer tidak ditemukan.");
+  }
+
+  const templateName = input.templateName.trim().toLowerCase();
+  const languageCode = input.languageCode?.trim() || "id";
+  const bodyParameters = (input.bodyParameters ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const providerMessageId = `template-${crypto.randomUUID()}`;
+  const stored = await prisma.whatsAppMessage.create({
+    data: {
+      conversationId,
+      providerMessageId,
+      senderType: SenderType.USER,
+      messageType: MessageType.TEXT,
+      messageBody: `Template: ${templateName}${
+        bodyParameters.length > 0 ? ` · ${bodyParameters.join(" · ")}` : ""
+      }`,
+      intent: "owner_whatsapp_template",
+      processingStatus: ProcessingStatus.RECEIVED,
+      deliveryStatus: "SENDING",
+      sentByUserId: userId,
+      rawPayload: toJsonValue({
+        channel: "WHATSAPP",
+        direction: "OUTBOUND",
+        templateName,
+        languageCode,
+        bodyParameters,
+      }),
+    },
+  });
+
+  const delivery = await sendWhatsAppTemplateMessage({
+    businessId: business.id,
+    to: conversation.contact.phoneNumber,
+    templateName,
+    languageCode,
+    bodyParameters,
+  });
+  await prisma.whatsAppMessage.update({
+    where: { id: stored.id },
+    data: {
+      providerMessageId: delivery.providerMessageId ?? providerMessageId,
+      deliveryStatus: delivery.sent ? "ACCEPTED" : "FAILED",
+      deliveryError: delivery.sent ? null : delivery.reason,
+      processingStatus: delivery.sent
+        ? ProcessingStatus.PROCESSED
+        : ProcessingStatus.FAILED,
+      deliveredAt: delivery.sent ? new Date() : null,
+    },
+  });
+  await prisma.whatsAppConversation.update({
+    where: { id: conversationId },
+    data: {
+      status: ConversationStatus.HUMAN_NEEDED,
+      lastMessageAt: new Date(),
+      ownerLastReadAt: new Date(),
+    },
+  });
+
+  if (!delivery.sent) {
+    throw new Error(`Template ditolak WhatsApp (${delivery.reason}).`);
+  }
+  return delivery;
+}
+
+async function requireBusinessForUser(userId: string) {
+  const access = await requireWorkspaceAccess(userId, [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.AGENT,
+  ]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 async function requireBusinessById(businessId: string) {
@@ -1464,7 +1710,7 @@ async function recoverDuplicateCustomerMessageResult<
 async function queueLeadRefresh(businessId: string, conversationId: string, source?: string) {
   await enqueueLeadRefresh({ businessId, conversationId, source });
   after(async () => {
-    await processPendingJobs(2);
+    await wakeAndDrainJobs(2);
   });
 }
 

@@ -203,6 +203,46 @@ export default async function WhatsAppSettingsPage({
           </div>
         </div>
       </section>
+
+      <section className="section">
+        <div className="section-title-row">
+          <div>
+            <p className="eyebrow">Production diagnostics</p>
+            <h2>Status traffic WhatsApp terbaru</h2>
+          </div>
+        </div>
+        <div className="grid">
+          <div className="card">
+            <h3>Inbound terakhir</h3>
+            <p className="metric">
+              {formatConnectionDate(page.diagnostics.lastInboundAt)}
+            </p>
+            <small>Pesan customer terakhir yang diterima webhook.</small>
+          </div>
+          <div className="card">
+            <h3>Outbound terakhir</h3>
+            <p className="metric">
+              {page.diagnostics.lastOutboundStatus ?? "Belum ada"}
+            </p>
+            <small>
+              {page.diagnostics.lastOutboundAt
+                ? formatConnectionDate(page.diagnostics.lastOutboundAt)
+                : "Belum ada pesan keluar."}
+            </small>
+          </div>
+          <div className="card">
+            <h3>Gagal 24 jam</h3>
+            <p className="metric">
+              {page.diagnostics.failedMessagesLast24h}
+            </p>
+            <small>
+              {page.diagnostics.lastOutboundError ||
+                page.diagnostics.lastWebhookError ||
+                "Tidak ada error provider terbaru."}
+            </small>
+          </div>
+        </div>
+      </section>
     </AppShell>
   );
 }
