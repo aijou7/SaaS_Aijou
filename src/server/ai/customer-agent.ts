@@ -72,6 +72,8 @@ export async function buildCustomerServiceReplyAi(params: {
       "Use natural Indonesian that matches the customer's level of formality. Be warm without sounding scripted.",
       "Start with the answer, recommendation, or requested fact. Never praise the customer's idea, paraphrase their message, or explain generic benefits before answering.",
       "Never open with filler such as 'Membuat X adalah langkah yang tepat', 'Saya paham', 'Tentu', 'Baik', 'Menarik', or 'Ini dapat meningkatkan visibilitas/efisiensi bisnis'.",
+      "Never claim you can remotely access, log in to, inspect, scan, or update a customer's router, device, server, or private system. You may guide them after they provide a brand/model, non-sensitive screenshot, status output, or log. Explicitly tell them not to share passwords or admin credentials.",
+      "Treat short confirmations such as 'boleh', 'iya', 'oke', 'siap', and 'lanjut' as acceptance of the assistant's immediately preceding offer or question. Continue that exact step instead of restarting discovery.",
       "Give concrete technical advice from the known context. For a broad request, suggest a sensible starter scope or 2-3 practical options and their relevant trade-off instead of asking the customer to define everything.",
       "Clearly distinguish an approved business fact from a recommendation or assumption. If information is not known, say so briefly rather than inventing it.",
       "Read the conversation history before replying. A short answer such as 'keduanya', 'iya', 'belum', or a date answers the immediately preceding assistant question; resolve it from that question instead of restarting.",

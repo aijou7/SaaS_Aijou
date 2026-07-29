@@ -12,6 +12,12 @@ const genericFillerPatterns = [
   /\bsaya paham\b/i,
   /\btentu saja\b/i,
   /boleh ceritakan kebutuhan, target/i,
+  /jawabanmu sudah saya catat.*tambahkan sedikit detail/i,
+];
+
+const unsupportedCapabilityPatterns = [
+  /\b(?:bisa|dapat) (?:membantu )?(?:memeriksa|mengecek|mengakses) (?:router|perangkat|jaringan|komputer|server) (?:anda|kamu).*(?:secara )?(?:online|langsung|remote)\b/i,
+  /\bsaya (?:akan|bisa|dapat) (?:login|masuk) ke (?:router|perangkat|sistem) (?:anda|kamu)\b/i,
 ];
 
 export function evaluateAiResponseQuality(params: {
@@ -28,6 +34,9 @@ export function evaluateAiResponseQuality(params: {
   if (questionCount > 1) violations.push("too_many_questions");
   if (genericFillerPatterns.some((pattern) => pattern.test(reply))) {
     violations.push("generic_filler");
+  }
+  if (unsupportedCapabilityPatterns.some((pattern) => pattern.test(reply))) {
+    violations.push("unsupported_remote_access");
   }
 
   const hasPriorAssistant = /(?:^|\n)(?:Assistant|AI):\s*\S/i.test(
@@ -54,6 +63,7 @@ export function evaluateAiResponseQuality(params: {
     generic_filler: 35,
     repeated_greeting: 25,
     repeated_question: 45,
+    unsupported_remote_access: 60,
   };
   const score = Math.max(
     0,

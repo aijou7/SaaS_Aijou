@@ -41,6 +41,29 @@ describe("AI reply regression quality gate", () => {
     assert.equal(result.questionCount, 1);
   });
 
+  test("rejects unsupported claims of remote router access", () => {
+    const result = evaluateAiResponseQuality({
+      reply:
+        "Saya bisa membantu memeriksa router Anda secara online jika Anda mau.",
+      conversationContext:
+        "Customer: Saya kurang paham cara update firmware router.",
+    });
+
+    assert.equal(result.passed, false);
+    assert.ok(result.violations.includes("unsupported_remote_access"));
+  });
+
+  test("rejects the old generic acknowledgement fallback", () => {
+    const result = evaluateAiResponseQuality({
+      reply:
+        "Oke, jawabanmu sudah saya catat. Bisa tambahkan sedikit detail tentang bagian yang paling penting?",
+      conversationContext: "Assistant: Saya bisa bantu mengeceknya jika Anda mau.",
+    });
+
+    assert.equal(result.passed, false);
+    assert.ok(result.violations.includes("generic_filler"));
+  });
+
   test("deterministic short follow-ups pass the same quality gate", () => {
     const cases = [
       buildContextualCustomerReply({

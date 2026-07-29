@@ -60,6 +60,54 @@ export function buildContextualCustomerReply(params: {
     return `Iya, saat ini kamu sedang ngobrol dengan ${params.agentName}, asisten AI. Saya bantu memahami kebutuhan awal dan menyiapkan konteksnya; kapan pun dibutuhkan, percakapan ini bisa diteruskan ke tim manusia.`;
   }
 
+  if (isShortAffirmative(normalized) && facts.latestAssistantMessage) {
+    const previous = normalize(facts.latestAssistantMessage);
+    if (
+      /\b(?:router(?:nya)?|wifi(?:nya)?|wi fi|firmware(?:nya)?|access point|jaringan)\b/.test(
+        previous,
+      ) &&
+      /\b(?:bisa bantu|memeriksa|mengecek|kirim|share|model|status|system information|jika anda mau|kalau kamu mau)\b/.test(
+        previous,
+      )
+    ) {
+      return "Siap. Kirim merek dan model router—biasanya tertulis di stiker bawah atau belakang perangkat—atau foto halaman Status/System Information. Dari situ saya bantu identifikasi jenis WiFi, versi firmware, dan langkah update yang sesuai. Jangan kirim password WiFi atau login admin.";
+    }
+    if (
+      /\b(?:kirim|share|unggah|upload)\b.*\b(?:foto|screenshot|model|tipe|dokumen|materi|logo)\b/.test(
+        previous,
+      )
+    ) {
+      return "Silakan kirim data atau file yang tadi disebutkan. Setelah itu saya lanjut cek dan beri langkah berikutnya tanpa mengulang pembahasan.";
+    }
+    if (
+      /\b(?:saya|kami) bisa bantu\b|\b(?:kalau|jika) (?:kamu|anda) mau\b|\bmau saya bantu\b/.test(
+        previous,
+      )
+    ) {
+      return "Siap, kita lanjut. Kirim informasi yang diminta pada langkah terakhir; setelah itu saya beri arahan yang spesifik dari konteks tersebut.";
+    }
+  }
+
+  if (
+    /\b(?:router(?:nya)?|wifi(?:nya)?|wi fi|firmware(?:nya)?)\b/.test(
+      normalized,
+    ) &&
+    /\b(?:jenis|tipe|versi|update|upgrade|firmware|wifi [4567])\b/.test(
+      normalized,
+    )
+  ) {
+    return "Jenis WiFi dan firmware belum bisa dipastikan tanpa model perangkat. Cek stiker bawah atau belakang router untuk merek, model, dan hardware revision; bisa juga kirim foto halaman Status/System Information. Untuk update, gunakan firmware resmi yang tepat untuk model dan revision tersebut—jangan kirim password WiFi atau login admin.";
+  }
+
+  if (
+    /\b(?:router|wifi|wi fi|firmware)\b/.test(normalized) &&
+    /\b(?:jenis|tipe|versi|update|upgrade|firmware|wifi [4567])\b/.test(
+      normalized,
+    )
+  ) {
+    return "Jenis WiFi dan firmware belum bisa dipastikan tanpa model perangkat. Cek stiker bawah atau belakang router untuk merek, model, dan hardware revision; bisa juga kirim foto halaman Status/System Information. Untuk update, gunakan firmware resmi yang tepat untuk model dan revision tersebut—jangan kirim password WiFi atau login admin.";
+  }
+
   if (
     /(?:aku|saya|kami|kita)?\s*(?:ga|gak|nggak|tidak|belum)\s*(?:punya|ada)\s*(?:ide|gambaran|bayangan)|bingung\s+(?:mulai|konsep)/.test(
       normalized,
@@ -179,7 +227,7 @@ export function buildContextAwareFallback(params: {
     return `Oke, konteks ${facts.project}${details ? ` ${details}` : ""} sudah saya catat. Kita lanjut dari informasi itu, bukan mengulang dari awal. Bagian mana yang ingin kamu pastikan berikutnya: scope, proses pengerjaan, atau estimasi?`;
   }
   return facts.hasAssistantReply
-    ? "Oke, jawabanmu sudah saya catat. Bisa tambahkan sedikit detail tentang bagian yang paling penting supaya saya melanjutkan dari konteks yang sama?"
+    ? "Biar tidak salah arah, sebutkan perangkat atau layanan yang dimaksud dan kendala utamanya dalam satu kalimat."
     : "Ceritakan kebutuhan utama atau masalah yang ingin diselesaikan, nanti saya bantu petakan langkah yang paling masuk akal.";
 }
 
@@ -251,7 +299,7 @@ function deriveFacts(
     } else if (/custom\s*dashboard|dashboard\s*(?:custom|khusus)?/.test(text)) {
       project = "custom dashboard";
     } else if (
-      /(?:pasang|instalasi|setup|bangun).*(?:wifi|wi-fi|jaringan)|(?:wifi|wi-fi|jaringan).*(?:villa|kantor|gedung|bangunan)/.test(
+      /\b(?:wifi(?:nya)?|wi fi|router(?:nya)?|firmware(?:nya)?|access point|jaringan)\b/.test(
         text,
       )
     ) {
@@ -321,6 +369,12 @@ function parseConversation(context?: string) {
 function isBothAnswer(text: string) {
   return /^(?:ingin\s+)?(?:dua[- ]duanya|keduanya|semuanya|dua[- ]dua nya)(?:\s+(?:aja|deh))?$/.test(
     normalize(text),
+  );
+}
+
+function isShortAffirmative(text: string) {
+  return /^(?:ya|iya|boleh|oke|ok|siap|lanjut|gas|gass|silakan|ayo)(?:\s+(?:deh|dong|ya|aja|gan|kak|bro))?$/.test(
+    text,
   );
 }
 

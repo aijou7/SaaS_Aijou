@@ -127,6 +127,37 @@ describe("customer conversation continuity", () => {
     assert.doesNotMatch(reply ?? "", /ceritakan kebutuhan/i);
   });
 
+  test("continues a router diagnostic when the customer says 'boleh'", () => {
+    const reply = buildContextualCustomerReply({
+      message: "boleh",
+      conversationContext: [
+        "Customer: kurang paham untuk update dan jenis wifinya",
+        "Assistant: Router Anda mungkin menggunakan WiFi 5. Saya bisa membantu Anda memeriksa router Anda secara online jika Anda mau.",
+      ].join("\n"),
+      agentName: "Aijou",
+    });
+
+    assert.match(reply ?? "", /merek dan model router/i);
+    assert.match(reply ?? "", /jenis WiFi, versi firmware, dan langkah update/i);
+    assert.match(reply ?? "", /jangan kirim password/i);
+    assert.doesNotMatch(reply ?? "", /tambahkan sedikit detail|sudah saya catat/i);
+    assert.doesNotMatch(reply ?? "", /memeriksa router.*secara online/i);
+  });
+
+  test("does not guess a WiFi generation without the router model", () => {
+    const reply = buildContextualCustomerReply({
+      message: "kurang paham untuk update dan jenis wifinya",
+      conversationContext:
+        "Customer: Router ini sudah lama dipakai di kantor.",
+      agentName: "Aijou",
+    });
+
+    assert.match(reply ?? "", /belum bisa dipastikan tanpa model perangkat/i);
+    assert.match(reply ?? "", /hardware revision/i);
+    assert.match(reply ?? "", /firmware resmi/i);
+    assert.doesNotMatch(reply ?? "", /mungkin menggunakan WiFi 5/i);
+  });
+
   test("provider fallback preserves known context", () => {
     const fallback = buildContextAwareFallback({
       message: "oke lanjut",
