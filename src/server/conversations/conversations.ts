@@ -17,6 +17,7 @@ import {
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { emptyInboxLiveState } from "@/lib/inbox-live";
+import { ttlCache } from "@/lib/ttl-cache";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
@@ -95,6 +96,26 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
 export async function getConversationsInboxForBusiness(
   business: ConversationBusiness,
   filters: ConversationInboxFilters = {},
+) {
+  const cacheKey = [
+    "conversation-inbox",
+    business.id,
+    filters.status ?? "",
+    filters.q?.trim().slice(0, 160) ?? "",
+    filters.unread ? "unread" : "all",
+    String(Math.max(1, filters.page ?? 1)),
+  ].join(":");
+
+  // Keep this shorter than the first 4-second live poll. Rapid switches reuse
+  // the list, while a live refresh always reads an expired inbox snapshot.
+  return ttlCache(cacheKey, 3_500, () =>
+    loadConversationsInboxForBusiness(business, filters),
+  );
+}
+
+async function loadConversationsInboxForBusiness(
+  business: ConversationBusiness,
+  filters: ConversationInboxFilters,
 ) {
   const where = buildConversationWhere(business.id, filters);
   const page = Math.max(1, filters.page ?? 1);

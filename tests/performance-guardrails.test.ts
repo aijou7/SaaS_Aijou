@@ -60,4 +60,14 @@ describe("production performance guardrails", () => {
     assert.match(linkSource, /prefetch=\{false\}/);
     assert.match(linkSource, /router\.prefetch\(String\(href\)\)/);
   });
+
+  test("reuses the inbox briefly without hiding live updates", async () => {
+    const source = await readFile(
+      new URL("../src/server/conversations/conversations.ts", import.meta.url),
+      "utf8",
+    );
+
+    assert.match(source, /ttlCache\(cacheKey,\s*3_500/);
+    assert.match(source, /loadConversationsInboxForBusiness\(business,\s*filters\)/);
+  });
 });
