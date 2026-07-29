@@ -38,6 +38,39 @@ describe("customer conversation continuity", () => {
     assert.equal(reply, "Halo, ada yang bisa saya bantu?");
   });
 
+  test("does not resolve stretched greetings from an unrelated old topic", () => {
+    const conversationContext = [
+      "Customer: saya mau buat website",
+      "Assistant: Untuk versi awal, websitenya bisa berisi profil dan layanan.",
+      "Customer: alamatnya di mana?",
+      "Assistant: Lokasi bisnis berada di Lombok.",
+    ].join("\n");
+
+    for (const message of ["haloo", "halooo", "hallooo", "haiii", "hiii"]) {
+      const reply = buildContextualCustomerReply({
+        message,
+        conversationContext,
+        agentName: "Aijou",
+      });
+
+      assert.equal(reply, "Iya, saya di sini. Mau tanya apa?");
+      assert.doesNotMatch(reply ?? "", /lokasi|website|konteks|sudah saya catat/i);
+    }
+  });
+
+  test("answers consecutive greetings without restarting or repeating the old context", () => {
+    const reply = buildContextualCustomerReply({
+      message: "halo!!!",
+      conversationContext: [
+        "Customer: halooo",
+        "Assistant: Iya, saya di sini. Mau tanya apa?",
+      ].join("\n"),
+      agentName: "Aijou",
+    });
+
+    assert.equal(reply, "Masih di sini. Kirim saja pertanyaannya.");
+  });
+
   test("answers a broad website request with a concrete starter scope", () => {
     const reply = buildContextualCustomerReply({
       message: "saya mau buat website",

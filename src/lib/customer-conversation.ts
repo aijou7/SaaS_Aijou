@@ -44,12 +44,17 @@ export function buildContextualCustomerReply(params: {
   const normalized = normalize(params.message);
   const facts = deriveFacts(params.message, params.conversationContext);
 
-  if (
-    /^(?:halo|hai|hi|hello|pagi|siang|sore|malam)(?:\s+(?:bro|kak|min|admin))?$/.test(
-      normalized,
-    )
-  ) {
-    return "Halo, ada yang bisa saya bantu?";
+  if (isGreeting(normalized)) {
+    if (!facts.hasAssistantReply) {
+      return "Halo, ada yang bisa saya bantu?";
+    }
+
+    return facts.latestAssistantMessage &&
+      /^(?:iya saya di sini|masih di sini)\b/.test(
+        normalize(facts.latestAssistantMessage),
+      )
+      ? "Masih di sini. Kirim saja pertanyaannya."
+      : "Iya, saya di sini. Mau tanya apa?";
   }
 
   if (
@@ -375,6 +380,25 @@ function isBothAnswer(text: string) {
 function isShortAffirmative(text: string) {
   return /^(?:ya|iya|boleh|oke|ok|siap|lanjut|gas|gass|silakan|ayo)(?:\s+(?:deh|dong|ya|aja|gan|kak|bro))?$/.test(
     text,
+  );
+}
+
+function isGreeting(text: string) {
+  const tokens = text.split(" ").filter(Boolean);
+  const suffixes = new Set(["bro", "kak", "min", "admin", "gan"]);
+  if (tokens.at(-1) && suffixes.has(tokens.at(-1)!)) {
+    tokens.pop();
+  }
+
+  if (tokens.length === 2 && tokens[0] === "selamat") {
+    return /^(?:pagi+|siang+|sore+|malam+)$/.test(tokens[1]);
+  }
+
+  return (
+    tokens.length === 1 &&
+    /^(?:h+a+l+o+|h+a+i+|h+i+|h+e+l+o+|h+e+y+|pagi+|siang+|sore+|malam+)$/.test(
+      tokens[0],
+    )
   );
 }
 
