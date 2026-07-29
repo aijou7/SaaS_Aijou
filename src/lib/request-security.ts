@@ -91,10 +91,6 @@ export async function readRequestBodyBuffer(request: Request, maxBytes: number) 
 }
 
 function hasTrustedOrigin(request: NextRequest) {
-  if (request.headers.get("sec-fetch-site") === "cross-site") {
-    return false;
-  }
-
   const origin = normalizeOrigin(request.headers.get("origin"));
   if (!origin) {
     return process.env.NODE_ENV !== "production";
