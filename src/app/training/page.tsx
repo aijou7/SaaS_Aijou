@@ -29,8 +29,12 @@ export default async function TrainingPage({ searchParams }: TrainingPageProps) 
     redirect("/login" as Route);
   }
 
-  const page = await getKnowledgeBasePage(session.userId);
-  const params = searchParams ? await searchParams : {};
+  const paramsPromise: Promise<{ websiteSync?: string; prices?: string }> =
+    searchParams ?? Promise.resolve({});
+  const [page, params] = await Promise.all([
+    getKnowledgeBasePage(session.userId),
+    paramsPromise,
+  ]);
   const syncedPriceCount = Math.max(0, Number(params.prices ?? "0") || 0);
 
   return (

@@ -70,4 +70,19 @@ describe("production performance guardrails", () => {
     assert.match(source, /ttlCache\(cacheKey,\s*3_500/);
     assert.match(source, /loadConversationsInboxForBusiness\(business,\s*filters\)/);
   });
+
+  test("parallelizes independent primary menu loaders", async () => {
+    const [agentSource, paymentsSource, trainingSource, shellSource] =
+      await Promise.all([
+        readFile(new URL("../src/app/agent/page.tsx", import.meta.url), "utf8"),
+        readFile(new URL("../src/app/payments/page.tsx", import.meta.url), "utf8"),
+        readFile(new URL("../src/app/training/page.tsx", import.meta.url), "utf8"),
+        readFile(new URL("../src/components/app-shell.tsx", import.meta.url), "utf8"),
+      ]);
+
+    assert.match(agentSource, /const \[page,\s*profile,\s*params\] = await Promise\.all/);
+    assert.match(paymentsSource, /const \[page,\s*payments\] = await Promise\.all/);
+    assert.match(trainingSource, /const \[page,\s*params\] = await Promise\.all/);
+    assert.match(shellSource, /<IntentPrefetchLink/);
+  });
 });

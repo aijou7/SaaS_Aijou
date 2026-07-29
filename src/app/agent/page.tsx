@@ -19,8 +19,8 @@ export default async function AgentSettingsPage({ searchParams }: AgentSettingsP
     redirect("/login" as Route);
   }
 
-  const page = await getAgentSettingsPage(session.userId);
-  const [profile, params] = await Promise.all([
+  const [page, profile, params] = await Promise.all([
+    getAgentSettingsPage(session.userId),
     getBusinessProfilePage(session.userId),
     searchParams,
   ]);

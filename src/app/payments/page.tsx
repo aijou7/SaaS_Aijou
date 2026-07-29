@@ -19,11 +19,13 @@ export default async function PaymentsPage() {
     redirect("/login" as Route);
   }
 
-  const page = await getTransactionsPage(
-    session.userId,
-    parseTransactionFilters({ transactionType: "INCOME" }),
-  );
-  const payments = await getPaymentsPage(session.userId);
+  const [page, payments] = await Promise.all([
+    getTransactionsPage(
+      session.userId,
+      parseTransactionFilters({ transactionType: "INCOME" }),
+    ),
+    getPaymentsPage(session.userId),
+  ]);
   return (
     <AppShell active="payments" businessName={page.business?.businessName}>
       <section className="core-page">

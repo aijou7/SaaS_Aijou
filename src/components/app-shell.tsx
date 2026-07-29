@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { isTeamManagementEnabled } from "@/lib/team-feature";
 
 type ModuleKey =
@@ -198,10 +199,14 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
             const isActive = item.module === activeModule;
 
             return (
-              <Link className={isActive ? "top-nav-item active" : "top-nav-item"} href={item.href} key={item.label}>
+              <IntentPrefetchLink
+                className={isActive ? "top-nav-item active" : "top-nav-item"}
+                href={item.href}
+                key={item.label}
+              >
                 <Icon size={16} aria-hidden="true" />
                 {item.label}
-              </Link>
+              </IntentPrefetchLink>
             );
           })}
         </nav>
@@ -249,14 +254,14 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
                 const Icon = item.icon;
 
                 return (
-                  <Link
+                  <IntentPrefetchLink
                     className={active === item.key ? "settings-nav-item active" : "settings-nav-item"}
                     href={item.href}
                     key={item.key}
                   >
                     <Icon size={17} aria-hidden="true" />
                     <span>{item.label}</span>
-                  </Link>
+                  </IntentPrefetchLink>
                 );
               })}
             </nav>

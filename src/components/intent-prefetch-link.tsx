@@ -17,6 +17,7 @@ const hoverIntentDelayMs = 120;
 export function IntentPrefetchLink({
   href,
   onBlur,
+  onClick,
   onFocus,
   onMouseEnter,
   onMouseLeave,
@@ -47,6 +48,10 @@ export function IntentPrefetchLink({
       {...props}
       href={href}
       prefetch={false}
+      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+        cancelPendingPrefetch();
+        onClick?.(event);
+      }}
       onBlur={(event: FocusEvent<HTMLAnchorElement>) => {
         cancelPendingPrefetch();
         onBlur?.(event);
