@@ -45,4 +45,19 @@ describe("production performance guardrails", () => {
     assert.match(source, /"Server-Timing"/);
     assert.match(source, /getInboxLiveStateForBusiness\(session\.business\.id\)/);
   });
+
+  test("prefetches only the conversation a user intends to open", async () => {
+    const [pageSource, linkSource] = await Promise.all([
+      readFile(new URL("../src/app/conversations/page.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../src/components/intent-prefetch-link.tsx", import.meta.url),
+        "utf8",
+      ),
+    ]);
+
+    assert.match(pageSource, /<IntentPrefetchLink/);
+    assert.doesNotMatch(pageSource, /key=\{conversation\.id\}\s+prefetch/);
+    assert.match(linkSource, /prefetch=\{false\}/);
+    assert.match(linkSource, /router\.prefetch\(String\(href\)\)/);
+  });
 });

@@ -28,6 +28,7 @@ import {
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { ConversationStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
@@ -264,7 +265,7 @@ function ConversationTicketList({
         </div>
       ) : (
         inbox.conversations.map((conversation) => (
-          <Link
+          <IntentPrefetchLink
             className={selectedConversationId === conversation.id ? "chat-ticket active" : "chat-ticket"}
             href={buildInboxPageUrl({
               conversationId: conversation.id,
@@ -274,7 +275,6 @@ function ConversationTicketList({
               page: inbox.pagination.page,
             })}
             key={conversation.id}
-            prefetch
             scroll={false}
           >
             <div className="ticket-heading">
@@ -302,7 +302,7 @@ function ConversationTicketList({
               ) : null}
               <span className="count-badge">{conversation.messageCount}</span>
             </div>
-          </Link>
+          </IntentPrefetchLink>
         ))
       )}
     </div>
