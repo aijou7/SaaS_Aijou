@@ -288,7 +288,7 @@ async function processCustomerMediaMessage(
   business: ResolvedBusiness,
 ) {
   const reply =
-    "File-nya sudah saya terima. Supaya tidak salah membaca konteks, tim kami akan ikut mengecek. Boleh tambahkan penjelasan singkat tentang file ini?";
+    "File-nya sudah saya terima. Tambahkan sedikit konteks tentang isi file atau bagian yang ingin dibahas, nanti saya lanjutkan dari sana.";
   const storage = await persistMessage({
     business,
     intent: "customer_media",
@@ -304,7 +304,7 @@ async function processCustomerMediaMessage(
             conversationId: storage.conversationId,
             to: message.from,
             body: reply,
-            intent: "customer_media_handoff",
+            intent: "customer_media_acknowledged",
             sourceProviderMessageId: message.id,
           })
         : null;
@@ -324,35 +324,26 @@ async function processCustomerMediaMessage(
     conversationId: storage.conversationId,
     to: message.from ?? "",
     body: reply,
-    intent: "customer_media_handoff",
+    intent: "customer_media_acknowledged",
     sourceProviderMessageId: message.id ?? storage.messageId,
   });
 
-  await Promise.all([
-    prisma.whatsAppConversation.update({
-      where: { id: storage.conversationId },
-      data: {
-        status: ConversationStatus.HUMAN_NEEDED,
-        lastMessageAt: new Date(),
-      },
-    }),
-    prisma.aiLog.create({
-      data: {
-        businessId: business.id,
-        conversationId: storage.conversationId,
-        messageId: delivery.messageId,
-        inputText: `customer_media:${message.type ?? "unknown"}`,
-        outputText: reply,
-        intent: "customer_media_handoff",
-        confidenceScore: "0.90",
-        actionTaken: "customer_media_handoff_created",
-      },
-    }),
-  ]);
+  await prisma.aiLog.create({
+    data: {
+      businessId: business.id,
+      conversationId: storage.conversationId,
+      messageId: delivery.messageId,
+      inputText: `customer_media:${message.type ?? "unknown"}`,
+      outputText: reply,
+      intent: "customer_media_acknowledged",
+      confidenceScore: "0.90",
+      actionTaken: "customer_media_acknowledged",
+    },
+  });
 
   return buildMessageResult(message, {
     action: {
-      action: "customer_media_handoff_created",
+      action: "customer_media_acknowledged",
       conversationId: storage.conversationId,
     },
     delivery,

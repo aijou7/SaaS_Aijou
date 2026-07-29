@@ -42,6 +42,18 @@ describe("human takeover safety", () => {
     assert.equal(aiDeliverySuppressionReason("HUMAN_NEEDED"), humanTakeoverDeliveryReason);
   });
 
+  test("acknowledges customer media without silently freezing future AI replies", async () => {
+    const processor = await readFile("src/server/whatsapp/processor.ts", "utf8");
+    const handler = processor.match(
+      /async function processCustomerMediaMessage[\s\S]+?(?=\nasync function processOwnerImageAction)/,
+    )?.[0];
+
+    assert.ok(handler);
+    assert.match(handler, /customer_media_acknowledged/);
+    assert.doesNotMatch(handler, /ConversationStatus\.HUMAN_NEEDED/);
+    assert.doesNotMatch(handler, /tim kami akan ikut mengecek/i);
+  });
+
   test("keeps database race guards on finalization and both deliveries", async () => {
     const [conversations, telegram] = await Promise.all([
       readFile("src/server/conversations/conversations.ts", "utf8"),
