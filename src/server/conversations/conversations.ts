@@ -16,6 +16,7 @@ import {
   UserStatus,
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { emptyInboxLiveState } from "@/lib/inbox-live";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
@@ -53,10 +54,17 @@ type ConversationInboxFilters = {
 };
 
 type ConversationChannel = "WHATSAPP" | "TELEGRAM" | "WEB_CHAT";
+type ConversationBusiness = {
+  id: string;
+  businessName: string;
+};
 
 type ConversationSummaryRow = {
+  version: string;
+  conversationCount: number;
   open: number;
   humanNeeded: number;
+  pendingConfirmation: number;
   customerService: number;
   closed: number;
   unread: number;
@@ -77,9 +85,17 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
         unread: 0,
       },
       pagination: { page: 1, pageSize: 30, total: 0, pageCount: 1 },
+      liveState: { ...emptyInboxLiveState },
     };
   }
 
+  return getConversationsInboxForBusiness(business, filters);
+}
+
+export async function getConversationsInboxForBusiness(
+  business: ConversationBusiness,
+  filters: ConversationInboxFilters = {},
+) {
   const where = buildConversationWhere(business.id, filters);
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = 30;
@@ -133,8 +149,11 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
     prisma.whatsAppConversation.count({ where }),
     withDatabaseRawReadRetry(() => prisma.$queryRaw<ConversationSummaryRow[]>`
       SELECT
+        COALESCE(MAX("lastMessageAt")::text, '') AS "version",
+        COUNT(*)::int AS "conversationCount",
         (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.OPEN}))::int AS "open",
         (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.HUMAN_NEEDED}))::int AS "humanNeeded",
+        (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.PENDING_CONFIRMATION}))::int AS "pendingConfirmation",
         (COUNT(*) FILTER (WHERE "conversationType"::text = ${ConversationType.CUSTOMER_SERVICE}))::int AS "customerService",
         (COUNT(*) FILTER (WHERE "status"::text = ${ConversationStatus.CLOSED}))::int AS "closed",
         COALESCE(SUM("unreadCount"), 0)::int AS "unread"
@@ -143,8 +162,11 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
     `),
   ]);
   const summary = summaryRows[0] ?? {
+    version: "",
+    conversationCount: 0,
     open: 0,
     humanNeeded: 0,
+    pendingConfirmation: 0,
     customerService: 0,
     closed: 0,
     unread: 0,
@@ -152,6 +174,15 @@ export async function getConversationsInbox(userId: string, filters: Conversatio
 
   return {
     business,
+    liveState: {
+      version: summary.version,
+      conversationCount: summary.conversationCount,
+      unreadCount: summary.unread,
+      openCount: summary.open,
+      humanNeededCount: summary.humanNeeded,
+      pendingConfirmationCount: summary.pendingConfirmation,
+      closedCount: summary.closed,
+    },
     summary: {
       open: summary.open,
       humanNeeded: summary.humanNeeded,
@@ -193,9 +224,18 @@ export async function getConversationDetail(userId: string, conversationId?: str
     return null;
   }
 
+  return getConversationDetailForBusiness(business.id, conversationId);
+}
+
+export async function getConversationDetailForBusiness(
+  businessId: string,
+  conversationId?: string,
+  requestedMessageLimit = 50,
+) {
+  const messageLimit = Math.min(500, Math.max(50, Math.round(requestedMessageLimit)));
   const conversation = await prisma.whatsAppConversation.findFirst({
     where: {
-      businessId: business.id,
+      businessId,
       ...(conversationId ? { id: conversationId } : {}),
     },
     orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
@@ -218,7 +258,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
       },
       messages: {
         orderBy: { createdAt: "desc" },
-        take: 100,
+        take: messageLimit,
         select: {
           id: true,
           senderType: true,
@@ -252,6 +292,9 @@ export async function getConversationDetail(userId: string, conversationId?: str
           updatedAt: true,
         },
       },
+      _count: {
+        select: { messages: true },
+      },
     },
   });
 
@@ -271,7 +314,7 @@ export async function getConversationDetail(userId: string, conversationId?: str
         await prisma.whatsAppConversation.updateMany({
           where: {
             id: conversation.id,
-            businessId: business.id,
+            businessId,
             ...snapshotMutation.where,
           },
           data: snapshotMutation.data,
@@ -297,6 +340,10 @@ export async function getConversationDetail(userId: string, conversationId?: str
     contactName: conversation.contact?.displayName ?? conversation.contact?.phoneNumber ?? "Unknown",
     contactPhone: conversation.contact?.phoneNumber ?? "-",
     contactType: conversation.contact?.contactType ?? ContactType.UNKNOWN,
+    messageLimit,
+    messageCount: conversation._count.messages,
+    hasOlderMessages:
+      conversation._count.messages > conversation.messages.length && messageLimit < 500,
     messages: [...conversation.messages].reverse().map((message) => ({
       id: message.id,
       senderType: message.senderType,

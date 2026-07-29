@@ -34,11 +34,15 @@ import { getAgentSettingsPage } from "@/server/agent/settings";
 import {
   formatConversationStatus,
   getConversationDetail,
+  getConversationDetailForBusiness,
   getConversationsInbox,
+  getConversationsInboxForBusiness,
 } from "@/server/conversations/conversations";
 import type { InboxLiveState } from "@/lib/inbox-live";
-import { getInboxLiveState } from "@/server/conversations-live";
-import { getActiveQuickRepliesForUser } from "@/server/quick-replies/quick-replies";
+import {
+  getActiveQuickRepliesForBusiness,
+  getActiveQuickRepliesForUser,
+} from "@/server/quick-replies/quick-replies";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
 type ChatView =
@@ -57,7 +61,7 @@ type ConversationsPageProps = {
 type ConversationInbox = Awaited<ReturnType<typeof getConversationsInbox>>;
 type ConversationDetail = Awaited<ReturnType<typeof getConversationDetail>>;
 type AgentSettingsPageData = Awaited<ReturnType<typeof getAgentSettingsPage>>;
-type QuickReplies = Awaited<ReturnType<typeof getActiveQuickRepliesForUser>>;
+type QuickReplies = Awaited<ReturnType<typeof getActiveQuickRepliesForBusiness>>;
 type WhatsAppSettingsPageData = Awaited<ReturnType<typeof getWhatsAppSettingsPage>>;
 
 export default async function ConversationsPage({ searchParams }: ConversationsPageProps) {
@@ -73,33 +77,41 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const q = getSearchParam(resolvedSearchParams, "q");
   const unread = getSearchParam(resolvedSearchParams, "unread") === "1";
   const pageNumber = Math.max(1, Number(getSearchParam(resolvedSearchParams, "page") ?? 1) || 1);
+  const historyLimit = normalizeHistoryLimit(getSearchParam(resolvedSearchParams, "history"));
   const currentView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
+  const business = session.business;
 
-  const inboxPromise = getConversationsInbox(session.userId, {
-    status,
-    q,
-    unread,
-    page: pageNumber,
-  });
+  const inboxFilters = { status, q, unread, page: pageNumber };
+  const inboxPromise = business
+    ? getConversationsInboxForBusiness(business, inboxFilters)
+    : getConversationsInbox(session.userId, inboxFilters);
 
   if (currentView === "chat") {
     const [inbox, selectedConversation, quickReplies] = await Promise.all([
       inboxPromise,
-      conversationId ? getConversationDetail(session.userId, conversationId) : Promise.resolve(null),
-      conversationId ? getActiveQuickRepliesForUser(session.userId) : Promise.resolve([]),
+      conversationId
+        ? business
+          ? getConversationDetailForBusiness(business.id, conversationId, historyLimit)
+          : getConversationDetail(session.userId, conversationId)
+        : Promise.resolve(null),
+      conversationId
+        ? business
+          ? getActiveQuickRepliesForBusiness(business.id)
+          : getActiveQuickRepliesForUser(session.userId)
+        : Promise.resolve([]),
     ]);
-    const liveState = await getInboxLiveState(session.userId);
 
     return (
       <AppShell active="conversations" businessName={inbox.business?.businessName}>
         <ChatInboxView
           inbox={inbox}
-          liveState={liveState}
+          liveState={inbox.liveState}
           q={q}
           quickReplies={quickReplies}
           selectedConversation={selectedConversation}
           status={status}
           unread={unread}
+          historyLimit={historyLimit}
         />
       </AppShell>
     );
@@ -134,6 +146,7 @@ function ChatInboxView({
   selectedConversation,
   status,
   unread,
+  historyLimit,
 }: {
   inbox: ConversationInbox;
   liveState: InboxLiveState;
@@ -142,6 +155,7 @@ function ChatInboxView({
   selectedConversation: ConversationDetail;
   status?: string;
   unread?: boolean;
+  historyLimit: number;
 }) {
   return (
     <section className="chat-page">
@@ -210,7 +224,18 @@ function ChatInboxView({
         {!selectedConversation ? (
           <WelcomeChecklist />
         ) : (
-          <ConversationDetailPanel quickReplies={quickReplies} selectedConversation={selectedConversation} />
+          <ConversationDetailPanel
+            historyUrl={buildInboxPageUrl({
+              conversationId: selectedConversation.id,
+              history: Math.min(500, historyLimit + 50),
+              page: inbox.pagination.page,
+              q,
+              status,
+              unread,
+            })}
+            quickReplies={quickReplies}
+            selectedConversation={selectedConversation}
+          />
         )}
       </main>
     </section>
@@ -249,6 +274,8 @@ function ConversationTicketList({
               page: inbox.pagination.page,
             })}
             key={conversation.id}
+            prefetch
+            scroll={false}
           >
             <div className="ticket-heading">
               <strong>{conversation.contactName}</strong>
@@ -283,9 +310,11 @@ function ConversationTicketList({
 }
 
 function ConversationDetailPanel({
+  historyUrl,
   quickReplies,
   selectedConversation,
 }: {
+  historyUrl: string;
   quickReplies: QuickReplies;
   selectedConversation: NonNullable<ConversationDetail>;
 }) {
@@ -394,6 +423,11 @@ function ConversationDetailPanel({
       </form>
 
       <div className="chat-window">
+        {selectedConversation.hasOlderMessages ? (
+          <Link className="small-outline-button chat-history-link" href={historyUrl} scroll={false}>
+            Muat 50 pesan sebelumnya
+          </Link>
+        ) : null}
         {selectedConversation.messages.map((message) => (
           <div className={`chat-bubble ${bubbleClassForSender(message.senderType)}`} key={message.id}>
             <small>{formatConversationStatus(message.senderType)}</small>
@@ -1174,6 +1208,7 @@ const chatFeatureMeta: Record<Exclude<ChatView, "chat">, { title: string; descri
 
 function buildInboxPageUrl(params: {
   conversationId?: string;
+  history?: number;
   q?: string;
   status?: string;
   unread?: boolean;
@@ -1182,12 +1217,18 @@ function buildInboxPageUrl(params: {
 }) {
   const search = new URLSearchParams();
   if (params.conversationId) search.set("conversationId", params.conversationId);
+  if (params.history && params.history > 50) search.set("history", String(params.history));
   if (params.q) search.set("q", params.q);
   if (params.status) search.set("status", params.status);
   if (params.unread) search.set("unread", "1");
   if (params.view) search.set("view", params.view);
   search.set("page", String(params.page));
   return `/conversations?${search.toString()}`;
+}
+
+function normalizeHistoryLimit(value?: string) {
+  const parsed = Number(value ?? 50);
+  return Math.min(500, Math.max(50, Number.isFinite(parsed) ? Math.round(parsed) : 50));
 }
 
 function getSearchParam(

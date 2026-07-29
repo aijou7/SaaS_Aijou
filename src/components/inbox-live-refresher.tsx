@@ -40,14 +40,31 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
 
     let active = true;
     let timer: number | undefined;
+    let refreshTimer: number | undefined;
     let request: AbortController | null = null;
     let knownState = initialState;
+    let navigationCooldownUntil = 0;
     let unchangedPolls = 0;
     let failedPolls = 0;
 
     const clearTimer = () => {
       if (timer !== undefined) window.clearTimeout(timer);
       timer = undefined;
+    };
+
+    const clearRefreshTimer = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = undefined;
+    };
+
+    const scheduleRefresh = () => {
+      clearRefreshTimer();
+      if (Date.now() < navigationCooldownUntil) return;
+
+      refreshTimer = window.setTimeout(() => {
+        if (!active || Date.now() < navigationCooldownUntil) return;
+        router.refresh();
+      }, 650);
     };
 
     const schedule = (delayMs: number) => {
@@ -109,7 +126,7 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
                 ? `${addedUnread} pesan baru masuk.`
                 : "Inbox diperbarui.",
           );
-          router.refresh();
+          scheduleRefresh();
         } else {
           unchangedPolls += 1;
         }
@@ -146,7 +163,26 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
       schedule(250);
     };
 
+    const handleNavigationStart = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+
+      try {
+        const destination = new URL(anchor.href, window.location.href);
+        if (destination.origin !== window.location.origin) return;
+      } catch {
+        return;
+      }
+
+      navigationCooldownUntil = Date.now() + 5_000;
+      clearRefreshTimer();
+    };
+
     document.addEventListener("visibilitychange", syncWithBrowser);
+    document.addEventListener("click", handleNavigationStart, true);
     window.addEventListener("online", syncWithBrowser);
     window.addEventListener("offline", syncWithBrowser);
     syncWithBrowser();
@@ -154,8 +190,10 @@ export function InboxLiveRefresher({ initialState }: InboxLiveRefresherProps) {
     return () => {
       active = false;
       clearTimer();
+      clearRefreshTimer();
       request?.abort();
       document.removeEventListener("visibilitychange", syncWithBrowser);
+      document.removeEventListener("click", handleNavigationStart, true);
       window.removeEventListener("online", syncWithBrowser);
       window.removeEventListener("offline", syncWithBrowser);
     };

@@ -79,6 +79,13 @@ export async function getSession() {
       passwordHash: true,
       status: true,
       lastSeenAt: true,
+      businesses: {
+        take: 1,
+        select: {
+          id: true,
+          businessName: true,
+        },
+      },
     },
   });
 
@@ -112,6 +119,7 @@ export async function getSession() {
     userId: user.id,
     email: user.email,
     exp: payload.exp,
+    business: user.businesses[0] ?? null,
   };
 }
 

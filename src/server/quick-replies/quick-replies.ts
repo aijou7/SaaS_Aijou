@@ -116,11 +116,13 @@ export async function getActiveQuickRepliesForUser(userId: string) {
     return [];
   }
 
-  await ensureDefaultQuickReplies(business.id);
+  return getActiveQuickRepliesForBusiness(business.id);
+}
 
-  return ttlCache(`quick-replies-active:${business.id}`, 30_000, () =>
+export async function getActiveQuickRepliesForBusiness(businessId: string) {
+  return ttlCache(`quick-replies-active:${businessId}`, 30_000, () =>
     prisma.quickReply.findMany({
-      where: { businessId: business.id, isActive: true },
+      where: { businessId, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,

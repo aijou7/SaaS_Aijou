@@ -3518,6 +3518,10 @@ sup {
   padding: 14px;
 }
 
+.chat-history-link {
+  justify-self: center;
+}
+
 .quick-reply-strip {
   display: flex;
   flex-wrap: wrap;

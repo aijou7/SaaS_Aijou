@@ -13,6 +13,21 @@ type InboxLiveRow = InboxLiveState;
  * after this cursor changes.
  */
 export async function getInboxLiveState(userId: string): Promise<InboxLiveState> {
+  const business = await prisma.business.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!business) {
+    return { ...emptyInboxLiveState };
+  }
+
+  return getInboxLiveStateForBusiness(business.id);
+}
+
+export async function getInboxLiveStateForBusiness(
+  businessId: string,
+): Promise<InboxLiveState> {
   const rows = await withDatabaseRawReadRetry(() => prisma.$queryRaw<InboxLiveRow[]>`
     SELECT
       COALESCE(MAX(conversation."lastMessageAt")::text, '') AS "version",
@@ -22,12 +37,8 @@ export async function getInboxLiveState(userId: string): Promise<InboxLiveState>
       (COUNT(conversation.id) FILTER (WHERE conversation.status::text = ${ConversationStatus.HUMAN_NEEDED}))::int AS "humanNeededCount",
       (COUNT(conversation.id) FILTER (WHERE conversation.status::text = ${ConversationStatus.PENDING_CONFIRMATION}))::int AS "pendingConfirmationCount",
       (COUNT(conversation.id) FILTER (WHERE conversation.status::text = ${ConversationStatus.CLOSED}))::int AS "closedCount"
-    FROM businesses AS business
-    LEFT JOIN whatsapp_conversations AS conversation
-      ON conversation."businessId" = business.id
-    WHERE business."userId" = ${userId}
-    GROUP BY business.id
-    LIMIT 1
+    FROM whatsapp_conversations AS conversation
+    WHERE conversation."businessId" = ${businessId}
   `);
 
   return rows[0] ?? { ...emptyInboxLiveState };
