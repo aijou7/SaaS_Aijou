@@ -1,5 +1,6 @@
 import {
   Bot,
+  Building2,
   CheckCircle2,
   ClipboardCheck,
   MessageCircle,
@@ -16,7 +17,12 @@ import { getSession } from "@/lib/session";
 import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
 
 type DashboardPageProps = {
-  searchParams: Promise<{ onboarding?: string; deletionCancelled?: string }>;
+  searchParams: Promise<{
+    onboarding?: string;
+    deletionCancelled?: string;
+    welcome?: string;
+    emailVerified?: string;
+  }>;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
@@ -30,6 +36,71 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     getFinanceDashboardSnapshot(session.userId),
     searchParams,
   ]);
+
+  if (dashboard.isWorkspaceEmpty && !dashboard.onboardingCompleted) {
+    return (
+      <AppShell active="dashboard" businessName={dashboard.businessName}>
+        <section className="new-workspace-dashboard">
+          <div className="new-workspace-welcome">
+            <span className="new-workspace-icon" aria-hidden="true">
+              <Sparkles size={26} />
+            </span>
+            <p className="eyebrow">
+              {params.welcome === "1" ? "Akun berhasil diaktifkan" : "Workspace baru"}
+            </p>
+            <h1>{dashboard.businessName} siap kamu atur dari nol.</h1>
+            <p>
+              Workspace ini belum berisi chat, customer, lead, produk, transaksi, atau
+              data contoh. Mulai dengan melengkapi konteks bisnis agar Aijou tidak menebak.
+            </p>
+            <div className="new-workspace-actions">
+              <Link className="primary-button" href="/setup?welcome=1">
+                Mulai setup workspace
+              </Link>
+              <Link className="ghost-button" href="/business">
+                Isi profil bisnis
+              </Link>
+            </div>
+          </div>
+
+          <div className="new-workspace-steps" aria-label="Langkah awal workspace">
+            <Link href="/business">
+              <span><Building2 size={20} aria-hidden="true" /></span>
+              <div>
+                <small>Langkah 1</small>
+                <strong>Kenalkan bisnismu</strong>
+                <p>Isi layanan, area, jam operasional, dan website resmi.</p>
+              </div>
+            </Link>
+            <Link href="/agent">
+              <span><Bot size={20} aria-hidden="true" /></span>
+              <div>
+                <small>Langkah 2</small>
+                <strong>Atur cara AI menjawab</strong>
+                <p>Tentukan nama, gaya bahasa, batasan, dan aturan handoff.</p>
+              </div>
+            </Link>
+            <Link href="/training">
+              <span><Sparkles size={20} aria-hidden="true" /></span>
+              <div>
+                <small>Langkah 3</small>
+                <strong>Masukkan knowledge</strong>
+                <p>Tambahkan informasi yang benar sebelum mengaktifkan channel.</p>
+              </div>
+            </Link>
+          </div>
+
+          <div className="new-workspace-privacy-note">
+            <CheckCircle2 size={18} aria-hidden="true" />
+            <span>
+              Data setiap workspace terisolasi. Hanya data yang kamu atau channel-mu
+              masukkan yang akan tampil di dashboard ini.
+            </span>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell active="dashboard" businessName={dashboard.businessName}>

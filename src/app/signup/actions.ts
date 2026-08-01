@@ -107,7 +107,7 @@ export async function signupWithInviteAction(
   }
 
   await createSessionCookie({ userId: user.userId, passwordHash: user.passwordHash });
-  redirect("/setup?welcome=1");
+  redirect("/dashboard?welcome=1");
 }
 
 async function discardFailedPublicSignup(userId: string) {

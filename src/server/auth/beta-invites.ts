@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { UserRole, WorkspaceRole } from "@/generated/prisma-beta/client";
+import { UserRole } from "@/generated/prisma-beta/client";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
+import { createEmptyOwnedWorkspace } from "@/server/auth/workspace-bootstrap";
 
 export class BetaInviteError extends Error {
   constructor(message: string) {
@@ -160,25 +160,10 @@ export async function acceptBetaInvite(input: {
           emailVerifiedAt: claimedAt,
         },
       });
-      const business = await tx.business.create({
-        data: {
-          id: user.id + ":default",
-          userId: user.id,
-          businessName,
-          businessType: "Belum diisi",
-        },
-      });
-      await tx.agentSettings.create({
-        data: {
-          businessId: business.id,
-          ...newWorkspaceAgentDefaults(businessName),
-        },
-      });
-      await tx.workspaceMembership.create({
-        data: { businessId: business.id, userId: user.id, role: WorkspaceRole.OWNER },
-      });
-      await tx.activationEvent.create({
-        data: { businessId: business.id, type: "SIGNUP", metadata: { source: "BETA_INVITE" } },
+      await createEmptyOwnedWorkspace(tx, {
+        ownerId: user.id,
+        businessName,
+        signupSource: "BETA_INVITE",
       });
       await tx.betaInvite.update({
         where: { tokenHash },

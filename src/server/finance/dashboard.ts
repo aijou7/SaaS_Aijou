@@ -19,6 +19,7 @@ type DashboardAggregateRow = {
   unreadConversationCount: number;
   hotLeadCount: number;
   dueFollowUpCount: number;
+  workspaceRecordCount: number;
 };
 
 export async function getFinanceDashboardSnapshot(userId: string) {
@@ -58,6 +59,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
       unreadConversationCount: 0,
       hotLeadCount: 0,
       dueFollowUpCount: 0,
+      isWorkspaceEmpty: true,
       latestAiActions: [],
       recentTransactions: [],
     };
@@ -132,11 +134,29 @@ export async function getFinanceDashboardSnapshot(userId: string) {
           )::double precision AS "dueFollowUpCount"
         FROM "leads"
         WHERE "businessId" = ${business.id}
+      ),
+      workspace_data_stats AS (
+        SELECT (
+          (SELECT COUNT(*) FROM "contacts" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "whatsapp_conversations" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "transactions" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "knowledge_base" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "products" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "quick_replies" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "leads" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "customer_segments" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "complaints" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "broadcast_campaigns" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "orders" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "shipping_rates" WHERE "businessId" = ${business.id}) +
+          (SELECT COUNT(*) FROM "automation_workflows" WHERE "businessId" = ${business.id})
+        )::double precision AS "workspaceRecordCount"
       )
       SELECT *
       FROM transaction_stats
       CROSS JOIN conversation_stats
       CROSS JOIN lead_stats
+      CROSS JOIN workspace_data_stats
     `),
     prisma.aiLog.findMany({
       where: { businessId: business.id },
@@ -200,6 +220,7 @@ export async function getFinanceDashboardSnapshot(userId: string) {
     unreadConversationCount: aggregate.unreadConversationCount,
     hotLeadCount: aggregate.hotLeadCount,
     dueFollowUpCount: aggregate.dueFollowUpCount,
+    isWorkspaceEmpty: aggregate.workspaceRecordCount === 0,
     latestAiActions: latestAiActions.map((action) => ({
       id: action.id,
       actionTaken: action.actionTaken ?? "-",

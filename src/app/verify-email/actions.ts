@@ -46,7 +46,7 @@ export async function verifyEmailOtpAction(
     };
   }
 
-  redirect("/setup?welcome=1&emailVerified=1");
+  redirect("/dashboard?welcome=1&emailVerified=1");
 }
 
 export async function resendVerificationOtpAction(formData: FormData) {

@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
-import { UserRole, WorkspaceRole } from "@/generated/prisma-beta/client";
+import { UserRole } from "@/generated/prisma-beta/client";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
+import { createEmptyOwnedWorkspace } from "@/server/auth/workspace-bootstrap";
 import {
   isPublicSignupEnabled,
   isPublicSignupReady,
@@ -57,28 +57,10 @@ export async function createPublicBetaAccount(
         select: { id: true, email: true },
       });
 
-      const business = await tx.business.create({
-        data: {
-          id: `${user.id}:default`,
-          userId: user.id,
-          businessName: normalized.businessName,
-          businessType: "Belum diisi",
-        },
-        select: { id: true },
-      });
-
-      await tx.agentSettings.create({
-        data: {
-          businessId: business.id,
-          ...newWorkspaceAgentDefaults(normalized.businessName),
-        },
-      });
-
-      await tx.workspaceMembership.create({
-        data: { businessId: business.id, userId: user.id, role: WorkspaceRole.OWNER },
-      });
-      await tx.activationEvent.create({
-        data: { businessId: business.id, type: "SIGNUP", metadata: { source: "PUBLIC" } },
+      await createEmptyOwnedWorkspace(tx, {
+        ownerId: user.id,
+        businessName: normalized.businessName,
+        signupSource: "PUBLIC",
       });
 
       return {
