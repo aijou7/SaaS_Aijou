@@ -1,4 +1,5 @@
 import {
+  BroadcastRecipientStatus,
   Prisma,
   ProcessingStatus,
 } from "@/generated/prisma-beta/client";
@@ -162,11 +163,59 @@ export async function applyWhatsAppDeliveryStatuses(
     updated += Number(count);
   }
 
+  const broadcastRecipients = providerIds.length
+    ? await prisma.broadcastRecipient.findMany({
+        where: {
+          providerMessageId: { in: providerIds },
+          campaign: { businessId },
+        },
+        select: { id: true, providerMessageId: true, status: true },
+      })
+    : [];
+  let broadcastUpdated = 0;
+  for (const recipient of broadcastRecipients) {
+    const events = eventsByProviderId.get(recipient.providerMessageId ?? "") ?? [];
+    let status = recipient.status;
+    let deliveredAt: Date | undefined;
+    let readAt: Date | undefined;
+    let errorCode: string | null | undefined;
+    for (const event of events) {
+      if (
+        event.deliveryStatus === "FAILED" &&
+        status !== BroadcastRecipientStatus.DELIVERED &&
+        status !== BroadcastRecipientStatus.READ
+      ) {
+        status = BroadcastRecipientStatus.FAILED;
+        errorCode = event.deliveryError;
+      } else if (event.deliveryStatus === "READ") {
+        status = BroadcastRecipientStatus.READ;
+        readAt = event.deliveryTime;
+        deliveredAt ??= event.deliveryTime;
+        errorCode = null;
+      } else if (event.deliveryStatus === "DELIVERED" && status !== BroadcastRecipientStatus.READ) {
+        status = BroadcastRecipientStatus.DELIVERED;
+        deliveredAt = event.deliveryTime;
+        errorCode = null;
+      } else if (event.deliveryStatus === "ACCEPTED" && status === BroadcastRecipientStatus.PENDING) {
+        status = BroadcastRecipientStatus.SENT;
+        errorCode = null;
+      }
+    }
+    if (status === recipient.status && !deliveredAt && !readAt) continue;
+    await prisma.broadcastRecipient.update({
+      where: { id: recipient.id },
+      data: { status, deliveredAt, readAt, errorCode },
+    });
+    broadcastUpdated += 1;
+  }
+
   return {
     received: statuses.length,
     recognized: normalized.length,
     matched: messages.length,
     updated,
+    broadcastMatched: broadcastRecipients.length,
+    broadcastUpdated,
   };
 }
 

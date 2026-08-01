@@ -20,6 +20,8 @@ import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { emptyInboxLiveState } from "@/lib/inbox-live";
 import { ttlCache } from "@/lib/ttl-cache";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
+import { evaluateBusinessHours } from "@/server/operations/business-hours";
+import { runWorkflowsForTrigger } from "@/server/operations/workflows";
 import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
 import {
@@ -542,9 +544,22 @@ async function simulateCustomerMessageForResolvedBusiness(
     nextStatus = ConversationStatus.OPEN;
   }
   const settings = await getAgentRuntimeSettings(business.id);
+  const hours = evaluateBusinessHours({
+    enabled: settings.businessHoursEnabled,
+    schedule: settings.businessHours,
+    timeZone: settings.timeZone,
+  });
+  const outsideBusinessHours = settings.isActive && !hours.isOpen;
 
   if (!settings.isActive) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;
+  } else if (outsideBusinessHours) {
+    nextStatus = ConversationStatus.HUMAN_NEEDED;
+    aiReply =
+      settings.afterHoursMode === "PAUSE_AI"
+        ? null
+        : settings.afterHoursMessage ||
+          "Pesanmu sudah masuk. Tim kami akan melanjutkan saat jam operasional berikutnya.";
   } else if (handoffRequested) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;
     aiReply = `${settings.agentName}: Baik, saya panggilkan owner/admin untuk lanjut bantu ya.`;
@@ -629,9 +644,13 @@ async function simulateCustomerMessageForResolvedBusiness(
           messageId: aiMessage.id,
           inputText: input.message,
           outputText: finalReply,
-          intent: handoffRequested ? "handoff_request" : "customer_service_reply",
-          confidenceScore: handoffRequested ? "0.95" : "0.82",
-          actionTaken: handoffRequested
+          intent: outsideBusinessHours
+            ? "outside_business_hours"
+            : handoffRequested
+              ? "handoff_request"
+              : "customer_service_reply",
+          confidenceScore: handoffRequested || outsideBusinessHours ? "0.95" : "0.82",
+          actionTaken: handoffRequested || outsideBusinessHours
             ? "handoff_reply_created"
             : "customer_service_reply_created",
         },
@@ -659,7 +678,9 @@ async function simulateCustomerMessageForResolvedBusiness(
         contactName: contact.displayName ?? contact.phoneNumber,
         reason: handoffRequested
           ? "Customer meminta berbicara dengan manusia."
-          : "AI tidak aktif atau membutuhkan bantuan operator.",
+          : outsideBusinessHours
+            ? "Pesan masuk di luar jam kerja AI."
+            : "AI tidak aktif atau membutuhkan bantuan operator.",
       });
     }
 
@@ -677,6 +698,14 @@ async function simulateCustomerMessageForResolvedBusiness(
   });
 
   await queueLeadRefresh(business.id, conversation.id, input.leadSource);
+  await runWorkflowsForTrigger(business.id, "CUSTOMER_MESSAGE", {
+    triggerType: "CUSTOMER_MESSAGE",
+    contactId: contact.id,
+    conversationId: conversation.id,
+    messageId: customerMessage.id,
+    message: input.message.slice(0, 1_000),
+    channel: conversationChannelFromSource(input.leadSource),
+  });
 
   return {
     conversationId: conversation.id,

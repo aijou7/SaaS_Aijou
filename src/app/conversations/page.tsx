@@ -29,6 +29,8 @@ import {
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
+import { ChatMessageThread } from "@/components/chat-message-thread";
+import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { FastConversationLink } from "@/components/fast-conversation-link";
@@ -117,7 +119,6 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           selectedConversation={selectedConversation}
           status={status}
           unread={unread}
-          historyLimit={historyLimit}
         />
       </AppShell>
     );
@@ -152,7 +153,6 @@ function ChatInboxView({
   selectedConversation,
   status,
   unread,
-  historyLimit,
 }: {
   inbox: ConversationInbox;
   liveState: InboxLiveState;
@@ -161,7 +161,6 @@ function ChatInboxView({
   selectedConversation: ConversationDetail;
   status?: string;
   unread?: boolean;
-  historyLimit: number;
 }) {
   return (
     <section className="chat-page">
@@ -242,14 +241,6 @@ function ChatInboxView({
               <WelcomeChecklist />
             ) : (
               <ConversationDetailPanel
-                historyUrl={buildInboxPageUrl({
-                  conversationId: selectedConversation.id,
-                  history: Math.min(500, historyLimit + 50),
-                  page: inbox.pagination.page,
-                  q,
-                  status,
-                  unread,
-                })}
                 quickReplies={quickReplies}
                 selectedConversation={selectedConversation}
               />
@@ -329,11 +320,9 @@ function ConversationTicketList({
 }
 
 function ConversationDetailPanel({
-  historyUrl,
   quickReplies,
   selectedConversation,
 }: {
-  historyUrl: string;
   quickReplies: QuickReplies;
   selectedConversation: NonNullable<ConversationDetail>;
 }) {
@@ -462,48 +451,12 @@ function ConversationDetailPanel({
         </button>
       </form>
 
-      <div className="chat-window">
-        {selectedConversation.hasOlderMessages ? (
-          <Link className="small-outline-button chat-history-link" href={historyUrl} scroll={false}>
-            Muat 50 pesan sebelumnya
-          </Link>
-        ) : null}
-        {selectedConversation.messages.map((message) => (
-          <div className={`chat-bubble ${bubbleClassForSender(message.senderType)}`} key={message.id}>
-            <small>{formatConversationStatus(message.senderType)}</small>
-            {message.media ? (
-              message.media.available ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="chat-media-preview"
-                  src={message.media.url}
-                  alt="Lampiran gambar customer"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="chat-media-unavailable">
-                  Lampiran belum tersimpan permanen
-                </span>
-              )
-            ) : null}
-            <p>{message.messageBody}</p>
-            {message.senderType !== "CUSTOMER" &&
-            message.senderType !== "SYSTEM" ? (
-              <span
-                className={
-                  message.deliveryStatus === "FAILED" ||
-                  message.deliveryStatus === "UNKNOWN"
-                    ? "message-delivery failed"
-                    : "message-delivery"
-                }
-                title={message.deliveryError ?? undefined}
-              >
-                {formatDeliveryStatus(message.deliveryStatus)}
-              </span>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      <ChatMessageThread
+        conversationId={selectedConversation.id}
+        hasOlderMessages={selectedConversation.hasOlderMessages}
+        messageLimit={selectedConversation.messageLimit}
+        messages={selectedConversation.messages}
+      />
 
       {selectedConversation.channel === "WHATSAPP" &&
       !isWhatsAppCustomerCareWindowOpen(
@@ -574,19 +527,7 @@ function ConversationDetailPanel({
         </Link>
       </div>
 
-      <form className="reply-form" action={sendOwnerReplyAction}>
-        <input name="conversationId" type="hidden" value={selectedConversation.id} />
-        <input
-          name="message"
-          type="text"
-          maxLength={4096}
-          placeholder="Balas sebagai owner..."
-          required
-        />
-        <button className="primary-button" type="submit">
-          Send
-        </button>
-      </form>
+      <ChatReplyComposer conversationId={selectedConversation.id} quickReplies={quickReplies} />
     </section>
   );
 }
@@ -1396,37 +1337,6 @@ function formatChannelLabel(channel: string, leadSource?: string | null) {
 function formatContactAddress(channel: string, value: string) {
   if (channel === "TELEGRAM") return "Telegram private chat";
   return value;
-}
-
-function bubbleClassForSender(senderType: string) {
-  if (senderType === "AI") {
-    return "ai";
-  }
-
-  if (senderType === "USER") {
-    return "owner";
-  }
-
-  if (senderType === "SYSTEM") {
-    return "system";
-  }
-
-  return "customer";
-}
-
-function formatDeliveryStatus(status: string) {
-  const labels: Record<string, string> = {
-    PENDING: "Menunggu dikirim",
-    SENDING: "Mengirim",
-    ACCEPTED: "Terkirim",
-    DELIVERED: "Diterima",
-    READ: "Dibaca",
-    FAILED: "Gagal",
-    UNKNOWN: "Status belum pasti",
-    SUPPRESSED: "Tidak dikirim",
-    STORED: "Tersimpan",
-  };
-  return labels[status] ?? status;
 }
 
 function formatEstimateRange(min?: string | null, max?: string | null) {

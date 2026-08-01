@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Megaphone,
   Package,
   ReceiptText,
   Send,
@@ -20,6 +21,11 @@ import {
   TrendingUp,
   Users,
   WalletCards,
+  Workflow,
+  Truck,
+  ShoppingBag,
+  LifeBuoy,
+  Clock3,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -27,6 +33,7 @@ import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { NotificationBell } from "@/components/notification-bell";
+import { ToastCenter } from "@/components/toast-center";
 import {
   WorkspaceUserChip,
   WorkspaceUserSummary,
@@ -41,7 +48,8 @@ type ModuleKey =
   | "products"
   | "payments"
   | "reports"
-  | "integrations";
+  | "integrations"
+  | "operations";
 
 type NavigationItem = {
   href: string;
@@ -57,6 +65,7 @@ const topNavigation = [
   { href: "/products", label: "Produk", icon: Package, module: "products" as ModuleKey },
   { href: "/payments", label: "Pembayaran", icon: WalletCards, module: "payments" as ModuleKey },
   { href: "/reports", label: "Laporan", icon: TrendingUp, module: "reports" as ModuleKey },
+  { href: "/orders", label: "Operasional", icon: Workflow, module: "operations" as ModuleKey },
   { href: "/integrations", label: "Integrasi", icon: Building2, module: "integrations" as ModuleKey },
 ];
 
@@ -132,6 +141,18 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
       { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
     ],
   },
+  operations: {
+    title: "Operasional",
+    items: [
+      { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours" },
+      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints" },
+      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers" },
+      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts" },
+      { href: "/orders", label: "Pesanan", icon: ShoppingBag, key: "orders" },
+      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping" },
+      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows" },
+    ],
+  },
 };
 
 const moduleByActive: Record<string, ModuleKey> = {
@@ -160,6 +181,13 @@ const moduleByActive: Record<string, ModuleKey> = {
   whatsapp: "integrations",
   readiness: "integrations",
   notifications: "inbox",
+  hours: "operations",
+  complaints: "operations",
+  customers: "operations",
+  broadcasts: "operations",
+  orders: "operations",
+  shipping: "operations",
+  workflows: "operations",
 };
 
 type AppShellProps = {
@@ -181,6 +209,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
 
   return (
     <main className="app-frame">
+      <ToastCenter />
       <header className="app-topbar">
         <div className="app-logo-menu">
           <Link className="app-logo" href="/dashboard" aria-label="Aijou AI dashboard">

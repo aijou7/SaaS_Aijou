@@ -37,6 +37,32 @@ export async function sendOwnerReplyAction(formData: FormData) {
   revalidateConversationPages(conversationId);
 }
 
+export type ConversationReplyState = {
+  ok: boolean;
+  message: string;
+  nonce: number;
+};
+
+export async function sendOwnerReplyUiAction(
+  _state: ConversationReplyState,
+  formData: FormData,
+): Promise<ConversationReplyState> {
+  try {
+    const session = await getRequiredSession();
+    const conversationId = String(formData.get("conversationId") ?? "");
+    const message = String(formData.get("message") ?? "");
+    await sendOwnerConversationReply(session.userId, conversationId, message);
+    revalidateConversationPages(conversationId);
+    return { ok: true, message: "Balasan terkirim.", nonce: Date.now() };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Balasan gagal dikirim.",
+      nonce: Date.now(),
+    };
+  }
+}
+
 export async function sendWhatsAppTemplateAction(formData: FormData) {
   const session = await getRequiredSession();
   const conversationId = String(formData.get("conversationId") ?? "");

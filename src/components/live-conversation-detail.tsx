@@ -10,6 +10,8 @@ import {
   takeoverConversationAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
+import { ChatMessageThread } from "@/components/chat-message-thread";
+import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { loadConversationDetail } from "@/components/fast-conversation-link";
 import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 
@@ -31,6 +33,7 @@ type ConversationDetail = {
     messageBody: string;
     deliveryStatus: string;
     deliveryError: string | null;
+    createdAt?: string;
     media: {
       url: string;
       mimeType: string | null;
@@ -236,54 +239,12 @@ function ClientConversationPanel(props: {
         </button>
       </form>
 
-      <div className="chat-window">
-        {detail.hasOlderMessages ? (
-          <a
-            className="small-outline-button chat-history-link"
-            href={`/conversations?conversationId=${encodeURIComponent(
-              detail.id,
-            )}&history=${Math.min(500, detail.messageLimit + 50)}`}
-          >
-            Muat 50 pesan sebelumnya
-          </a>
-        ) : null}
-        {detail.messages.map((message) => (
-          <div
-            className={`chat-bubble ${bubbleClass(message.senderType)}`}
-            key={message.id}
-          >
-            <small>{formatLabel(message.senderType)}</small>
-            {message.media ? (
-              message.media.available ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="chat-media-preview"
-                  src={message.media.url}
-                  alt="Lampiran customer"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="chat-media-unavailable">
-                  Lampiran belum tersimpan permanen
-                </span>
-              )
-            ) : null}
-            {message.messageBody ? <p>{message.messageBody}</p> : null}
-            {!["CUSTOMER", "SYSTEM"].includes(message.senderType) ? (
-              <span
-                className={
-                  ["FAILED", "UNKNOWN"].includes(message.deliveryStatus)
-                    ? "message-delivery failed"
-                    : "message-delivery"
-                }
-                title={message.deliveryError ?? undefined}
-              >
-                {deliveryLabel(message.deliveryStatus)}
-              </span>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      <ChatMessageThread
+        conversationId={detail.id}
+        hasOlderMessages={detail.hasOlderMessages}
+        messageLimit={detail.messageLimit}
+        messages={detail.messages}
+      />
 
       {detail.channel === "WHATSAPP" &&
       !isWhatsAppCustomerCareWindowOpen(detail.lastCustomerMessageAt) ? (
@@ -334,18 +295,7 @@ function ClientConversationPanel(props: {
         </form>
       ) : null}
 
-      <form className="reply-form" action={sendOwnerReplyAction}>
-        <input name="conversationId" type="hidden" value={detail.id} />
-        <input
-          name="message"
-          maxLength={4096}
-          placeholder="Balas sebagai tim..."
-          required
-        />
-        <button className="primary-button" type="submit">
-          Send
-        </button>
-      </form>
+      <ChatReplyComposer conversationId={detail.id} quickReplies={props.quickReplies} />
     </section>
   );
 }

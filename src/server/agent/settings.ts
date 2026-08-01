@@ -1,7 +1,8 @@
-import { WorkspaceRole } from "@/generated/prisma-beta/client";
+import { Prisma, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
+import { defaultBusinessHours } from "@/server/operations/business-hours";
 import { getBusinessActivationReadiness } from "@/server/business/profile";
 import {
   requireWorkspaceAccess,
@@ -17,6 +18,11 @@ export type AgentRuntimeSettings = {
   businessDescription: string | null;
   handoffRules: string | null;
   systemInstruction: string | null;
+  businessHoursEnabled: boolean;
+  businessHours: unknown;
+  timeZone: string;
+  afterHoursMode: string;
+  afterHoursMessage: string | null;
   isActive: boolean;
 };
 
@@ -27,7 +33,14 @@ export class AgentActivationError extends Error {
   }
 }
 
-type AgentSettingsInput = AgentRuntimeSettings;
+type AgentSettingsInput = Omit<
+  AgentRuntimeSettings,
+  | "businessHoursEnabled"
+  | "businessHours"
+  | "timeZone"
+  | "afterHoursMode"
+  | "afterHoursMessage"
+>;
 
 export async function getAgentSettingsPage(userId: string) {
   const business = await getBusinessForUser(userId);
@@ -51,6 +64,11 @@ export async function getAgentSettingsPage(userId: string) {
         businessDescription: true,
         handoffRules: true,
         systemInstruction: true,
+        businessHoursEnabled: true,
+        businessHours: true,
+        timeZone: true,
+        afterHoursMode: true,
+        afterHoursMessage: true,
         isActive: true,
       },
     })) ?? defaultAgentSettings();
@@ -159,6 +177,11 @@ async function ensureAgentSettings(businessId: string) {
       businessDescription: true,
       handoffRules: true,
       systemInstruction: true,
+      businessHoursEnabled: true,
+      businessHours: true,
+      timeZone: true,
+      afterHoursMode: true,
+      afterHoursMessage: true,
       isActive: true,
     },
   });
@@ -167,10 +190,12 @@ async function ensureAgentSettings(businessId: string) {
     return existing;
   }
 
+  const defaults = defaultAgentSettings();
   const created = await prisma.agentSettings.create({
     data: {
       businessId,
-      ...defaultAgentSettings(),
+      ...defaults,
+      businessHours: defaults.businessHours as Prisma.InputJsonValue,
     },
     select: {
       agentName: true,
@@ -181,6 +206,11 @@ async function ensureAgentSettings(businessId: string) {
       businessDescription: true,
       handoffRules: true,
       systemInstruction: true,
+      businessHoursEnabled: true,
+      businessHours: true,
+      timeZone: true,
+      afterHoursMode: true,
+      afterHoursMessage: true,
       isActive: true,
     },
   });
@@ -204,9 +234,16 @@ async function requireBusinessForUser(userId: string) {
 }
 
 function defaultAgentSettings(): AgentRuntimeSettings {
-  return newWorkspaceAgentDefaults(
+  return {
+    ...newWorkspaceAgentDefaults(
     "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
-  );
+    ),
+    businessHoursEnabled: false,
+    businessHours: defaultBusinessHours,
+    timeZone: "Asia/Makassar",
+    afterHoursMode: "HANDOFF",
+    afterHoursMessage: "Terima kasih, pesanmu sudah masuk. Tim kami akan melanjutkan saat jam operasional berikutnya.",
+  };
 }
 
 function cleanOptional(value: string, maxLength: number) {
@@ -217,6 +254,7 @@ function cleanOptional(value: string, maxLength: number) {
 function cleanRequired(value: string, maxLength: number, fallback: string) {
   return value.trim().slice(0, maxLength) || fallback;
 }
+
 
 function joinContext(...parts: Array<string | null | undefined>) {
   const value = parts.filter(Boolean).join("\n").trim();

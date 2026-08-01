@@ -12,6 +12,10 @@ import {
   deliverHumanTakeoverNotifications,
   humanTakeoverNotificationJob,
 } from "@/server/notifications/notifications";
+import {
+  broadcastJobType,
+  processBroadcastJob,
+} from "@/server/operations/broadcasts";
 
 const leadRefreshJob = "LEAD_REFRESH";
 const whatsAppWebhookJob = "WHATSAPP_WEBHOOK";
@@ -376,6 +380,11 @@ async function executeJob(type: string, payload: Prisma.JsonValue, businessId: s
 
   if (type === humanTakeoverNotificationJob) {
     await deliverHumanTakeoverNotifications(businessId, payload);
+    return;
+  }
+
+  if (type === broadcastJobType) {
+    await processBroadcastJob(businessId, payload);
     return;
   }
 
