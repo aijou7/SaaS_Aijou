@@ -2,41 +2,21 @@ import type { Metadata } from "next";
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
-  BookOpenText,
   Check,
-  ContactRound,
-  CreditCard,
-  Hand,
-  Layers3,
-  MessageCircleMore,
-  Sparkles,
-  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AijouLogo } from "@/components/aijou-logo";
+import { MarketingFeatureIcon } from "@/components/marketing-feature-icon";
+import { MarketingHeader } from "@/components/marketing-header";
 import {
   getMarketingFeature,
   marketingFeatures,
-  type MarketingFeature,
 } from "@/lib/marketing-features";
 
 type FeaturePageProps = {
   params: Promise<{ slug: string }>;
 };
-
-const featureIcons = {
-  bot: Bot,
-  whatsapp: MessageCircleMore,
-  layers: Layers3,
-  book: BookOpenText,
-  wand: Sparkles,
-  hand: Hand,
-  contact: ContactRound,
-  pipeline: Workflow,
-  payment: CreditCard,
-} satisfies Record<MarketingFeature["icon"], typeof Bot>;
 
 export function generateStaticParams() {
   return marketingFeatures.map(({ slug }) => ({ slug }));
@@ -57,7 +37,6 @@ export default async function FeaturePage({ params }: FeaturePageProps) {
   const feature = getMarketingFeature((await params).slug);
   if (!feature) notFound();
 
-  const Icon = featureIcons[feature.icon];
   const related = marketingFeatures
     .filter((item) => item.slug !== feature.slug)
     .sort((a, b) => Number(b.category === feature.category) - Number(a.category === feature.category))
@@ -65,50 +44,34 @@ export default async function FeaturePage({ params }: FeaturePageProps) {
 
   return (
     <main className="marketing-page feature-page">
-      <header className="marketing-header">
-        <Link className="marketing-brand" href="/" aria-label="Aijou AI — beranda">
-          <AijouLogo size={36} />
-          <span><strong>Aijou AI</strong><small>Customer workspace</small></span>
-        </Link>
-        <nav aria-label="Navigasi utama">
-          <Link href="/#features">Fitur</Link>
-          <Link href="/#industries">Industri</Link>
-          <Link href="/#workflow">Cara kerja</Link>
-        </nav>
-        <div className="marketing-header-actions">
-          <Link href="/login">Masuk</Link>
-          <Link className="marketing-button compact" href="/signup">
-            Coba gratis <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-      </header>
+      <MarketingHeader />
 
       <section className="feature-hero">
         <div className="feature-hero-glow" aria-hidden="true" />
         <div className="feature-breadcrumb">
           <Link href="/"><ArrowLeft size={14} /> Beranda</Link>
           <span>/</span>
-          <Link href="/#features">Fitur</Link>
+          <Link href="/features">Fitur</Link>
           <span>/</span>
           <strong>{feature.navTitle}</strong>
         </div>
         <div className="feature-hero-content">
           <div>
-            <p className="marketing-kicker"><Icon size={15} /> {feature.eyebrow}</p>
+            <p className="marketing-kicker"><MarketingFeatureIcon name={feature.icon} size={15} /> {feature.eyebrow}</p>
             <h1>{feature.hero}</h1>
             <p>{feature.summary}</p>
             <div className="marketing-cta-row">
               <Link className="marketing-button" href="/signup">
                 Buat workspace <ArrowRight size={17} aria-hidden="true" />
               </Link>
-              <Link className="marketing-button ghost" href="/#features">
+              <Link className="marketing-button ghost" href="/features">
                 Lihat semua fitur
               </Link>
             </div>
           </div>
           <div className="feature-visual" aria-label={`Ringkasan fitur ${feature.navTitle}`}>
             <div className="feature-visual-head">
-              <span><Icon size={18} /> {feature.navTitle}</span>
+              <span><MarketingFeatureIcon name={feature.icon} size={18} /> {feature.navTitle}</span>
               <small>AKTIF</small>
             </div>
             <div className="feature-visual-body">
@@ -159,14 +122,13 @@ export default async function FeaturePage({ params }: FeaturePageProps) {
       <section className="feature-related">
         <div className="feature-related-head">
           <div><p className="marketing-eyebrow">Jelajahi Aijou</p><h2>Fitur yang bekerja bersamanya.</h2></div>
-          <Link href="/#features">Semua fitur <ArrowRight size={15} /></Link>
+          <Link href="/features">Semua fitur <ArrowRight size={15} /></Link>
         </div>
         <div className="feature-related-grid">
           {related.map((item) => {
-            const RelatedIcon = featureIcons[item.icon];
             return (
               <Link href={`/features/${item.slug}`} key={item.slug}>
-                <RelatedIcon size={20} />
+                <MarketingFeatureIcon name={item.icon} size={20} />
                 <div><strong>{item.navTitle}</strong><span>{item.summary}</span></div>
                 <ArrowRight size={17} />
               </Link>

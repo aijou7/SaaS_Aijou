@@ -1,44 +1,20 @@
 import {
   ArrowRight,
-  Bot,
-  BookOpenText,
   Building2,
   Check,
-  ContactRound,
-  CreditCard,
   GraduationCap,
-  Hand,
   HeartPulse,
   Hotel,
-  Layers3,
   MessageCircleMore,
   Plane,
   Send,
   ShoppingBag,
-  Sparkles,
   Store,
   UtensilsCrossed,
-  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
-import {
-  marketingFeatureCategories,
-  marketingFeatures,
-  type MarketingFeature,
-} from "@/lib/marketing-features";
-
-const featureIcons = {
-  bot: Bot,
-  whatsapp: MessageCircleMore,
-  layers: Layers3,
-  book: BookOpenText,
-  wand: Sparkles,
-  hand: Hand,
-  contact: ContactRound,
-  pipeline: Workflow,
-  payment: CreditCard,
-} satisfies Record<MarketingFeature["icon"], typeof Bot>;
+import { MarketingHeader } from "@/components/marketing-header";
 
 const industries = [
   { icon: Hotel, title: "Hotel & Villa", description: "Jawab tamu, kualifikasi booking, dan teruskan kebutuhan khusus." },
@@ -60,23 +36,7 @@ const workflowSteps = [
 export default function LandingPage() {
   return (
     <main className="marketing-page">
-      <header className="marketing-header">
-        <Link className="marketing-brand" href="/" aria-label="Aijou AI — beranda">
-          <AijouLogo size={36} />
-          <span><strong>Aijou AI</strong><small>Customer workspace</small></span>
-        </Link>
-        <nav aria-label="Navigasi utama">
-          <a href="#features">Fitur</a>
-          <a href="#industries">Industri</a>
-          <a href="#workflow">Cara kerja</a>
-        </nav>
-        <div className="marketing-header-actions">
-          <Link href="/login">Masuk</Link>
-          <Link className="marketing-button compact" href="/signup">
-            Coba gratis <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-      </header>
+      <MarketingHeader />
 
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
@@ -94,7 +54,7 @@ export default function LandingPage() {
             <Link className="marketing-button" href="/signup">
               Mulai gratis <ArrowRight size={17} aria-hidden="true" />
             </Link>
-            <a className="marketing-button ghost" href="#features">Jelajahi fitur</a>
+            <Link className="marketing-button ghost" href="/features">Jelajahi fitur</Link>
           </div>
           <div className="marketing-proof-row">
             <span><Check size={14} /> Tanpa kartu kredit</span>
@@ -134,30 +94,6 @@ export default function LandingPage() {
       <section className="marketing-trust-strip" aria-label="Channel yang didukung">
         <p>SATU RUANG KERJA UNTUK</p>
         <div><span>WhatsApp</span><i /> <span>Web Live Chat</span><i /> <span>Telegram</span><i /> <span>AI + Tim Manusia</span></div>
-      </section>
-
-      <section className="marketing-section" id="features">
-        <div className="marketing-section-head">
-          <div><p className="marketing-eyebrow">Yang sudah dapat dipakai</p><h2>Dari chat pertama sampai tindak lanjut.</h2></div>
-          <p>Setiap fitur punya tujuan yang jelas dan halaman penjelasannya sendiri. Tidak ada fitur “coming soon” yang dijual seolah sudah selesai.</p>
-        </div>
-        <div className="marketing-feature-directory">
-          {marketingFeatureCategories.map((category) => (
-            <div className="marketing-feature-column" key={category}>
-              <p>{category}</p>
-              {marketingFeatures.filter((feature) => feature.category === category).map((feature) => {
-                const Icon = featureIcons[feature.icon];
-                return (
-                  <Link href={`/features/${feature.slug}`} key={feature.slug}>
-                    <span><Icon size={18} /></span>
-                    <div><strong>{feature.navTitle}</strong><small>{feature.summary}</small></div>
-                    <ArrowRight size={15} />
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </div>
       </section>
 
       <section className="marketing-industries" id="industries">
