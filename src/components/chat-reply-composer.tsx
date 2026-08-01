@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Sparkles } from "lucide-react";
+import { ClockAlert, Send, Sparkles } from "lucide-react";
 import { useActionState, useEffect, useRef } from "react";
 import { sendOwnerReplyUiAction, type ConversationReplyState } from "@/app/conversations/actions";
 import { showToast } from "@/components/toast-center";
@@ -10,10 +10,12 @@ const initialState: ConversationReplyState = { ok: false, message: "", nonce: 0 
 export function ChatReplyComposer(props: {
   conversationId: string;
   quickReplies: Array<{ id: string; name: string; content: string; shortcut: string | null }>;
+  blockedReason?: string | null;
 }) {
   const [state, action, pending] = useActionState(sendOwnerReplyUiAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const blocked = Boolean(props.blockedReason);
 
   useEffect(() => {
     if (!state.nonce) return;
@@ -33,7 +35,7 @@ export function ChatReplyComposer(props: {
         <div className="quick-reply-pills" aria-label="Balasan cepat">
           <Sparkles size={15} aria-hidden="true" />
           {props.quickReplies.slice(0, 6).map((reply) => (
-            <button key={reply.id} type="button" onClick={() => {
+            <button key={reply.id} type="button" disabled={blocked || pending} onClick={() => {
               if (inputRef.current) {
                 inputRef.current.value = reply.content;
                 inputRef.current.focus();
@@ -44,17 +46,32 @@ export function ChatReplyComposer(props: {
           ))}
         </div>
       ) : null}
-      <form className="reply-form" action={action} ref={formRef}>
+      {props.blockedReason ? (
+        <div className="composer-blocked-notice" id={`reply-status-${props.conversationId}`} role="status">
+          <ClockAlert size={17} aria-hidden="true" />
+          <span>{props.blockedReason}</span>
+        </div>
+      ) : null}
+      <form
+        className="reply-form"
+        action={action}
+        ref={formRef}
+        onSubmit={(event) => {
+          if (blocked) event.preventDefault();
+        }}
+      >
         <input name="conversationId" type="hidden" value={props.conversationId} />
         <label className="sr-only" htmlFor={`reply-${props.conversationId}`}>Balas sebagai tim</label>
         <textarea
           id={`reply-${props.conversationId}`}
           name="message"
           maxLength={4096}
-          placeholder="Tulis balasan sebagai tim…"
+          placeholder={blocked ? "Gunakan approved template Meta di atas" : "Tulis balasan sebagai tim…"}
           required
           rows={1}
           ref={inputRef}
+          disabled={blocked || pending}
+          aria-describedby={props.blockedReason ? `reply-status-${props.conversationId}` : undefined}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
@@ -62,12 +79,14 @@ export function ChatReplyComposer(props: {
             }
           }}
         />
-        <button className="primary-button" type="submit" disabled={pending}>
+        <button className="primary-button" type="submit" disabled={blocked || pending}>
           <Send size={17} aria-hidden="true" />
           {pending ? "Mengirim…" : "Kirim"}
         </button>
       </form>
-      <small className="composer-hint">Enter untuk kirim · Shift + Enter untuk baris baru</small>
+      <small className="composer-hint">
+        {blocked ? "Pesan bebas aktif lagi setelah pelanggan membalas." : "Enter untuk kirim · Shift + Enter untuk baris baru"}
+      </small>
     </div>
   );
 }

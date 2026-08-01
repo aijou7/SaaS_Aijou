@@ -19,6 +19,7 @@ import {
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { emptyInboxLiveState } from "@/lib/inbox-live";
 import { ttlCache } from "@/lib/ttl-cache";
+import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
 import { evaluateBusinessHours } from "@/server/operations/business-hours";
 import { runWorkflowsForTrigger } from "@/server/operations/workflows";
@@ -902,6 +903,7 @@ export async function sendConversationOwnerMessage(params: {
     select: {
       id: true,
       channel: true,
+      lastCustomerMessageAt: true,
       contact: { select: { phoneNumber: true } },
     },
   });
@@ -911,6 +913,14 @@ export async function sendConversationOwnerMessage(params: {
   }
 
   const channel = normalizeConversationChannel(conversation.channel);
+  if (
+    channel === "WHATSAPP" &&
+    !isWhatsAppCustomerCareWindowOpen(conversation.lastCustomerMessageAt)
+  ) {
+    throw new Error(
+      "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru.",
+    );
+  }
   const isExternalChannel = channel !== "WEB_CHAT";
   const internalProviderMessageId = params.idempotencyKey
     ? internalOutboundId(params.providerMessagePrefix ?? "owner", params.idempotencyKey)

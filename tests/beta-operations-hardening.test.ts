@@ -38,6 +38,30 @@ describe("beta operations hardening", () => {
     );
   });
 
+  test("blocks freeform WhatsApp replies outside the 24-hour window without refreshing the page", async () => {
+    const conversations = await readFile(
+      new URL("../src/server/conversations/conversations.ts", import.meta.url),
+      "utf8",
+    );
+    const composer = await readFile(
+      new URL("../src/components/chat-reply-composer.tsx", import.meta.url),
+      "utf8",
+    );
+    const actions = await readFile(
+      new URL("../src/app/conversations/actions.ts", import.meta.url),
+      "utf8",
+    );
+    const uiAction = actions.slice(
+      actions.indexOf("export async function sendOwnerReplyUiAction"),
+      actions.indexOf("export async function sendWhatsAppTemplateAction"),
+    );
+
+    assert.match(conversations, /!isWhatsAppCustomerCareWindowOpen\(conversation\.lastCustomerMessageAt\)/);
+    assert.match(composer, /disabled=\{blocked \|\| pending\}/);
+    assert.match(composer, /approved template Meta/);
+    assert.doesNotMatch(uiAction, /revalidateConversationPages/);
+  });
+
   test("durably wakes the authenticated job endpoint through QStash", async () => {
     process.env.QSTASH_TOKEN = "qstash-test-token";
     process.env.CRON_SECRET = "cron-test-secret";

@@ -52,7 +52,6 @@ export async function sendOwnerReplyUiAction(
     const conversationId = String(formData.get("conversationId") ?? "");
     const message = String(formData.get("message") ?? "");
     await sendOwnerConversationReply(session.userId, conversationId, message);
-    revalidateConversationPages(conversationId);
     return { ok: true, message: "Balasan terkirim.", nonce: Date.now() };
   } catch (error) {
     return {

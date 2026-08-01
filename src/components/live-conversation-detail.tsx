@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   assignConversationAction,
   releaseConversationAction,
@@ -69,13 +69,25 @@ export function LiveConversationDetail(props: {
   );
   const [hasClientSelection, setHasClientSelection] = useState(false);
   const [loading, setLoading] = useState(false);
+  const loadingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const handleStart = () => setLoading(true);
+    const stopLoading = () => {
+      if (loadingTimerRef.current !== null) {
+        window.clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+      setLoading(false);
+    };
+    const handleStart = () => {
+      setLoading(true);
+      if (loadingTimerRef.current !== null) window.clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = window.setTimeout(stopLoading, 8_000);
+    };
     const handleLoaded = (event: Event) => {
       setDetail((event as CustomEvent<ConversationDetail>).detail);
       setHasClientSelection(true);
-      setLoading(false);
+      stopLoading();
     };
     const handlePopState = () => {
       const id = new URLSearchParams(window.location.search).get(
@@ -89,7 +101,7 @@ export function LiveConversationDetail(props: {
           setHasClientSelection(true);
         })
         .catch(() => window.location.reload())
-        .finally(() => setLoading(false));
+        .finally(stopLoading);
     };
     const handleInboxChange = () => {
       const id = new URLSearchParams(window.location.search).get(
@@ -108,6 +120,7 @@ export function LiveConversationDetail(props: {
     window.addEventListener("popstate", handlePopState);
     window.addEventListener("aijou:inbox-state-changed", handleInboxChange);
     return () => {
+      if (loadingTimerRef.current !== null) window.clearTimeout(loadingTimerRef.current);
       window.removeEventListener("aijou:conversation-load-start", handleStart);
       window.removeEventListener("aijou:conversation-loaded", handleLoaded);
       window.removeEventListener("popstate", handlePopState);
@@ -142,6 +155,12 @@ function ClientConversationPanel(props: {
   loading: boolean;
 }) {
   const { detail } = props;
+  const freeformWhatsAppBlocked =
+    detail.channel === "WHATSAPP" &&
+    !isWhatsAppCustomerCareWindowOpen(detail.lastCustomerMessageAt);
+  const freeformBlockReason = freeformWhatsAppBlocked
+    ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru."
+    : null;
   return (
     <section
       className={
@@ -248,7 +267,7 @@ function ClientConversationPanel(props: {
 
       {detail.channel === "WHATSAPP" &&
       !isWhatsAppCustomerCareWindowOpen(detail.lastCustomerMessageAt) ? (
-        <details className="whatsapp-template-panel">
+        <details className="whatsapp-template-panel" open>
           <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
           <form className="form-grid" action={sendWhatsAppTemplateAction}>
             <input name="conversationId" type="hidden" value={detail.id} />
@@ -295,7 +314,11 @@ function ClientConversationPanel(props: {
         </form>
       ) : null}
 
-      <ChatReplyComposer conversationId={detail.id} quickReplies={props.quickReplies} />
+      <ChatReplyComposer
+        conversationId={detail.id}
+        quickReplies={props.quickReplies}
+        blockedReason={freeformBlockReason}
+      />
     </section>
   );
 }

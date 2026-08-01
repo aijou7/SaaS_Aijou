@@ -462,7 +462,7 @@ function ConversationDetailPanel({
       !isWhatsAppCustomerCareWindowOpen(
         selectedConversation.lastCustomerMessageAt,
       ) ? (
-        <details className="whatsapp-template-panel">
+        <details className="whatsapp-template-panel" open>
           <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
           <form className="form-grid" action={sendWhatsAppTemplateAction}>
             <input
@@ -527,7 +527,16 @@ function ConversationDetailPanel({
         </Link>
       </div>
 
-      <ChatReplyComposer conversationId={selectedConversation.id} quickReplies={quickReplies} />
+      <ChatReplyComposer
+        conversationId={selectedConversation.id}
+        quickReplies={quickReplies}
+        blockedReason={
+          selectedConversation.channel === "WHATSAPP" &&
+          !isWhatsAppCustomerCareWindowOpen(selectedConversation.lastCustomerMessageAt)
+            ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru."
+            : null
+        }
+      />
     </section>
   );
 }
