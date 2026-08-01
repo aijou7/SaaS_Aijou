@@ -20,17 +20,15 @@ import { redirect } from "next/navigation";
 import { updateAgentSettingsAction } from "@/app/agent/actions";
 import {
   assignConversationAction,
-  releaseConversationAction,
-  resolveConversationAction,
   sendOwnerReplyAction,
   sendWhatsAppTemplateAction,
-  takeoverConversationAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
+import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { FastConversationLink } from "@/components/fast-conversation-link";
@@ -342,26 +340,10 @@ function ConversationDetailPanel({
         </span>
       </div>
 
-      <div className="handoff-actions">
-        <form action={takeoverConversationAction}>
-          <input name="conversationId" type="hidden" value={selectedConversation.id} />
-          <button className="primary-button" type="submit">
-            Ambil alih chat
-          </button>
-        </form>
-        <form action={releaseConversationAction}>
-          <input name="conversationId" type="hidden" value={selectedConversation.id} />
-          <button className="ghost-button" type="submit">
-            Aktifkan AI lagi
-          </button>
-        </form>
-        <form action={resolveConversationAction}>
-          <input name="conversationId" type="hidden" value={selectedConversation.id} />
-          <button className="ghost-button" type="submit">
-            Mark resolved
-          </button>
-        </form>
-      </div>
+      <ConversationModeControls
+        conversationId={selectedConversation.id}
+        status={selectedConversation.status}
+      />
 
       <form className="conversation-assignment" action={assignConversationAction}>
         <input name="conversationId" type="hidden" value={selectedConversation.id} />
@@ -462,7 +444,7 @@ function ConversationDetailPanel({
       !isWhatsAppCustomerCareWindowOpen(
         selectedConversation.lastCustomerMessageAt,
       ) ? (
-        <details className="whatsapp-template-panel" open>
+        <details className="whatsapp-template-panel">
           <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
           <form className="form-grid" action={sendWhatsAppTemplateAction}>
             <input

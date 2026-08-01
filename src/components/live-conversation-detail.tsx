@@ -3,15 +3,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   assignConversationAction,
-  releaseConversationAction,
-  resolveConversationAction,
   sendOwnerReplyAction,
   sendWhatsAppTemplateAction,
-  takeoverConversationAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
+import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import { loadConversationDetail } from "@/components/fast-conversation-link";
 import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 
@@ -185,24 +183,10 @@ function ClientConversationPanel(props: {
         </span>
       </div>
 
-      <div className="handoff-actions">
-        <ConversationAction
-          action={takeoverConversationAction}
-          conversationId={detail.id}
-          label="Ambil alih chat"
-          primary
-        />
-        <ConversationAction
-          action={releaseConversationAction}
-          conversationId={detail.id}
-          label="Aktifkan AI lagi"
-        />
-        <ConversationAction
-          action={resolveConversationAction}
-          conversationId={detail.id}
-          label="Mark resolved"
-        />
-      </div>
+      <ConversationModeControls
+        conversationId={detail.id}
+        status={detail.status}
+      />
 
       <form className="conversation-assignment" action={assignConversationAction}>
         <input name="conversationId" type="hidden" value={detail.id} />
@@ -267,7 +251,7 @@ function ClientConversationPanel(props: {
 
       {detail.channel === "WHATSAPP" &&
       !isWhatsAppCustomerCareWindowOpen(detail.lastCustomerMessageAt) ? (
-        <details className="whatsapp-template-panel" open>
+        <details className="whatsapp-template-panel">
           <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
           <form className="form-grid" action={sendWhatsAppTemplateAction}>
             <input name="conversationId" type="hidden" value={detail.id} />
@@ -320,25 +304,6 @@ function ClientConversationPanel(props: {
         blockedReason={freeformBlockReason}
       />
     </section>
-  );
-}
-
-function ConversationAction(props: {
-  action: (formData: FormData) => void | Promise<void>;
-  conversationId: string;
-  label: string;
-  primary?: boolean;
-}) {
-  return (
-    <form action={props.action}>
-      <input name="conversationId" type="hidden" value={props.conversationId} />
-      <button
-        className={props.primary ? "primary-button" : "ghost-button"}
-        type="submit"
-      >
-        {props.label}
-      </button>
-    </form>
   );
 }
 

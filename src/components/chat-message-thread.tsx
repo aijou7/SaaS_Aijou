@@ -20,15 +20,49 @@ export function ChatMessageThread(props: {
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const newestMessageId = props.messages.at(-1)?.id ?? "empty";
+  const positionRef = useRef({
+    conversationId: "",
+    newestMessageId: "",
+    scrollTop: 0,
+    pinnedToBottom: true,
+  });
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
-  }, [props.conversationId, newestMessageId]);
+    const previous = positionRef.current;
+    const conversationChanged = previous.conversationId !== props.conversationId;
+    const newestChanged = previous.newestMessageId !== newestMessageId;
+
+    if (conversationChanged || newestChanged || previous.pinnedToBottom) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
+    } else {
+      const maximumScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      viewport.scrollTop = Math.min(previous.scrollTop, maximumScrollTop);
+    }
+
+    positionRef.current = {
+      conversationId: props.conversationId,
+      newestMessageId,
+      scrollTop: viewport.scrollTop,
+      pinnedToBottom:
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48,
+    };
+  });
 
   return (
-    <div className="chat-window" ref={viewportRef} aria-live="polite" aria-label="Riwayat percakapan">
+    <div
+      className="chat-window"
+      ref={viewportRef}
+      aria-live="polite"
+      aria-label="Riwayat percakapan"
+      onScroll={(event) => {
+        const viewport = event.currentTarget;
+        positionRef.current.scrollTop = viewport.scrollTop;
+        positionRef.current.pinnedToBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48;
+      }}
+    >
       {props.hasOlderMessages ? (
         <a
           className="small-outline-button chat-history-link"

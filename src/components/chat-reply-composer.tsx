@@ -31,7 +31,7 @@ export function ChatReplyComposer(props: {
 
   return (
     <div className="chat-composer-shell">
-      {props.quickReplies.length > 0 ? (
+      {props.quickReplies.length > 0 && !blocked ? (
         <div className="quick-reply-pills" aria-label="Balasan cepat">
           <Sparkles size={15} aria-hidden="true" />
           {props.quickReplies.slice(0, 6).map((reply) => (

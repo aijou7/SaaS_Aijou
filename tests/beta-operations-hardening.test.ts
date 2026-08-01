@@ -62,6 +62,32 @@ describe("beta operations hardening", () => {
     assert.doesNotMatch(uiAction, /revalidateConversationPages/);
   });
 
+  test("keeps inbox controls lightweight and preserves the chat scroll position", async () => {
+    const controls = await readFile(
+      new URL("../src/components/conversation-mode-controls.tsx", import.meta.url),
+      "utf8",
+    );
+    const thread = await readFile(
+      new URL("../src/components/chat-message-thread.tsx", import.meta.url),
+      "utf8",
+    );
+    const composer = await readFile(
+      new URL("../src/components/chat-reply-composer.tsx", import.meta.url),
+      "utf8",
+    );
+    const styles = await readFile(
+      new URL("../src/app/globals.css", import.meta.url),
+      "utf8",
+    );
+
+    assert.match(controls, /updateConversationModeUiAction/);
+    assert.match(controls, /aijou:inbox-state-changed/);
+    assert.match(thread, /pinnedToBottom/);
+    assert.match(thread, /Math\.min\(previous\.scrollTop, maximumScrollTop\)/);
+    assert.match(composer, /props\.quickReplies\.length > 0 && !blocked/);
+    assert.match(styles, /\.chat-window \{[^}]*min-height: 100px/);
+  });
+
   test("durably wakes the authenticated job endpoint through QStash", async () => {
     process.env.QSTASH_TOKEN = "qstash-test-token";
     process.env.CRON_SECRET = "cron-test-secret";

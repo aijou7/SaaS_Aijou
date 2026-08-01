@@ -12,20 +12,41 @@ import {
   updateConversationOwnerNotes,
 } from "@/server/conversations/conversations";
 
-export async function takeoverConversationAction(formData: FormData) {
+export type ConversationMode = "takeover" | "ai" | "resolved";
+
+export type ConversationModeResult = {
+  ok: boolean;
+  message: string;
+};
+
+export async function updateConversationModeUiAction(
+  conversationId: string,
+  mode: ConversationMode,
+): Promise<ConversationModeResult> {
   const session = await getRequiredSession();
-  const conversationId = String(formData.get("conversationId") ?? "");
 
-  await setConversationTakeover(session.userId, conversationId, true);
-  revalidateConversationPages(conversationId);
-}
-
-export async function releaseConversationAction(formData: FormData) {
-  const session = await getRequiredSession();
-  const conversationId = String(formData.get("conversationId") ?? "");
-
-  await setConversationTakeover(session.userId, conversationId, false);
-  revalidateConversationPages(conversationId);
+  try {
+    if (!conversationId.trim()) throw new Error("Percakapan tidak valid.");
+    if (mode === "resolved") {
+      await resolveConversation(session.userId, conversationId);
+    } else {
+      await setConversationTakeover(session.userId, conversationId, mode === "takeover");
+    }
+    return {
+      ok: true,
+      message:
+        mode === "takeover"
+          ? "Human takeover aktif."
+          : mode === "ai"
+            ? "AI aktif kembali."
+            : "Percakapan ditandai selesai.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Status percakapan gagal diubah.",
+    };
+  }
 }
 
 export async function sendOwnerReplyAction(formData: FormData) {
@@ -75,14 +96,6 @@ export async function sendWhatsAppTemplateAction(formData: FormData) {
     languageCode: String(formData.get("languageCode") ?? "id"),
     bodyParameters: parameters,
   });
-  revalidateConversationPages(conversationId);
-}
-
-export async function resolveConversationAction(formData: FormData) {
-  const session = await getRequiredSession();
-  const conversationId = String(formData.get("conversationId") ?? "");
-
-  await resolveConversation(session.userId, conversationId);
   revalidateConversationPages(conversationId);
 }
 
