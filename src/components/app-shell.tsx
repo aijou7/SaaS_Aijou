@@ -67,6 +67,7 @@ const topNavigation = [
   { href: "/reports", label: "Laporan", icon: TrendingUp, module: "reports" as ModuleKey },
   { href: "/orders", label: "Operasional", icon: Workflow, module: "operations" as ModuleKey },
   { href: "/integrations", label: "Integrasi", icon: Building2, module: "integrations" as ModuleKey },
+  { href: "/dashboard", label: "Pengaturan", icon: Settings, module: "settings" as ModuleKey },
 ];
 
 const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem[] }> = {
@@ -236,6 +237,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
                 className={isActive ? "top-nav-item active" : "top-nav-item"}
                 href={item.href}
                 key={item.label}
+                aria-current={isActive ? "page" : undefined}
               >
                 <Icon size={16} aria-hidden="true" />
                 {item.label}
