@@ -18,6 +18,7 @@ export async function createKnowledgeBaseAction(formData: FormData) {
   const session = await getRequiredSession();
   await createKnowledgeBaseEntry(session.userId, parseKnowledgeBaseFormData(formData));
   revalidateKnowledgePaths();
+  redirect("/knowledge?created=1");
 }
 
 export async function importTextKnowledgeAction(formData: FormData) {
@@ -52,6 +53,7 @@ export async function importTextKnowledgeAction(formData: FormData) {
     isActive: true,
   });
   revalidateKnowledgePaths();
+  redirect("/knowledge?created=1");
 }
 
 function isSupportedTextFile(file: File) {
@@ -70,6 +72,7 @@ export async function updateKnowledgeBaseAction(formData: FormData) {
   const entryId = String(formData.get("entryId") ?? "");
   await updateKnowledgeBaseEntry(session.userId, entryId, parseKnowledgeBaseFormData(formData));
   revalidateKnowledgePaths();
+  redirect("/knowledge?saved=1");
 }
 
 export async function deleteKnowledgeBaseAction(formData: FormData) {
@@ -77,6 +80,7 @@ export async function deleteKnowledgeBaseAction(formData: FormData) {
   const entryId = String(formData.get("entryId") ?? "");
   await deleteKnowledgeBaseEntry(session.userId, entryId);
   revalidateKnowledgePaths();
+  redirect("/knowledge?deleted=1");
 }
 
 export async function createKnowledgeTemplateAction(formData: FormData) {
@@ -85,6 +89,7 @@ export async function createKnowledgeTemplateAction(formData: FormData) {
 
   await createKnowledgeTemplate(session.userId, templateKey);
   revalidateKnowledgePaths();
+  redirect("/knowledge?created=1");
 }
 
 export async function generateStarterKnowledgeAction() {
@@ -92,13 +97,14 @@ export async function generateStarterKnowledgeAction() {
 
   await generateStarterKnowledge(session.userId);
   revalidateKnowledgePaths();
+  redirect("/knowledge?created=1");
 }
 
 export async function syncWebsiteKnowledgeAction() {
   const session = await getRequiredSession();
   const result = await syncBusinessWebsiteKnowledge(session.userId);
   revalidateKnowledgePaths();
-  redirect(`/training?websiteSync=success&prices=${result.priceCount}`);
+  redirect(`/knowledge?websiteSync=success&prices=${result.priceCount}`);
 }
 
 async function getRequiredSession() {

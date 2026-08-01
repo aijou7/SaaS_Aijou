@@ -1845,6 +1845,52 @@ sup {
   font-size: 18px;
 }
 
+.knowledge-unified-page .core-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.knowledge-unified-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--foreground);
+  padding: 14px 16px;
+}
+
+.knowledge-unified-note svg {
+  color: var(--accent);
+}
+
+.knowledge-unified-note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.knowledge-library {
+  min-width: 0;
+}
+
+.knowledge-entry .edit-form {
+  margin-bottom: 14px;
+}
+
+.knowledge-delete-form {
+  display: flex;
+  justify-content: flex-start;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.knowledge-delete-form .danger-button {
+  min-height: 44px;
+  margin-top: 0;
+}
+
 .knowledge-list {
   display: grid;
   gap: 8px;
@@ -2220,6 +2266,7 @@ sup {
 .template-button {
   display: grid;
   width: 100%;
+  min-height: 58px;
   gap: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -4100,6 +4147,10 @@ sup {
 
   .core-metrics,
   .core-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-unified-page .core-metrics {
     grid-template-columns: 1fr;
   }
 

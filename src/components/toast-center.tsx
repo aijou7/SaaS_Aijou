@@ -47,6 +47,7 @@ export function showToast(message: string, kind: ToastKind = "success") {
 function toastFromQuery(params: URLSearchParams): ToastPayload | null {
   if (params.get("error")) return { kind: "error", message: "Aksi belum berhasil. Periksa data lalu coba lagi." };
   if (params.get("created")) return { kind: "success", message: "Data baru berhasil dibuat." };
+  if (params.get("deleted")) return { kind: "success", message: "Data berhasil dihapus permanen." };
   if (params.get("saved")) return { kind: "success", message: "Perubahan berhasil disimpan." };
   if (params.get("updated")) return { kind: "success", message: "Status berhasil diperbarui." };
   if (params.get("started")) return { kind: "success", message: "Proses berhasil dimulai dan masuk antrean aman." };

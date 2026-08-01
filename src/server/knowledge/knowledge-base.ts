@@ -156,19 +156,13 @@ export async function updateKnowledgeBaseEntry(
 
 export async function deleteKnowledgeBaseEntry(userId: string, entryId: string) {
   const business = await requireBusinessForUser(userId);
-  const existing = await prisma.knowledgeBase.findFirst({
+  const result = await prisma.knowledgeBase.deleteMany({
     where: { id: entryId, businessId: business.id },
-    select: { id: true },
   });
 
-  if (!existing) {
+  if (result.count !== 1) {
     throw new Error("Knowledge base entry tidak ditemukan.");
   }
-
-  await prisma.knowledgeBase.update({
-    where: { id: entryId },
-    data: { isActive: false },
-  });
   invalidateTtlCache(`knowledge-context:${business.id}`);
 }
 
@@ -179,15 +173,28 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
   if (!template) {
     throw new Error("Template knowledge tidak ditemukan.");
   }
-  const entry = await prisma.knowledgeBase.create({
-    data: {
+  const existing = await prisma.knowledgeBase.findFirst({
+    where: {
       businessId: business.id,
       title: template.title,
       category: template.category,
-      content: template.content,
-      isActive: true,
     },
+    select: { id: true },
   });
+  const entry = existing
+    ? await prisma.knowledgeBase.update({
+        where: { id: existing.id },
+        data: { content: template.content, isActive: true },
+      })
+    : await prisma.knowledgeBase.create({
+        data: {
+          businessId: business.id,
+          title: template.title,
+          category: template.category,
+          content: template.content,
+          isActive: true,
+        },
+      });
   invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return entry;

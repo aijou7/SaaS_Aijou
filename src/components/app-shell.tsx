@@ -61,7 +61,7 @@ type NavigationItem = {
 const topNavigation = [
   { href: "/conversations", label: "Percakapan", icon: MessageCircle, module: "inbox" as ModuleKey },
   { href: "/agent", label: "Aijou AI", icon: Bot, module: "agent" as ModuleKey },
-  { href: "/training", label: "Pelatihan", icon: Tags, module: "training" as ModuleKey },
+  { href: "/knowledge", label: "Knowledge", icon: Tags, module: "training" as ModuleKey },
   { href: "/products", label: "Produk", icon: Package, module: "products" as ModuleKey },
   { href: "/payments", label: "Pembayaran", icon: WalletCards, module: "payments" as ModuleKey },
   { href: "/reports", label: "Laporan", icon: TrendingUp, module: "reports" as ModuleKey },
@@ -103,10 +103,9 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     ],
   },
   training: {
-    title: "Pelatihan",
+    title: "Knowledge",
     items: [
-      { href: "/training", label: "Knowledge", icon: Tags, key: "training" },
-      { href: "/knowledge", label: "Knowledge lanjutan", icon: ReceiptText, key: "knowledge" },
+      { href: "/knowledge", label: "Kelola knowledge", icon: Tags, key: "knowledge" },
       { href: "/simulator", label: "Contoh percakapan", icon: MessageCircle, key: "training-import" },
     ],
   },

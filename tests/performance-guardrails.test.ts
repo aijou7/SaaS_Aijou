@@ -77,17 +77,19 @@ describe("production performance guardrails", () => {
   });
 
   test("parallelizes independent primary menu loaders", async () => {
-    const [agentSource, paymentsSource, trainingSource, shellSource] =
+    const [agentSource, paymentsSource, knowledgeSource, trainingSource, shellSource] =
       await Promise.all([
         readFile(new URL("../src/app/agent/page.tsx", import.meta.url), "utf8"),
         readFile(new URL("../src/app/payments/page.tsx", import.meta.url), "utf8"),
+        readFile(new URL("../src/app/knowledge/page.tsx", import.meta.url), "utf8"),
         readFile(new URL("../src/app/training/page.tsx", import.meta.url), "utf8"),
         readFile(new URL("../src/components/app-shell.tsx", import.meta.url), "utf8"),
       ]);
 
     assert.match(agentSource, /const \[page,\s*profile,\s*params\] = await Promise\.all/);
     assert.match(paymentsSource, /const \[page,\s*payments\] = await Promise\.all/);
-    assert.match(trainingSource, /const \[page,\s*params\] = await Promise\.all/);
+    assert.match(knowledgeSource, /const \[session,\s*params\] = await Promise\.all/);
+    assert.match(trainingSource, /redirect\("\/knowledge"\)/);
     assert.match(shellSource, /<IntentPrefetchLink/);
   });
 });
