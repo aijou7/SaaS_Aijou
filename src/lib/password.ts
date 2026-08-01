@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 
 const keyLength = 64;
-const minimumPasswordLength = 12;
+const minimumPasswordLength = 8;
 const maximumPasswordLength = 128;
 
 export const dummyPasswordHash =

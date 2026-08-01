@@ -109,7 +109,7 @@ export function SignupForm({
             aria-describedby="signup-password-hint"
             name="password"
             type="password"
-            minLength={12}
+            minLength={8}
             maxLength={128}
             autoComplete="new-password"
             required
@@ -120,7 +120,7 @@ export function SignupForm({
           <input
             name="confirmPassword"
             type="password"
-            minLength={12}
+            minLength={8}
             maxLength={128}
             autoComplete="new-password"
             required
@@ -128,7 +128,7 @@ export function SignupForm({
         </label>
       </div>
       <p className="auth-form-hint" id="signup-password-hint">
-        Minimal 12 karakter dengan huruf dan angka. Setelah daftar, masukkan OTP dari email.
+        Minimal 8 karakter dengan huruf dan angka. Setelah daftar, masukkan OTP dari email.
       </p>
 
       {state.error ? (

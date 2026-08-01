@@ -26,7 +26,7 @@ export function VerifyEmailForm({ token }: { token: string }) {
           aria-describedby="verify-password-hint"
           name="password"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           autoComplete="new-password"
           required
@@ -37,14 +37,14 @@ export function VerifyEmailForm({ token }: { token: string }) {
         <input
           name="confirmPassword"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           autoComplete="new-password"
           required
         />
       </label>
       <p className="auth-form-hint" id="verify-password-hint">
-        Password ini menggantikan kredensial sementara dan menjadi satu-satunya password akunmu.
+        Minimal 8 karakter dengan huruf dan angka. Password ini menjadi satu-satunya password akunmu.
       </p>
       {state.error ? (
         <div className="settings-note" role="alert">

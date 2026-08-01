@@ -111,7 +111,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
         <div className="card">
           <h2>Ganti password</h2>
-          <p className="muted">Gunakan minimal 12 karakter yang memuat huruf dan angka.</p>
+          <p className="muted">Gunakan minimal 8 karakter yang memuat huruf dan angka.</p>
           {params.error ? (
             <div className="settings-note" role="alert">
               <strong>Password belum diubah</strong>
@@ -129,7 +129,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 name="newPassword"
                 type="password"
                 autoComplete="new-password"
-                minLength={12}
+                minLength={8}
                 maxLength={128}
                 required
               />
@@ -140,7 +140,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 name="confirmPassword"
                 type="password"
                 autoComplete="new-password"
-                minLength={12}
+                minLength={8}
                 maxLength={128}
                 required
               />

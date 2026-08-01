@@ -26,7 +26,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           aria-describedby="reset-password-hint"
           name="password"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           autoComplete="new-password"
           required
@@ -37,14 +37,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <input
           name="confirmPassword"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           autoComplete="new-password"
           required
         />
       </label>
       <p className="auth-form-hint" id="reset-password-hint">
-        Minimal 12 karakter serta memuat huruf dan angka.
+        Minimal 8 karakter serta memuat huruf dan angka.
       </p>
       {state.error ? (
         <div className="settings-note" role="alert">

@@ -5,7 +5,11 @@ import {
   knowledgeContentMaxChars,
   normalizeKnowledgeTextInput,
 } from "../src/lib/knowledge-limits";
-import { hashPassword, verifyPassword } from "../src/lib/password";
+import {
+  hashPassword,
+  validatePasswordStrength,
+  verifyPassword,
+} from "../src/lib/password";
 import {
   clearTtlCache,
   getTtlCacheStats,
@@ -150,6 +154,14 @@ describe("security and parsing helpers", () => {
     assert.equal(await verifyPassword("rahasia-beta", firstHash), true);
     assert.equal(await verifyPassword("salah", firstHash), false);
     assert.equal(await verifyPassword("rahasia-beta", "invalid"), false);
+  });
+
+  test("accepts an eight-character password with letters and numbers", () => {
+    assert.equal(validatePasswordStrength("aman2026"), null);
+    assert.equal(
+      validatePasswordStrength("aman123"),
+      "Password minimal 8 karakter.",
+    );
   });
 
   test("extracts intent, Indonesian amounts, and WhatsApp business identifiers", () => {

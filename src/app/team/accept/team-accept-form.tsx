@@ -39,7 +39,7 @@ export function TeamAcceptForm({ mode, token }: TeamAcceptFormProps) {
               <input
                 name="password"
                 type="password"
-                minLength={12}
+                minLength={8}
                 maxLength={128}
                 autoComplete="new-password"
                 required
@@ -50,7 +50,7 @@ export function TeamAcceptForm({ mode, token }: TeamAcceptFormProps) {
               <input
                 name="confirmPassword"
                 type="password"
-                minLength={12}
+                minLength={8}
                 maxLength={128}
                 autoComplete="new-password"
                 required
@@ -58,7 +58,7 @@ export function TeamAcceptForm({ mode, token }: TeamAcceptFormProps) {
             </label>
           </div>
           <p className="auth-form-hint">
-            Minimal 12 karakter, gunakan huruf dan angka, serta hindari nama atau emailmu.
+            Minimal 8 karakter, gunakan huruf dan angka, serta hindari nama atau emailmu.
           </p>
         </>
       ) : null}
