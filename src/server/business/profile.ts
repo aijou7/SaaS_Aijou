@@ -40,6 +40,26 @@ export async function getBusinessProfilePage(userId: string) {
   return loadBusinessReadiness(userId);
 }
 
+export async function getOnboardingGuideStatus(userId: string) {
+  const completion = await prisma.business.findFirst({
+    where: { userId },
+    select: { onboardingCompleted: true },
+  });
+
+  if (completion?.onboardingCompleted) {
+    return {
+      onboardingCompleted: true,
+      readiness: null,
+    };
+  }
+
+  const page = await loadBusinessReadiness(userId);
+  return {
+    onboardingCompleted: Boolean(page.business?.onboardingCompleted),
+    readiness: page.readiness,
+  };
+}
+
 export async function getBusinessActivationReadiness(
   userId: string,
   agentOverride?: AgentReadinessOverride,

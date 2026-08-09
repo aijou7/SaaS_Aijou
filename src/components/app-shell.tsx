@@ -33,6 +33,7 @@ import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { NotificationBell } from "@/components/notification-bell";
+import { OnboardingGuide } from "@/components/onboarding-guide";
 import { ToastCenter } from "@/components/toast-center";
 import {
   WorkspaceUserChip,
@@ -210,6 +211,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
   return (
     <main className="app-frame">
       <ToastCenter />
+      <OnboardingGuide />
       <header className="app-topbar">
         <div className="app-logo-menu">
           <Link className="app-logo" href="/dashboard" aria-label="Aijou AI dashboard">

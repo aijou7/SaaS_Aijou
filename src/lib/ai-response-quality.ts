@@ -23,6 +23,7 @@ const unsupportedCapabilityPatterns = [
 export function evaluateAiResponseQuality(params: {
   reply: string;
   conversationContext?: string | null;
+  maxWords?: number;
 }) {
   const reply = params.reply.trim();
   const words = reply.match(/\S+/g) ?? [];
@@ -30,7 +31,8 @@ export function evaluateAiResponseQuality(params: {
   const violations: string[] = [];
 
   if (!reply) violations.push("empty_reply");
-  if (words.length > 90) violations.push("too_long");
+  const maxWords = Math.max(40, Math.min(params.maxWords ?? 90, 140));
+  if (words.length > maxWords) violations.push("too_long");
   if (questionCount > 1) violations.push("too_many_questions");
   if (genericFillerPatterns.some((pattern) => pattern.test(reply))) {
     violations.push("generic_filler");
@@ -58,7 +60,7 @@ export function evaluateAiResponseQuality(params: {
 
   const deductions: Record<string, number> = {
     empty_reply: 100,
-    too_long: 20,
+    too_long: 35,
     too_many_questions: 20,
     generic_filler: 35,
     repeated_greeting: 25,

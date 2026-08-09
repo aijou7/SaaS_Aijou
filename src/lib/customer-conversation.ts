@@ -240,6 +240,7 @@ export function polishCustomerReply(params: {
   reply: string;
   conversationContext?: string;
   fallback: string;
+  maxWords?: number;
 }) {
   const previous = parseConversation(params.conversationContext)
     .filter((turn) => turn.role === "assistant")
@@ -267,7 +268,7 @@ export function polishCustomerReply(params: {
   }
 
   reply = removeLowValueLead(reply);
-  reply = compactReply(reply);
+  reply = compactReply(reply, params.maxWords);
 
   return !reply || previous.some((text) => similarity(text, reply) >= 0.88)
     ? params.fallback
@@ -445,7 +446,9 @@ function isLowValueLeadSentence(sentence: string) {
   );
 }
 
-function compactReply(value: string) {
+function compactReply(value: string, requestedMaxWords = 90) {
+  const maxWords = Math.max(40, Math.min(requestedMaxWords, 140));
+  const maxSentences = maxWords > 90 ? 7 : 4;
   const sentences = value.split(/(?<=[.!?])\s+/).filter(Boolean);
   const kept: string[] = [];
   let wordCount = 0;
@@ -456,7 +459,10 @@ function compactReply(value: string) {
     if (isQuestion && hasQuestion) continue;
 
     const sentenceWords = sentence.trim().split(/\s+/).filter(Boolean).length;
-    if (kept.length >= 4 || (kept.length > 0 && wordCount + sentenceWords > 90)) {
+    if (
+      kept.length >= maxSentences ||
+      (kept.length > 0 && wordCount + sentenceWords > maxWords)
+    ) {
       break;
     }
 

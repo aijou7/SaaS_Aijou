@@ -5,6 +5,7 @@ import {
   polishCustomerReply,
 } from "@/lib/customer-conversation";
 import { buildPublishedPriceReply } from "@/lib/customer-pricing";
+import { buildCustomerResponsePolicy } from "@/lib/customer-response-policy";
 import { evaluateAiResponseQuality } from "@/lib/ai-response-quality";
 import { callGroqText } from "@/server/ai/groq";
 import type { AgentRuntimeSettings } from "@/server/agent/settings";
@@ -60,6 +61,7 @@ export async function buildCustomerServiceReplyAi(params: {
     message,
     conversationContext,
   );
+  const responsePolicy = buildCustomerResponsePolicy(message);
   const result = await callGroqText({
     businessId: params.businessId,
     usageType: "CUSTOMER_REPLY",
@@ -111,7 +113,7 @@ export async function buildCustomerServiceReplyAi(params: {
       "<derived_conversation_context>",
       derivedConversationContext,
       "</derived_conversation_context>",
-      "Final response contract: default to 1-3 short sentences and stay under 75 words. Use at most one question. Do not use headings, bullet points, repeated greetings, canned phrases, or generic marketing claims unless the customer explicitly asks for a detailed explanation or list.",
+      responsePolicy.instruction,
     ]
       .filter(Boolean)
       .join("\n"),
@@ -129,10 +131,12 @@ export async function buildCustomerServiceReplyAi(params: {
     reply: result.text,
     conversationContext,
     fallback,
+    maxWords: responsePolicy.maxWords,
   });
   const quality = evaluateAiResponseQuality({
     reply: polished,
     conversationContext,
+    maxWords: responsePolicy.maxWords,
   });
   return quality.passed
     ? polished
@@ -141,6 +145,7 @@ export async function buildCustomerServiceReplyAi(params: {
         conversationContext,
         fallback:
           "Konteksnya sudah saya catat. Tim kami bisa lanjut dari detail terakhir tanpa mengulang dari awal.",
+        maxWords: responsePolicy.maxWords,
       });
 }
 

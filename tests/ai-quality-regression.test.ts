@@ -6,6 +6,7 @@ import {
   buildContextualCustomerReply,
   polishCustomerReply,
 } from "../src/lib/customer-conversation";
+import { buildCustomerResponsePolicy } from "../src/lib/customer-response-policy";
 
 const realConversation = [
   "Customer: Saya butuh custom dashboard",
@@ -100,5 +101,27 @@ describe("AI reply regression quality gate", () => {
         `${reply}: ${result.violations.join(", ")}`,
       );
     }
+  });
+
+  test("gives technical questions a concise but usable answer budget", () => {
+    const policy = buildCustomerResponsePolicy(
+      "Bagaimana desain VLAN, firewall, access point, dan failover internet untuk jaringan hotel dengan banyak bangunan?",
+    );
+    assert.equal(policy.maxWords, 140);
+    assert.match(policy.instruction, /Start with the direct conclusion/i);
+    assert.match(policy.instruction, /2-5 short numbered steps or bullets/i);
+
+    const reply = Array.from({ length: 120 }, (_, index) => `kata${index}`).join(" ");
+    assert.equal(
+      evaluateAiResponseQuality({ reply, maxWords: policy.maxWords }).passed,
+      true,
+    );
+    assert.equal(evaluateAiResponseQuality({ reply }).passed, false);
+  });
+
+  test("keeps ordinary customer questions on the short response contract", () => {
+    const policy = buildCustomerResponsePolicy("Ada pricelist website?");
+    assert.equal(policy.maxWords, 75);
+    assert.match(policy.instruction, /1-3 short sentences/i);
   });
 });
