@@ -111,10 +111,36 @@ function trustedOrigins(request: NextRequest) {
 
   for (const candidate of candidates) {
     const origin = normalizeOrigin(candidate ?? null);
-    if (origin) origins.add(origin);
+    if (!origin) continue;
+
+    origins.add(origin);
+
+    const canonicalAlias = getCanonicalWwwAlias(origin);
+    if (canonicalAlias) origins.add(canonicalAlias);
   }
 
   return origins;
+}
+
+function getCanonicalWwwAlias(origin: string) {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+
+    if (hostname === "localhost" || hostname.includes(":")) return undefined;
+
+    if (hostname.startsWith("www.")) {
+      const apexHostname = hostname.slice(4);
+      if (!apexHostname.includes(".")) return undefined;
+      url.hostname = apexHostname;
+      return url.origin;
+    }
+
+    url.hostname = `www.${hostname}`;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
 }
 
 function getForwardedRequestOrigin(request: NextRequest) {

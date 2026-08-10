@@ -60,6 +60,24 @@ describe("mutation request origin validation", () => {
     assert.equal(response, null);
   });
 
+  test("accepts the apex origin when Vercel redirects the POST to the www canonical domain", () => {
+    const response = validateMutationRequest(
+      proxiedCustomDomainRequest("https://aijou.site", "www.aijou.site"),
+      "form",
+    );
+
+    assert.equal(response, null);
+  });
+
+  test("accepts the www origin when the proxy still reports the apex domain", () => {
+    const response = validateMutationRequest(
+      proxiedCustomDomainRequest("https://www.aijou.site", "aijou.site"),
+      "form",
+    );
+
+    assert.equal(response, null);
+  });
+
   test("does not confuse a forwarded custom host with an arbitrary browser origin", async () => {
     const response = validateMutationRequest(
       proxiedCustomDomainRequest("https://attacker.example"),
