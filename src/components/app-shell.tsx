@@ -4,12 +4,11 @@ import {
   Bot,
   BriefcaseBusiness,
   Building2,
-  CalendarDays,
-  CheckCircle2,
   CircleHelp,
   Code2,
   FileText,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   MessageCircle,
   Megaphone,
@@ -17,14 +16,13 @@ import {
   ReceiptText,
   Send,
   Settings,
+  ShoppingBag,
   Tags,
   TrendingUp,
+  Truck,
   Users,
   WalletCards,
   Workflow,
-  Truck,
-  ShoppingBag,
-  LifeBuoy,
   Clock3,
   Zap,
   type LucideIcon,
@@ -41,16 +39,7 @@ import {
 } from "@/components/workspace-user";
 import { isTeamManagementEnabled } from "@/lib/team-feature";
 
-type ModuleKey =
-  | "settings"
-  | "inbox"
-  | "agent"
-  | "training"
-  | "products"
-  | "payments"
-  | "reports"
-  | "integrations"
-  | "operations";
+type ModuleKey = "settings" | "inbox" | "ai" | "sales" | "automation";
 
 type NavigationItem = {
   href: string;
@@ -59,19 +48,59 @@ type NavigationItem = {
   key: string;
 };
 
-const topNavigation = [
+const primaryNavigation = [
   { href: "/conversations", label: "Percakapan", icon: MessageCircle, module: "inbox" as ModuleKey },
-  { href: "/agent", label: "AI Agent", icon: Bot, module: "agent" as ModuleKey },
-  { href: "/knowledge", label: "Knowledge", icon: Tags, module: "training" as ModuleKey },
-  { href: "/products", label: "Produk", icon: Package, module: "products" as ModuleKey },
-  { href: "/payments", label: "Pembayaran", icon: WalletCards, module: "payments" as ModuleKey },
-  { href: "/reports", label: "Laporan", icon: TrendingUp, module: "reports" as ModuleKey },
-  { href: "/orders", label: "Operasional", icon: Workflow, module: "operations" as ModuleKey },
-  { href: "/integrations", label: "Integrasi", icon: Building2, module: "integrations" as ModuleKey },
+  { href: "/agent", label: "AI & Knowledge", icon: Bot, module: "ai" as ModuleKey },
+  { href: "/leads", label: "Customer & Penjualan", icon: BriefcaseBusiness, module: "sales" as ModuleKey },
+  { href: "/integrations", label: "Otomatisasi", icon: Workflow, module: "automation" as ModuleKey },
   { href: "/dashboard", label: "Pengaturan", icon: Settings, module: "settings" as ModuleKey },
 ];
 
 const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem[] }> = {
+  inbox: {
+    title: "Kotak masuk",
+    items: [
+      { href: "/conversations", label: "Semua percakapan", icon: MessageCircle, key: "conversations" },
+      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover" },
+      { href: "/quick-replies", label: "Balasan cepat", icon: Zap, key: "quick-replies" },
+    ],
+  },
+  ai: {
+    title: "AI & knowledge",
+    items: [
+      { href: "/agent", label: "Kepribadian AI", icon: Bot, key: "agent" },
+      { href: "/knowledge", label: "Knowledge", icon: Tags, key: "knowledge" },
+      { href: "/simulator", label: "Uji percakapan", icon: MessageCircle, key: "simulator" },
+      { href: "/ai-activity", label: "Aktivitas AI", icon: Activity, key: "ai-activity" },
+    ],
+  },
+  sales: {
+    title: "Customer & penjualan",
+    items: [
+      { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads" },
+      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers" },
+      { href: "/products", label: "Katalog produk", icon: Package, key: "products" },
+      { href: "/transactions", label: "Pesanan & penjualan", icon: ShoppingBag, key: "transactions" },
+      { href: "/proposals", label: "Draft proposal", icon: FileText, key: "proposals" },
+      { href: "/payments", label: "Pembayaran", icon: WalletCards, key: "payments" },
+      { href: "/receipts", label: "Review bukti bayar", icon: ReceiptText, key: "receipts" },
+      { href: "/reports", label: "Laporan", icon: TrendingUp, key: "reports" },
+    ],
+  },
+  automation: {
+    title: "Otomatisasi",
+    items: [
+      { href: "/integrations", label: "Channel & integrasi", icon: Building2, key: "integrations" },
+      { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours" },
+      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints" },
+      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts" },
+      { href: "/orders", label: "Otomatisasi pesanan", icon: ShoppingBag, key: "orders" },
+      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping" },
+      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows" },
+      { href: "/whatsapp", label: "Setup WhatsApp", icon: Code2, key: "whatsapp" },
+      { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
+    ],
+  },
   settings: {
     title: "Ruang kerja",
     items: [
@@ -85,110 +114,42 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
       { href: "/account", label: "Keamanan akun", icon: Settings, key: "account" },
     ],
   },
-  inbox: {
-    title: "Percakapan",
-    items: [
-      { href: "/conversations", label: "Chat langsung", icon: MessageCircle, key: "conversations" },
-      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover" },
-      { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads" },
-      { href: "/proposals", label: "Proposal Drafts", icon: FileText, key: "proposals" },
-      { href: "/quick-replies", label: "Quick Replies", icon: Zap, key: "quick-replies" },
-      { href: "/simulator", label: "Simulator", icon: Zap, key: "simulator" },
-    ],
-  },
-  agent: {
-    title: "AI Agent",
-    items: [
-      { href: "/agent", label: "Kepribadian", icon: Bot, key: "agent" },
-      { href: "/ai-activity", label: "Aktivitas AI", icon: Activity, key: "ai-activity" },
-    ],
-  },
-  training: {
-    title: "Knowledge",
-    items: [
-      { href: "/knowledge", label: "Kelola knowledge", icon: Tags, key: "knowledge" },
-      { href: "/simulator", label: "Contoh percakapan", icon: MessageCircle, key: "training-import" },
-    ],
-  },
-  products: {
-    title: "Produk",
-    items: [
-      { href: "/products", label: "Katalog", icon: Package, key: "products" },
-      { href: "/transactions?view=create", label: "Buat pesanan", icon: CheckCircle2, key: "order-create" },
-    ],
-  },
-  payments: {
-    title: "Pembayaran",
-    items: [
-      { href: "/payments", label: "Setup pembayaran", icon: WalletCards, key: "payments" },
-      { href: "/transactions", label: "Pesanan & penjualan", icon: Package, key: "transactions" },
-      { href: "/receipts", label: "Review receipt", icon: ReceiptText, key: "receipts" },
-    ],
-  },
-  reports: {
-    title: "Laporan",
-    items: [
-      { href: "/reports", label: "Ringkasan", icon: TrendingUp, key: "reports" },
-      { href: "/transactions", label: "Laporan penjualan", icon: WalletCards, key: "report-sales" },
-      { href: "/ai-activity", label: "Performa AI", icon: Activity, key: "report-ai" },
-    ],
-  },
-  integrations: {
-    title: "Integrasi",
-    items: [
-      { href: "/integrations", label: "Platform", icon: Building2, key: "integrations" },
-      { href: "/integrations?platform=telegram", label: "Telegram", icon: Send, key: "telegram" },
-      { href: "/whatsapp", label: "WhatsApp", icon: Code2, key: "whatsapp" },
-      { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
-    ],
-  },
-  operations: {
-    title: "Operasional",
-    items: [
-      { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours" },
-      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints" },
-      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers" },
-      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts" },
-      { href: "/orders", label: "Pesanan", icon: ShoppingBag, key: "orders" },
-      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping" },
-      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows" },
-    ],
-  },
 };
 
 const moduleByActive: Record<string, ModuleKey> = {
+  conversations: "inbox",
+  "human-takeover": "inbox",
+  "quick-replies": "inbox",
+  notifications: "inbox",
+  agent: "ai",
+  knowledge: "ai",
+  training: "ai",
+  simulator: "ai",
+  "ai-activity": "ai",
+  leads: "sales",
+  customers: "sales",
+  products: "sales",
+  transactions: "sales",
+  proposals: "sales",
+  payments: "sales",
+  receipts: "sales",
+  reports: "sales",
+  integrations: "automation",
+  telegram: "automation",
+  hours: "automation",
+  complaints: "automation",
+  broadcasts: "automation",
+  orders: "automation",
+  shipping: "automation",
+  workflows: "automation",
+  whatsapp: "automation",
+  readiness: "automation",
   dashboard: "settings",
   business: "settings",
   setup: "settings",
   usage: "settings",
   team: "settings",
   account: "settings",
-  conversations: "inbox",
-  leads: "inbox",
-  proposals: "inbox",
-  "quick-replies": "inbox",
-  simulator: "inbox",
-  agent: "agent",
-  "ai-activity": "agent",
-  training: "training",
-  knowledge: "training",
-  products: "products",
-  transactions: "payments",
-  payments: "payments",
-  receipts: "payments",
-  reports: "reports",
-  integrations: "integrations",
-  telegram: "integrations",
-  whatsapp: "integrations",
-  readiness: "integrations",
-  notifications: "inbox",
-  hours: "operations",
-  complaints: "operations",
-  customers: "operations",
-  broadcasts: "operations",
-  orders: "operations",
-  shipping: "operations",
-  workflows: "operations",
 };
 
 type AppShellProps = {
@@ -200,7 +161,9 @@ type AppShellProps = {
 export function AppShell({ active, businessName, children }: AppShellProps) {
   const activeModule = moduleByActive[active] ?? "settings";
   const activeNavigation = moduleNavigation[activeModule];
-  const activeSettingsItem =
+  const activePrimaryNavigation =
+    primaryNavigation.find((item) => item.module === activeModule) ?? primaryNavigation[4];
+  const activePage =
     activeNavigation.items.find((item) => item.key === active) ??
     Object.values(moduleNavigation)
       .flatMap((module) => module.items)
@@ -215,7 +178,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
       <header className="app-topbar">
         <div className="app-logo-menu">
           <Link className="app-logo" href="/dashboard" aria-label="Aijou AI dashboard">
-            <AijouLogo size={28} />
+            <AijouLogo size={30} />
             <span className="app-wordmark">
               <strong>Aijou AI</strong>
               <small>Sales workspace</small>
@@ -228,34 +191,14 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           </div>
         </div>
 
-        <nav className="top-nav" aria-label="Primary navigation">
-          {topNavigation.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.module === activeModule;
-
-            return (
-              <IntentPrefetchLink
-                className={isActive ? "top-nav-item active" : "top-nav-item"}
-                href={item.href}
-                key={item.label}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <Icon size={16} aria-hidden="true" />
-                {item.label}
-              </IntentPrefetchLink>
-            );
-          })}
-        </nav>
+        <div className="topbar-context" aria-label="Halaman aktif">
+          <span>{activePrimaryNavigation.label}</span>
+          <strong>{activePage.label}</strong>
+        </div>
 
         <div className="topbar-actions">
-          <Link className="top-icon-button" href="/readiness" aria-label="Readiness" data-tooltip="Readiness">
-            <CalendarDays size={17} aria-hidden="true" />
-          </Link>
-          <Link className="top-icon-button" href="/transactions" aria-label="Transactions" data-tooltip="Orders">
-            <BriefcaseBusiness size={17} aria-hidden="true" />
-          </Link>
-          <Link className="top-icon-button" href="/setup" aria-label="Help" data-tooltip="Help">
-            <CircleHelp size={17} aria-hidden="true" />
+          <Link className="top-icon-button" href="/setup" aria-label="Bantuan" data-tooltip="Bantuan">
+            <CircleHelp size={18} aria-hidden="true" />
           </Link>
           <NotificationBell />
           <WorkspaceUserChip />
@@ -263,67 +206,65 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
       </header>
 
       <div className="app-workspace">
-          <aside className="settings-sidebar">
-            <div className="settings-panel-header">
-              <strong>{activeNavigation.title}</strong>
+        <aside className="settings-sidebar">
+          <div className="settings-account">
+            <div className="account-avatar">
+              <AijouLogo size={34} />
             </div>
-
-            <div className="settings-account">
-              <div className="account-avatar">
-                <AijouLogo size={32} />
-              </div>
-              <div>
-                <strong>{businessName ?? "Aijou AI"}</strong>
-                <span>{groqConfigured ? "AI agent terhubung" : "Workspace belum siap"}</span>
-              </div>
+            <div>
+              <strong>{businessName ?? "Aijou AI"}</strong>
+              <span>{groqConfigured ? "AI agent terhubung" : "Workspace belum siap"}</span>
             </div>
+          </div>
 
-            <nav className="settings-nav" aria-label="Settings navigation">
-              {activeNavigation.items.map((item) => {
-                const Icon = item.icon;
+          <nav className="primary-sidebar-nav" aria-label="Navigasi utama">
+            {primaryNavigation.map((item) => {
+              const Icon = item.icon;
+              const isActive = item.module === activeModule;
+              return (
+                <IntentPrefetchLink
+                  className={isActive ? "primary-sidebar-item active" : "primary-sidebar-item"}
+                  href={item.href}
+                  key={item.module}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </IntentPrefetchLink>
+              );
+            })}
+          </nav>
 
-                return (
-                  <IntentPrefetchLink
-                    className={active === item.key ? "settings-nav-item active" : "settings-nav-item"}
-                    href={item.href}
-                    key={item.key}
-                  >
-                    <Icon size={17} aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </IntentPrefetchLink>
-                );
-              })}
-            </nav>
+          <p className="sidebar-context-heading">{activeNavigation.title}</p>
+          <nav className="settings-nav" aria-label={`Menu ${activeNavigation.title}`}>
+            {activeNavigation.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <IntentPrefetchLink
+                  className={active === item.key ? "settings-nav-item active" : "settings-nav-item"}
+                  href={item.href}
+                  key={item.key}
+                >
+                  <Icon size={17} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </IntentPrefetchLink>
+              );
+            })}
+          </nav>
 
-            <div className="settings-footer">
-              <WorkspaceUserSummary />
-              <form action="/api/auth/logout" method="post">
-                <button className="sidebar-logout" type="submit">
-                  <LogOut size={15} aria-hidden="true" />
-                  Keluar
-                </button>
-              </form>
-            </div>
-          </aside>
+          <div className="settings-footer">
+            <WorkspaceUserSummary />
+            <form action="/api/auth/logout" method="post">
+              <button className="sidebar-logout" type="submit">
+                <LogOut size={16} aria-hidden="true" />
+                Keluar
+              </button>
+            </form>
+          </div>
+        </aside>
 
         <section className="app-main">
           <div className="app-main-inner">
-            <div className="workspace-bar">
-              <div>
-                <p className="workspace-kicker">Business workspace</p>
-                <strong>{activeSettingsItem?.label ?? "Dashboard"}</strong>
-              </div>
-              <div className="workspace-meta" aria-label="Workspace status">
-                <span className="meta-pill">
-                  <BadgeCheck size={14} aria-hidden="true" />
-                  Private beta
-                </span>
-                <span className={groqConfigured ? "meta-pill" : "meta-pill meta-pill-warning"}>
-                  <Zap size={14} aria-hidden="true" />
-                  {groqConfigured ? "AI aktif" : "Siapkan AI"}
-                </span>
-              </div>
-            </div>
             {children}
           </div>
         </section>

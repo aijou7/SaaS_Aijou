@@ -1,5 +1,6 @@
 "use client";
 
+import { Bot, CheckCircle2, MoreHorizontal, UserRoundCheck } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   updateConversationModeUiAction,
@@ -50,32 +51,47 @@ export function ConversationModeControls(props: {
     });
   };
 
+  const primaryMode: ConversationMode = displayStatus === "OPEN" ? "takeover" : "ai";
+  const PrimaryIcon = primaryMode === "takeover" ? UserRoundCheck : Bot;
+  const primaryLabel =
+    pendingMode === primaryMode
+      ? "Memproses..."
+      : primaryMode === "takeover"
+        ? "Ambil alih"
+        : displayStatus === "CLOSED"
+          ? "Buka dengan AI"
+          : "Aktifkan AI";
+
   return (
-    <div className="handoff-actions" aria-label="Kontrol percakapan">
+    <div className="conversation-mode-toolbar" aria-label="Kontrol percakapan">
       <button
         className="primary-button"
         type="button"
-        disabled={pending || displayStatus === "HUMAN_NEEDED"}
-        onClick={() => updateMode("takeover")}
+        disabled={pending}
+        onClick={() => updateMode(primaryMode)}
       >
-        {pendingMode === "takeover" ? "Mengambil alih…" : "Ambil alih chat"}
+        <PrimaryIcon size={17} aria-hidden="true" />
+        {primaryLabel}
       </button>
-      <button
-        className="ghost-button"
-        type="button"
-        disabled={pending || displayStatus === "OPEN"}
-        onClick={() => updateMode("ai")}
-      >
-        {pendingMode === "ai" ? "Mengaktifkan…" : "Aktifkan AI lagi"}
-      </button>
-      <button
-        className="ghost-button"
-        type="button"
-        disabled={pending || displayStatus === "CLOSED"}
-        onClick={() => updateMode("resolved")}
-      >
-        {pendingMode === "resolved" ? "Menyimpan…" : "Tandai selesai"}
-      </button>
+      <details className="conversation-more-menu">
+        <summary aria-label="Aksi percakapan lainnya" title="Aksi lainnya">
+          <MoreHorizontal size={19} aria-hidden="true" />
+        </summary>
+        <div>
+          {displayStatus === "CLOSED" ? (
+            <button type="button" disabled={pending} onClick={() => updateMode("takeover")}>
+              <UserRoundCheck size={16} aria-hidden="true" />
+              Buka dan ambil alih
+            </button>
+          ) : null}
+          {displayStatus !== "CLOSED" ? (
+            <button type="button" disabled={pending} onClick={() => updateMode("resolved")}>
+              <CheckCircle2 size={16} aria-hidden="true" />
+              Tandai selesai
+            </button>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }

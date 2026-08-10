@@ -147,7 +147,8 @@ export function LiveConversationDetail(props: {
   );
 }
 
-function ClientConversationPanel(props: {
+/* Previous layout retained temporarily during the task-first inbox rollout.
+function LegacyClientConversationPanel(props: {
   detail: ConversationDetail;
   quickReplies: QuickReply[];
   loading: boolean;
@@ -303,6 +304,126 @@ function ClientConversationPanel(props: {
         quickReplies={props.quickReplies}
         blockedReason={freeformBlockReason}
       />
+    </section>
+  );
+}
+
+*/
+function ClientConversationPanel(props: {
+  detail: ConversationDetail;
+  quickReplies: QuickReply[];
+  loading: boolean;
+}) {
+  const { detail } = props;
+  const outsideWhatsAppWindow =
+    detail.channel === "WHATSAPP" &&
+    !isWhatsAppCustomerCareWindowOpen(detail.lastCustomerMessageAt);
+
+  return (
+    <section className={props.loading ? "chat-detail-surface conversation-panel-loading" : "chat-detail-surface"}>
+      <div className="chat-detail-header">
+        <div className="chat-contact-identity">
+          <span className="chat-contact-avatar" aria-hidden="true">{detail.contactName.slice(0, 1).toUpperCase()}</span>
+          <div>
+            <h1>{detail.contactName}</h1>
+            <p>{formatAddress(detail.channel, detail.contactPhone)}</p>
+          </div>
+        </div>
+        <span className={detail.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
+          {formatLabel(detail.status)}
+        </span>
+      </div>
+
+      <div className="chat-detail-body">
+        <div className="chat-conversation-column">
+          <ChatMessageThread
+            conversationId={detail.id}
+            hasOlderMessages={detail.hasOlderMessages}
+            messageLimit={detail.messageLimit}
+            messages={detail.messages}
+          />
+
+          {outsideWhatsAppWindow ? (
+            <details className="whatsapp-template-panel">
+              <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
+              <form className="form-grid" action={sendWhatsAppTemplateAction}>
+                <input name="conversationId" type="hidden" value={detail.id} />
+                <label>Nama template Meta<input name="templateName" pattern="[a-z0-9_]{1,512}" placeholder="follow_up_customer" required /></label>
+                <label>Bahasa<input name="languageCode" defaultValue="id" required /></label>
+                <label className="span-2">Parameter body <small>(satu per baris)</small><textarea name="bodyParameters" rows={3} /></label>
+                <button className="primary-button span-2" type="submit">Kirim approved template</button>
+              </form>
+            </details>
+          ) : null}
+
+          {props.quickReplies.length > 0 ? (
+            <details className="quick-reply-strip">
+              <summary>Gunakan balasan cepat</summary>
+              <form action={sendOwnerReplyAction}>
+                <input name="conversationId" type="hidden" value={detail.id} />
+                <select name="message" defaultValue="" required aria-label="Pilih balasan cepat">
+                  <option value="" disabled>Pilih template balasan</option>
+                  {props.quickReplies.map((reply) => (
+                    <option key={reply.id} value={reply.content}>
+                      {reply.shortcut ?? reply.name} — {reply.content.slice(0, 80)}
+                    </option>
+                  ))}
+                </select>
+                <button className="small-outline-button" type="submit">Kirim</button>
+              </form>
+            </details>
+          ) : null}
+
+          <ChatReplyComposer
+            conversationId={detail.id}
+            quickReplies={props.quickReplies}
+            blockedReason={outsideWhatsAppWindow ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru." : null}
+          />
+        </div>
+
+        <aside className="chat-context-panel" aria-label="Detail percakapan">
+          <section className="chat-context-section chat-context-controls">
+            <div className="chat-context-heading">
+              <div><strong>Kendali chat</strong><span>Atur siapa yang menjawab pelanggan.</span></div>
+              <ConversationModeControls conversationId={detail.id} status={detail.status} />
+            </div>
+          </section>
+
+          <details className="chat-context-section" open>
+            <summary>Penanggung jawab</summary>
+            <form className="conversation-assignment" action={assignConversationAction}>
+              <input name="conversationId" type="hidden" value={detail.id} />
+              <select name="assigneeUserId" defaultValue={detail.assignedToUser?.id ?? ""} aria-label="Ditangani oleh">
+                <option value="">Belum ditugaskan</option>
+                {detail.assignableUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              </select>
+              <button className="small-outline-button" type="submit">Simpan</button>
+            </form>
+          </details>
+
+          {detail.lead ? (
+            <details className="chat-context-section" open>
+              <summary><span>Ringkasan lead</span><span className="context-score">{detail.lead.qualificationScore ?? 0}/100</span></summary>
+              <p className="lead-summary">{detail.lead.needSummary}</p>
+              <dl className="lead-facts">
+                <div><dt>Layanan</dt><dd>{detail.lead.serviceInterest ?? "-"}</dd></div>
+                <div><dt>Lokasi</dt><dd>{detail.lead.location ?? "-"}</dd></div>
+                <div><dt>Budget</dt><dd>{detail.lead.budget ?? "-"}</dd></div>
+                <div><dt>Urgensi</dt><dd>{detail.lead.urgency ?? "-"}</dd></div>
+              </dl>
+            </details>
+          ) : null}
+
+          <details className="chat-context-section">
+            <summary>Catatan internal</summary>
+            <form className="owner-notes-form" action={updateConversationNotesAction}>
+              <input name="conversationId" type="hidden" value={detail.id} />
+              <textarea name="ownerNotes" defaultValue={detail.ownerNotes ?? ""} placeholder="Follow up besok, minta foto lokasi..." aria-label="Catatan internal" />
+              <button className="small-outline-button" type="submit">Simpan catatan</button>
+            </form>
+          </details>
+        </aside>
+      </div>
     </section>
   );
 }

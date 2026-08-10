@@ -173,9 +173,9 @@ function ChatInboxView({
             maxLength={160}
             aria-label="Cari percakapan"
           />
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 4 }}>
+          <div className="chat-filter-row">
             <select name="status" defaultValue={status ?? ""} aria-label="Status percakapan">
-              <option value="">All status</option>
+              <option value="">Semua status</option>
               {Object.values(ConversationStatus).map((option) => (
                 <option key={option} value={option}>
                   {formatConversationStatus(option)}
@@ -189,13 +189,13 @@ function ChatInboxView({
 
         <div className="chat-tabs">
           <Link className={!unread && (!status || status !== "CLOSED") ? "active" : ""} href="/conversations">
-            Assigned <span>{inbox.summary.open + inbox.summary.humanNeeded}</span>
+            Aktif <span>{inbox.summary.open + inbox.summary.humanNeeded}</span>
           </Link>
           <Link className={unread ? "active" : ""} href="/conversations?unread=1">
-            Unread <span>{inbox.summary.unread}</span>
+            Belum dibaca <span>{inbox.summary.unread}</span>
           </Link>
           <Link className={status === "CLOSED" ? "active" : ""} href="/conversations?status=CLOSED">
-            Closed <span>{inbox.summary.closed}</span>
+            Selesai <span>{inbox.summary.closed}</span>
           </Link>
         </div>
 
@@ -268,8 +268,8 @@ function ConversationTicketList({
     <div className="chat-ticket-list">
       {inbox.conversations.length === 0 ? (
         <div className="chat-empty-ticket">
-          <strong>No conversations</strong>
-          <span>Coba kirim dari Simulator dulu.</span>
+          <strong>Belum ada percakapan</strong>
+          <span>Coba kirim pesan dari simulator atau channel yang sudah terhubung.</span>
         </div>
       ) : (
         inbox.conversations.map((conversation) => (
@@ -293,22 +293,14 @@ function ConversationTicketList({
             <div className="ticket-meta">
               <span className="channel-dot" aria-hidden="true" />
               <span>{formatChannelLabel(conversation.channel, conversation.lead?.source)}</span>
-              <span
-                className={
-                  conversation.status === "HUMAN_NEEDED"
-                    ? "mini-badge pending"
-                    : "mini-badge assigned"
-                }
-              >
-                {conversation.status === "HUMAN_NEEDED" ? "Pending" : "Assigned"}
-              </span>
-              {conversation.lead ? (
-                <span className="count-badge">{conversation.lead.qualificationScore ?? 0}/100</span>
+              {conversation.status === "HUMAN_NEEDED" ? (
+                <span className="mini-badge pending">Butuh tim</span>
               ) : null}
               {conversation.unreadCount > 0 ? (
-                <span className="mini-badge pending">{conversation.unreadCount} unread</span>
+                <span className="count-badge" aria-label={`${conversation.unreadCount} belum dibaca`}>
+                  {conversation.unreadCount}
+                </span>
               ) : null}
-              <span className="count-badge">{conversation.messageCount}</span>
             </div>
           </FastConversationLink>
         ))
@@ -317,7 +309,8 @@ function ConversationTicketList({
   );
 }
 
-function ConversationDetailPanel({
+/* Previous layout retained temporarily during the task-first inbox rollout.
+function LegacyConversationDetailPanel({
   quickReplies,
   selectedConversation,
 }: {
@@ -519,6 +512,155 @@ function ConversationDetailPanel({
             : null
         }
       />
+    </section>
+  );
+}
+
+*/
+function ConversationDetailPanel({
+  quickReplies,
+  selectedConversation,
+}: {
+  quickReplies: QuickReplies;
+  selectedConversation: NonNullable<ConversationDetail>;
+}) {
+  const outsideWhatsAppWindow =
+    selectedConversation.channel === "WHATSAPP" &&
+    !isWhatsAppCustomerCareWindowOpen(selectedConversation.lastCustomerMessageAt);
+
+  return (
+    <section className="chat-detail-surface">
+      <div className="chat-detail-header">
+        <div className="chat-contact-identity">
+          <span className="chat-contact-avatar" aria-hidden="true">
+            {selectedConversation.contactName.slice(0, 1).toUpperCase()}
+          </span>
+          <div>
+            <h1>{selectedConversation.contactName}</h1>
+            <p>{formatContactAddress(selectedConversation.channel, selectedConversation.contactPhone)}</p>
+          </div>
+        </div>
+        <span className={selectedConversation.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
+          {formatConversationStatus(selectedConversation.status)}
+        </span>
+      </div>
+
+      <div className="chat-detail-body">
+        <div className="chat-conversation-column">
+          <ChatMessageThread
+            conversationId={selectedConversation.id}
+            hasOlderMessages={selectedConversation.hasOlderMessages}
+            messageLimit={selectedConversation.messageLimit}
+            messages={selectedConversation.messages}
+          />
+
+          {outsideWhatsAppWindow ? (
+            <details className="whatsapp-template-panel">
+              <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
+              <form className="form-grid" action={sendWhatsAppTemplateAction}>
+                <input name="conversationId" type="hidden" value={selectedConversation.id} />
+                <label>
+                  Nama template Meta
+                  <input name="templateName" type="text" pattern="[a-z0-9_]{1,512}" placeholder="follow_up_customer" required />
+                </label>
+                <label>
+                  Bahasa
+                  <input name="languageCode" type="text" defaultValue="id" required />
+                </label>
+                <label className="span-2">
+                  Parameter body <small>(satu nilai per baris)</small>
+                  <textarea name="bodyParameters" placeholder={"Nama customer\nNama layanan"} rows={3} />
+                </label>
+                <button className="primary-button span-2" type="submit">Kirim approved template</button>
+              </form>
+            </details>
+          ) : null}
+
+          {quickReplies.length > 0 ? (
+            <details className="quick-reply-strip">
+              <summary>Gunakan balasan cepat</summary>
+              <form action={sendOwnerReplyAction}>
+                <input name="conversationId" type="hidden" value={selectedConversation.id} />
+                <select name="message" defaultValue="" required aria-label="Pilih balasan cepat">
+                  <option value="" disabled>Pilih template balasan</option>
+                  {quickReplies.map((reply) => (
+                    <option key={reply.id} value={reply.content}>
+                      {reply.shortcut ?? reply.name} — {reply.content.slice(0, 80)}
+                    </option>
+                  ))}
+                </select>
+                <button className="small-outline-button" type="submit">Kirim</button>
+                <Link className="small-outline-button" href="/quick-replies">Kelola</Link>
+              </form>
+            </details>
+          ) : null}
+
+          <ChatReplyComposer
+            conversationId={selectedConversation.id}
+            quickReplies={quickReplies}
+            blockedReason={
+              outsideWhatsAppWindow
+                ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru."
+                : null
+            }
+          />
+        </div>
+
+        <aside className="chat-context-panel" aria-label="Detail percakapan">
+          <section className="chat-context-section chat-context-controls">
+            <div className="chat-context-heading">
+              <div>
+                <strong>Kendali chat</strong>
+                <span>Atur siapa yang menjawab pelanggan.</span>
+              </div>
+              <ConversationModeControls conversationId={selectedConversation.id} status={selectedConversation.status} />
+            </div>
+          </section>
+
+          <details className="chat-context-section" open>
+            <summary>Penanggung jawab</summary>
+            <form className="conversation-assignment" action={assignConversationAction}>
+              <input name="conversationId" type="hidden" value={selectedConversation.id} />
+              <select name="assigneeUserId" defaultValue={selectedConversation.assignedToUser?.id ?? ""} aria-label="Ditangani oleh">
+                <option value="">Belum ditugaskan</option>
+                {selectedConversation.assignableUsers.map((user) => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+              </select>
+              <button className="small-outline-button" type="submit">Simpan</button>
+            </form>
+          </details>
+
+          {selectedConversation.lead ? (
+            <details className="chat-context-section" open>
+              <summary>
+                <span>Ringkasan lead</span>
+                <span className="context-score">{selectedConversation.lead.qualificationScore ?? 0}/100</span>
+              </summary>
+              <p className="lead-summary">{selectedConversation.lead.needSummary}</p>
+              <dl className="lead-facts">
+                <div><dt>Layanan</dt><dd>{selectedConversation.lead.serviceInterest ?? "-"}</dd></div>
+                <div><dt>Lokasi</dt><dd>{selectedConversation.lead.location ?? "-"}</dd></div>
+                <div><dt>Budget</dt><dd>{selectedConversation.lead.budget ?? "-"}</dd></div>
+                <div><dt>Urgensi</dt><dd>{selectedConversation.lead.urgency ?? "-"}</dd></div>
+                <div><dt>Estimasi</dt><dd>{formatEstimateRange(selectedConversation.lead.estimatedValueMin, selectedConversation.lead.estimatedValueMax)}</dd></div>
+              </dl>
+              {selectedConversation.lead.nextStep ? <p className="context-note">Langkah berikutnya: {selectedConversation.lead.nextStep}</p> : null}
+              {selectedConversation.lead.nextFollowUpAt ? <p className="context-note">Follow-up: {formatDateTime(selectedConversation.lead.nextFollowUpAt)}</p> : null}
+              <Link className="context-link" href="/leads">Buka detail lead</Link>
+            </details>
+          ) : null}
+
+          <details className="chat-context-section">
+            <summary>Catatan internal</summary>
+            <form className="owner-notes-form" action={updateConversationNotesAction}>
+              <input name="conversationId" type="hidden" value={selectedConversation.id} />
+              <textarea name="ownerNotes" defaultValue={selectedConversation.ownerNotes ?? ""} placeholder="Follow up besok, minta foto lokasi..." aria-label="Catatan internal" />
+              <button className="small-outline-button" type="submit">Simpan catatan</button>
+            </form>
+          </details>
+        </aside>
+      </div>
     </section>
   );
 }
