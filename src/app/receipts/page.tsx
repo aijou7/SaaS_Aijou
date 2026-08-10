@@ -26,9 +26,10 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
   const pageNumber = Math.max(1, Number(getSingleParam(params.page) ?? 1) || 1);
   const page = await getReceiptReviewPage(session.userId, { page: pageNumber });
   const today = new Date().toISOString().slice(0, 10);
+  const readOnly = session.role === "VIEWER";
 
   return (
-    <AppShell active="receipts" businessName={page.business?.businessName}>
+    <AppShell active="receipts" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
 
         <section className="hero compact-hero">
           <p className="eyebrow">Receipt OCR</p>
@@ -152,7 +153,7 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
                         </pre>
                       </div>
 
-                      <form className="form-grid edit-form" action={confirmReceiptReviewAction}>
+                      {!readOnly ? <form className="form-grid edit-form" action={confirmReceiptReviewAction}>
                         <input name="receiptId" type="hidden" value={receipt.id} />
                         <label>
                           Tanggal
@@ -219,15 +220,20 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
                             Confirm receipt
                           </button>
                         </div>
-                      </form>
+                      </form> : (
+                        <div className="settings-note" role="status">
+                          <strong>Mode hanya lihat</strong>
+                          <p>Viewer dapat membuka bukti bayar, tetapi tidak dapat menyetujui atau menolaknya.</p>
+                        </div>
+                      )}
                     </div>
 
-                    <form action={rejectReceiptReviewAction}>
+                    {!readOnly ? <form action={rejectReceiptReviewAction}>
                       <input name="receiptId" type="hidden" value={receipt.id} />
                       <button className="danger-button" type="submit">
                         Reject receipt
                       </button>
-                    </form>
+                    </form> : null}
                   </details>
                 ))}
               </div>

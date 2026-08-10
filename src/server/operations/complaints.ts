@@ -11,7 +11,7 @@ import { requireWorkspaceAccess } from "@/server/workspace-access";
 const operatorRoles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT];
 
 export async function getComplaintsPage(userId: string, status?: string) {
-  const access = await requireWorkspaceAccess(userId, operatorRoles);
+  const access = await requireWorkspaceAccess(userId);
   const normalizedStatus = Object.values(ComplaintStatus).includes(status as ComplaintStatus)
     ? (status as ComplaintStatus)
     : undefined;

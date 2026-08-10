@@ -25,9 +25,10 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
   const status = getSingleParam(params.status)?.trim() ?? "";
   const pageNumber = Math.max(1, Number(getSingleParam(params.page) ?? 1) || 1);
   const page = await getLeadsPage(session.userId, { page: pageNumber, query, status });
+  const readOnly = session.role === "VIEWER";
 
   return (
-    <AppShell active="leads" businessName={page.business?.businessName}>
+    <AppShell active="leads" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
 
         <section className="hero compact-hero">
           <p className="eyebrow">Customer opportunities</p>
@@ -208,7 +209,7 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
                           </p>
                         ) : null}
                       </div>
-                      <form className="form-grid" action={updateLeadAction}>
+                      {!readOnly ? <form className="form-grid" action={updateLeadAction}>
                         <input name="leadId" type="hidden" value={lead.id} />
                         <label>
                           Status
@@ -227,9 +228,15 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
                         <button className="primary-button span-2" type="submit">
                           Update lead
                         </button>
-                      </form>
+                      </form> : (
+                        <div className="settings-note">
+                          <strong>Mode hanya lihat</strong>
+                          <p>Status dan catatan lead hanya dapat diubah tim operasional.</p>
+                        </div>
+                      )}
                     </div>
                     <div className="quick-actions">
+                      {!readOnly ? <>
                       <form action={generateProposalDraftAction}>
                         <input name="leadId" type="hidden" value={lead.id} />
                         <button className="primary-button" type="submit">
@@ -241,6 +248,7 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
                           View proposal drafts
                         </Link>
                       ) : null}
+                      </> : null}
                       <Link
                         className="ghost-button"
                         href={`/conversations?conversationId=${lead.conversationId}`}

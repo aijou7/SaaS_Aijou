@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AijouLogo } from "@/components/aijou-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { NotificationBell } from "@/components/notification-bell";
@@ -38,10 +39,19 @@ import {
   WorkspaceUserSummary,
 } from "@/components/workspace-user";
 import { isTeamManagementEnabled } from "@/lib/team-feature";
+import { getSession } from "@/lib/session";
+import type { WorkspaceRoleValue } from "@/lib/team-invites";
+import {
+  canWorkspace,
+  getWorkspaceHome,
+  getWorkspaceRoleLabel,
+  type WorkspaceCapability,
+} from "@/lib/workspace-permissions";
 
 type ModuleKey = "settings" | "inbox" | "ai" | "sales" | "automation";
 
 type NavigationItem = {
+  capability: WorkspaceCapability;
   href: string;
   label: string;
   icon: LucideIcon;
@@ -60,58 +70,58 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
   inbox: {
     title: "Kotak masuk",
     items: [
-      { href: "/conversations", label: "Semua percakapan", icon: MessageCircle, key: "conversations" },
-      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover" },
-      { href: "/quick-replies", label: "Balasan cepat", icon: Zap, key: "quick-replies" },
+      { href: "/conversations", label: "Semua percakapan", icon: MessageCircle, key: "conversations", capability: "inbox:view" },
+      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover", capability: "inbox:operate" },
+      { href: "/quick-replies", label: "Balasan cepat", icon: Zap, key: "quick-replies", capability: "inbox:operate" },
     ],
   },
   ai: {
     title: "AI & knowledge",
     items: [
-      { href: "/agent", label: "Kepribadian AI", icon: Bot, key: "agent" },
-      { href: "/knowledge", label: "Knowledge", icon: Tags, key: "knowledge" },
-      { href: "/simulator", label: "Uji percakapan", icon: MessageCircle, key: "simulator" },
-      { href: "/ai-activity", label: "Aktivitas AI", icon: Activity, key: "ai-activity" },
+      { href: "/agent", label: "Kepribadian AI", icon: Bot, key: "agent", capability: "ai:manage" },
+      { href: "/knowledge", label: "Knowledge", icon: Tags, key: "knowledge", capability: "ai:manage" },
+      { href: "/simulator", label: "Uji percakapan", icon: MessageCircle, key: "simulator", capability: "ai:manage" },
+      { href: "/ai-activity", label: "Aktivitas AI", icon: Activity, key: "ai-activity", capability: "ai:view" },
     ],
   },
   sales: {
     title: "Customer & penjualan",
     items: [
-      { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads" },
-      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers" },
-      { href: "/products", label: "Katalog produk", icon: Package, key: "products" },
-      { href: "/transactions", label: "Pesanan & penjualan", icon: ShoppingBag, key: "transactions" },
-      { href: "/proposals", label: "Draft proposal", icon: FileText, key: "proposals" },
-      { href: "/payments", label: "Pembayaran", icon: WalletCards, key: "payments" },
-      { href: "/receipts", label: "Review bukti bayar", icon: ReceiptText, key: "receipts" },
-      { href: "/reports", label: "Laporan", icon: TrendingUp, key: "reports" },
+      { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads", capability: "sales:view" },
+      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers", capability: "sales:view" },
+      { href: "/products", label: "Katalog produk", icon: Package, key: "products", capability: "sales:view" },
+      { href: "/transactions", label: "Pesanan & penjualan", icon: ShoppingBag, key: "transactions", capability: "finance:view" },
+      { href: "/proposals", label: "Draft proposal", icon: FileText, key: "proposals", capability: "sales:operate" },
+      { href: "/payments", label: "Pembayaran", icon: WalletCards, key: "payments", capability: "finance:view" },
+      { href: "/receipts", label: "Review bukti bayar", icon: ReceiptText, key: "receipts", capability: "finance:view" },
+      { href: "/reports", label: "Laporan", icon: TrendingUp, key: "reports", capability: "finance:view" },
     ],
   },
   automation: {
     title: "Otomatisasi",
     items: [
-      { href: "/integrations", label: "Channel & integrasi", icon: Building2, key: "integrations" },
-      { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours" },
-      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints" },
-      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts" },
-      { href: "/orders", label: "Otomatisasi pesanan", icon: ShoppingBag, key: "orders" },
-      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping" },
-      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows" },
-      { href: "/whatsapp", label: "Setup WhatsApp", icon: Code2, key: "whatsapp" },
-      { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness" },
+      { href: "/integrations", label: "Channel & integrasi", icon: Building2, key: "integrations", capability: "automation:manage" },
+      { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours", capability: "automation:manage" },
+      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints", capability: "operations:view" },
+      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts", capability: "automation:manage" },
+      { href: "/orders", label: "Otomatisasi pesanan", icon: ShoppingBag, key: "orders", capability: "operations:view" },
+      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping", capability: "operations:view" },
+      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows", capability: "automation:manage" },
+      { href: "/whatsapp", label: "Setup WhatsApp", icon: Code2, key: "whatsapp", capability: "automation:manage" },
+      { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness", capability: "automation:manage" },
     ],
   },
   settings: {
     title: "Ruang kerja",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
-      { href: "/business", label: "Profil bisnis", icon: Building2, key: "business" },
-      { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup" },
-      { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage" },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard", capability: "dashboard:view" },
+      { href: "/business", label: "Profil bisnis", icon: Building2, key: "business", capability: "workspace:manage" },
+      { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup", capability: "workspace:manage" },
+      { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage", capability: "workspace:manage" },
       ...(isTeamManagementEnabled()
-        ? [{ href: "/team", label: "Tim & akses", icon: Users, key: "team" }]
+        ? [{ href: "/team", label: "Tim & akses", icon: Users, key: "team", capability: "team:manage" as const }]
         : []),
-      { href: "/account", label: "Keamanan akun", icon: Settings, key: "account" },
+      { href: "/account", label: "Keamanan akun", icon: Settings, key: "account", capability: "account:view" },
     ],
   },
 };
@@ -156,20 +166,49 @@ type AppShellProps = {
   active: string;
   businessName?: string | null;
   children: React.ReactNode;
+  workspaceRole?: WorkspaceRoleValue;
 };
 
-export function AppShell({ active, businessName, children }: AppShellProps) {
+export async function AppShell({
+  active,
+  businessName,
+  children,
+  workspaceRole: providedWorkspaceRole,
+}: AppShellProps) {
+  const session = providedWorkspaceRole ? null : await getSession();
+  const workspaceRole = providedWorkspaceRole ?? session?.role ?? "VIEWER";
   const activeModule = moduleByActive[active] ?? "settings";
-  const activeNavigation = moduleNavigation[activeModule];
+  const requestedNavigationItem = moduleNavigation[activeModule].items.find(
+    (item) => item.key === active,
+  );
+  if (
+    requestedNavigationItem &&
+    !canWorkspace(workspaceRole, requestedNavigationItem.capability)
+  ) {
+    redirect(getWorkspaceHome(workspaceRole));
+  }
+  const visibleModuleNavigation = Object.fromEntries(
+    Object.entries(moduleNavigation).map(([key, navigation]) => [
+      key,
+      {
+        ...navigation,
+        items: navigation.items.filter((item) => canWorkspace(workspaceRole, item.capability)),
+      },
+    ]),
+  ) as Record<ModuleKey, { title: string; items: NavigationItem[] }>;
+  const activeNavigation = visibleModuleNavigation[activeModule];
   const groqConfigured = Boolean(process.env.GROQ_API_KEY);
 
   return (
-    <main className="app-frame">
+    <main
+      className={`app-frame workspace-role-${workspaceRole.toLowerCase()}`}
+      data-workspace-role={workspaceRole}
+    >
       <ToastCenter />
-      <OnboardingGuide />
+      {workspaceRole === "OWNER" ? <OnboardingGuide /> : null}
       <header className="app-topbar">
         <div className="app-logo-menu">
-          <Link className="app-logo" href="/dashboard" aria-label="Aijou AI dashboard">
+          <Link className="app-logo" href={getWorkspaceHome(workspaceRole)} aria-label="Aijou AI dashboard">
             <AijouLogo size={30} />
             <span className="app-wordmark">
               <strong>Aijou AI</strong>
@@ -179,18 +218,20 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <div className="logo-popover" role="tooltip">
             <strong>Aijou AI</strong>
             <span>AI sales workspace untuk percakapan yang bergerak maju.</span>
-            <Link href="/dashboard">Buka dashboard</Link>
+            <Link href={getWorkspaceHome(workspaceRole)}>Buka ruang kerja</Link>
           </div>
         </div>
 
         <nav className="workspace-primary-nav" aria-label="Navigasi utama">
           {primaryNavigation.map((item) => {
+            const firstVisibleItem = visibleModuleNavigation[item.module].items[0];
+            if (!firstVisibleItem) return null;
             const Icon = item.icon;
             const isActive = item.module === activeModule;
             return (
               <IntentPrefetchLink
                 className={isActive ? "top-nav-item active" : "top-nav-item"}
-                href={item.href}
+                href={firstVisibleItem.href}
                 key={item.module}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -202,7 +243,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
         </nav>
 
         <div className="topbar-actions">
-          <Link className="top-icon-button" href="/setup" aria-label="Bantuan" data-tooltip="Bantuan">
+          <Link className="top-icon-button" href={canWorkspace(workspaceRole, "workspace:manage") ? "/setup" : "/account"} aria-label="Bantuan" data-tooltip="Bantuan">
             <CircleHelp size={18} aria-hidden="true" />
           </Link>
           <NotificationBell />
@@ -223,6 +264,10 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           </div>
 
           <p className="sidebar-context-heading">{activeNavigation.title}</p>
+          <div className={`workspace-role-badge workspace-role-${workspaceRole.toLowerCase()}`}>
+            {getWorkspaceRoleLabel(workspaceRole)}
+            {workspaceRole === "VIEWER" ? <small>Data hanya dapat dilihat</small> : null}
+          </div>
           <nav className="settings-nav" aria-label={`Menu ${activeNavigation.title}`}>
             {activeNavigation.items.map((item) => {
               const Icon = item.icon;

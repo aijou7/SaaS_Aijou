@@ -32,7 +32,9 @@ export async function getFinanceDashboardSnapshot(userId: string) {
             some: {
               userId,
               isActive: true,
-              role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
+              role: {
+                in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.VIEWER],
+              },
             },
           },
         },

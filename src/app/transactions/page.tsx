@@ -43,8 +43,12 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   const modal = getSingleParam(resolvedSearchParams.modal);
   const selectedProductId = getSingleParam(resolvedSearchParams.productId);
   const productQuery = (getSingleParam(resolvedSearchParams.productQ) ?? "").trim().toLowerCase();
+  const readOnly = session.role === "VIEWER";
   if (view === "balance" || view === "payment-settings") {
     redirect("/payments");
+  }
+  if (readOnly && view !== "orders") {
+    redirect("/transactions");
   }
   const page = await getTransactionsPage(session.userId, filters);
   const paymentReady =
@@ -59,7 +63,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <AppShell active="transactions" businessName={page.business?.businessName}>
+    <AppShell active="transactions" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
       {view === "create" ? (
         <CreateOrderPage
           today={today}
@@ -70,7 +74,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
       ) : view === "products" ? (
         <ProductsPage modal={modal} productQuery={productQuery} products={visibleProducts} />
       ) : (
-        <OrdersPage filters={filters} page={page} />
+        <OrdersPage filters={filters} page={page} readOnly={readOnly} />
       )}
     </AppShell>
   );
@@ -79,9 +83,11 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
 function OrdersPage({
   filters,
   page,
+  readOnly,
 }: {
   filters: ReturnType<typeof parseTransactionFilters>;
   page: Awaited<ReturnType<typeof getTransactionsPage>>;
+  readOnly: boolean;
 }) {
   const now = new Date();
   const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
@@ -98,9 +104,9 @@ function OrdersPage({
             <CalendarDays size={17} aria-hidden="true" />
             Month
           </Link>
-          <Link className="primary-button" href="/transactions?view=create">
+          {!readOnly ? <Link className="primary-button" href="/transactions?view=create">
             Create Order
-          </Link>
+          </Link> : null}
         </div>
       </div>
 
@@ -183,7 +189,7 @@ function OrdersPage({
                     <a href={transaction.payment.paymentLinkUrl} target="_blank" rel="noreferrer">
                       Pay link
                     </a>
-                  ) : transaction.transactionType === "INCOME" && transaction.status !== "CONFIRMED" ? (
+                  ) : !readOnly && transaction.transactionType === "INCOME" && transaction.status !== "CONFIRMED" ? (
                     <form action={createPaymentLinkAction}>
                       <input name="transactionId" type="hidden" value={transaction.id} />
                       <button className="table-link-button" type="submit">Create link</button>

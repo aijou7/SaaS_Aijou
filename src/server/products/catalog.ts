@@ -1,9 +1,11 @@
+import { WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import {
   buildActiveProductPromptContext,
   type PublicCatalogItem,
 } from "@/lib/customer-pricing";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
+import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
 
 type ProductInput = {
   name: string;
@@ -156,17 +158,14 @@ export function parseProductFormData(formData: FormData): ProductInput {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
-  }
-  return business;
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 async function ensureProductBelongsToBusiness(productId: string, businessId: string) {

@@ -19,9 +19,10 @@ export default async function ProductsPage() {
   }
 
   const page = await getProductsPage(session.userId);
+  const canManageCatalog = session.role === "OWNER" || session.role === "ADMIN";
 
   return (
-    <AppShell active="products" businessName={page.business?.businessName}>
+    <AppShell active="products" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
       <section className="core-page">
         <div className="core-hero">
           <div>
@@ -62,7 +63,7 @@ export default async function ProductsPage() {
                     </div>
                     <p className="muted">{product.description || "Belum ada deskripsi produk."}</p>
                     <span>{formatCurrencyIDR(product.price)}</span>
-                    <details className="product-editor">
+                    {canManageCatalog ? <details className="product-editor">
                       <summary><Pencil size={14} aria-hidden="true" /> Edit produk</summary>
                       <form className="form-grid" action={updateProductAction}>
                         <input name="productId" type="hidden" value={product.id} />
@@ -88,14 +89,14 @@ export default async function ProductsPage() {
                         <input name="productId" type="hidden" value={product.id} />
                         <button className="product-delete" type="submit"><Archive size={14} aria-hidden="true" /> Nonaktifkan produk</button>
                       </form>
-                    </details>
+                    </details> : null}
                   </article>
                 ))}
               </div>
             )}
           </section>
 
-          <section className="core-card product-create-card">
+          {canManageCatalog ? <section className="core-card product-create-card">
             <div className="section-header">
               <div>
                 <h2>Tambah produk</h2>
@@ -124,7 +125,12 @@ export default async function ProductsPage() {
                 <Plus size={17} aria-hidden="true" /> Tambahkan ke katalog
               </button>
             </form>
-          </section>
+          </section> : (
+            <section className="core-card">
+              <h2>Katalog hanya lihat</h2>
+              <p className="muted">Produk dapat dibaca oleh tim. Perubahannya tetap dipegang Owner atau Admin.</p>
+            </section>
+          )}
         </div>
       </section>
     </AppShell>

@@ -36,7 +36,7 @@ export function calculateShippingQuotes(
 }
 
 export async function getShippingPage(userId: string, zone?: string, weight?: number) {
-  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT]);
+  const access = await requireWorkspaceAccess(userId);
   const records = await prisma.shippingRate.findMany({
     where: { businessId: access.businessId },
     orderBy: [{ zoneName: "asc" }, { basePrice: "asc" }],

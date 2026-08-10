@@ -26,8 +26,9 @@ export default async function PaymentsPage() {
     ),
     getPaymentsPage(session.userId),
   ]);
+  const readOnly = session.role === "VIEWER";
   return (
-    <AppShell active="payments" businessName={page.business?.businessName}>
+    <AppShell active="payments" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
       <section className="core-page">
         <div className="core-hero">
           <div>
@@ -38,10 +39,10 @@ export default async function PaymentsPage() {
               tervalidasi akan mengubah status order menjadi paid secara idempotent.
             </p>
           </div>
-          <Link className="primary-button icon-link" href="/transactions?view=create">
+          {!readOnly ? <Link className="primary-button icon-link" href="/transactions?view=create">
             <Link2 size={17} aria-hidden="true" />
             Create test order
-          </Link>
+          </Link> : null}
         </div>
 
         <div className="core-metrics">
@@ -70,7 +71,7 @@ export default async function PaymentsPage() {
                 {payments.ready ? "Ready" : "Needs setup"}
               </span>
             </div>
-            <form className="form-grid" action={updatePaymentSettingsAction}>
+            {!readOnly ? <form className="form-grid" action={updatePaymentSettingsAction}>
               <label className="span-2">
                 Secret API key
                 <input
@@ -98,7 +99,12 @@ export default async function PaymentsPage() {
                 Aktifkan payment link
               </label>
               <button className="primary-button span-2" type="submit">Simpan payment settings</button>
-            </form>
+            </form> : (
+              <div className="settings-note" role="status">
+                <strong>Mode hanya lihat</strong>
+                <p>Konfigurasi pembayaran hanya dapat diubah Owner atau Admin.</p>
+              </div>
+            )}
             {payments.configurationIssue ? (
               <div className="settings-note" role="alert">
                 {payments.configurationIssue}

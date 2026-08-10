@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { after } from "next/server";
+import { cache } from "react";
 import { getPasswordVersion } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
@@ -56,7 +57,7 @@ export async function clearSessionCookie() {
   }
 }
 
-export async function getSession() {
+export const getSession = cache(async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(getSessionCookieName())?.value;
 
@@ -141,7 +142,7 @@ export async function getSession() {
     role: ownedBusiness ? ("OWNER" as const) : memberWorkspace?.role ?? null,
     business: ownedBusiness ?? memberWorkspace?.business ?? null,
   };
-}
+});
 
 function signSession(payload: SessionPayload) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");

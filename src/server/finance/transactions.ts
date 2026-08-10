@@ -5,9 +5,11 @@ import {
   TransactionSource,
   TransactionStatus,
   TransactionType,
+  WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
 
 export type TransactionFilters = {
   status?: string;
@@ -498,19 +500,14 @@ function buildTransactionWhere(businessId: string, filters: TransactionFilters) 
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
-  }
-
-  return business;
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 async function upsertCategory(

@@ -5,9 +5,11 @@ import {
   Prisma,
   TransactionStatus,
   TransactionType,
+  WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { decryptSecret, encryptSecret } from "@/lib/secret-encryption";
 import { prisma } from "@/lib/prisma";
+import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
 import {
   readCredentialSnapshot,
   requireCompleteCredentialReplacement,
@@ -453,16 +455,15 @@ function decryptPaymentSettings<T extends {
 }
 
 async function getBusinessForUser(userId: string) {
-  return prisma.business.findUnique({
-    where: { userId },
+  return prisma.business.findFirst({
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-  if (!business) throw new Error("Workspace bisnis belum dibuat.");
-  return business;
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 async function markPaymentFailed(id: string, error: string, rawPayload?: unknown) {

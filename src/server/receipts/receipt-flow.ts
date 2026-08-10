@@ -6,9 +6,11 @@ import {
   TransactionSource,
   TransactionStatus,
   TransactionType,
+  WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
 import { extractReceiptFromMedia } from "@/server/receipts/ocr";
 import { downloadWhatsAppMedia } from "@/server/whatsapp/client";
 
@@ -389,19 +391,14 @@ async function findReceiptForBusiness(receiptId: string, businessId: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: workspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }
 
 async function requireBusinessForUser(userId: string) {
-  const business = await getBusinessForUser(userId);
-
-  if (!business) {
-    throw new Error("Business belum dibuat. Jalankan seed database dulu.");
-  }
-
-  return business;
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  return { id: access.businessId, businessName: access.businessName };
 }
 
 async function upsertCategory(businessId: string, categoryName?: string | null) {

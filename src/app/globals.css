@@ -8148,6 +8148,33 @@ body {
   text-transform: uppercase;
 }
 
+.workspace-role-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 10px 8px;
+  padding: 8px 12px;
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #f7f9fc;
+  color: #41506a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workspace-role-badge small {
+  color: #71809a;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.workspace-role-viewer .workspace-role-badge {
+  border-color: #cbd9f1;
+  background: #eef4ff;
+  color: #1747b0;
+}
+
 .settings-nav {
   display: grid;
   gap: 2px;

@@ -17,7 +17,7 @@ export default async function AiActivityPage() {
   const page = await getAiActivityPage(session.userId);
 
   return (
-    <AppShell active="ai-activity" businessName={page.business?.businessName}>
+    <AppShell active="ai-activity" businessName={page.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
 
         <section className="hero compact-hero">
           <p className="eyebrow">Aktivitas AI</p>

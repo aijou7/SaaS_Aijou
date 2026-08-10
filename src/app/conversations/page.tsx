@@ -84,7 +84,13 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const unread = getSearchParam(resolvedSearchParams, "unread") === "1";
   const pageNumber = Math.max(1, Number(getSearchParam(resolvedSearchParams, "page") ?? 1) || 1);
   const historyLimit = normalizeHistoryLimit(getSearchParam(resolvedSearchParams, "history"));
-  const currentView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
+  const requestedView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
+  const canManageChatConfiguration = session.role === "OWNER" || session.role === "ADMIN";
+  const currentView =
+    !canManageChatConfiguration && ["ai-agents", "platforms", "flow", "settings"].includes(requestedView)
+      ? "chat"
+      : requestedView;
+  const readOnly = session.role === "VIEWER";
   const business = session.business;
 
   const inboxFilters = { status, q, unread, page: pageNumber };
@@ -100,7 +106,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           ? getConversationDetailForBusiness(business.id, conversationId, historyLimit)
           : getConversationDetail(session.userId, conversationId)
         : Promise.resolve(null),
-      conversationId
+      conversationId && !readOnly
         ? business
           ? getActiveQuickRepliesForBusiness(business.id)
           : getActiveQuickRepliesForUser(session.userId)
@@ -108,7 +114,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
     ]);
 
     return (
-      <AppShell active="conversations" businessName={inbox.business?.businessName}>
+      <AppShell active="conversations" businessName={inbox.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
         <ChatInboxView
           inbox={inbox}
           liveState={inbox.liveState}
@@ -117,6 +123,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           selectedConversation={selectedConversation}
           status={status}
           unread={unread}
+          readOnly={readOnly}
         />
       </AppShell>
     );
@@ -131,7 +138,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   ]);
 
   return (
-    <AppShell active="conversations" businessName={inbox.business?.businessName}>
+    <AppShell active="conversations" businessName={inbox.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
       <ChatFeaturePanel
         agentPage={agentPage}
         inbox={inbox}
@@ -151,6 +158,7 @@ function ChatInboxView({
   selectedConversation,
   status,
   unread,
+  readOnly,
 }: {
   inbox: ConversationInbox;
   liveState: InboxLiveState;
@@ -159,6 +167,7 @@ function ChatInboxView({
   selectedConversation: ConversationDetail;
   status?: string;
   unread?: boolean;
+  readOnly: boolean;
 }) {
   return (
     <section className="chat-page">
@@ -240,11 +249,13 @@ function ChatInboxView({
             ) : (
               <ConversationDetailPanel
                 quickReplies={quickReplies}
+                readOnly={readOnly}
                 selectedConversation={selectedConversation}
               />
             )
           }
           quickReplies={quickReplies}
+          readOnly={readOnly}
         />
       </main>
     </section>
@@ -519,9 +530,11 @@ function LegacyConversationDetailPanel({
 */
 function ConversationDetailPanel({
   quickReplies,
+  readOnly,
   selectedConversation,
 }: {
   quickReplies: QuickReplies;
+  readOnly: boolean;
   selectedConversation: NonNullable<ConversationDetail>;
 }) {
   const outsideWhatsAppWindow =
@@ -554,7 +567,7 @@ function ConversationDetailPanel({
             messages={selectedConversation.messages}
           />
 
-          {outsideWhatsAppWindow ? (
+          {!readOnly && outsideWhatsAppWindow ? (
             <details className="whatsapp-template-panel">
               <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
@@ -576,7 +589,7 @@ function ConversationDetailPanel({
             </details>
           ) : null}
 
-          {quickReplies.length > 0 ? (
+          {!readOnly && quickReplies.length > 0 ? (
             <details className="quick-reply-strip">
               <summary>Gunakan balasan cepat</summary>
               <form action={sendOwnerReplyAction}>
@@ -595,19 +608,26 @@ function ConversationDetailPanel({
             </details>
           ) : null}
 
-          <ChatReplyComposer
-            conversationId={selectedConversation.id}
-            quickReplies={quickReplies}
-            blockedReason={
-              outsideWhatsAppWindow
-                ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru."
-                : null
-            }
-          />
+          {readOnly ? (
+            <div className="settings-note" role="status">
+              <strong>Mode hanya lihat</strong>
+              <p>Viewer dapat membaca riwayat chat, tetapi tidak dapat membalas atau mengubah status.</p>
+            </div>
+          ) : (
+            <ChatReplyComposer
+              conversationId={selectedConversation.id}
+              quickReplies={quickReplies}
+              blockedReason={
+                outsideWhatsAppWindow
+                  ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru."
+                  : null
+              }
+            />
+          )}
         </div>
 
         <aside className="chat-context-panel" aria-label="Detail percakapan">
-          <section className="chat-context-section chat-context-controls">
+          {!readOnly ? <section className="chat-context-section chat-context-controls">
             <div className="chat-context-heading">
               <div>
                 <strong>Kendali chat</strong>
@@ -615,9 +635,9 @@ function ConversationDetailPanel({
               </div>
               <ConversationModeControls conversationId={selectedConversation.id} status={selectedConversation.status} />
             </div>
-          </section>
+          </section> : null}
 
-          <details className="chat-context-section" open>
+          {!readOnly ? <details className="chat-context-section" open>
             <summary>Penanggung jawab</summary>
             <form className="conversation-assignment" action={assignConversationAction}>
               <input name="conversationId" type="hidden" value={selectedConversation.id} />
@@ -629,7 +649,7 @@ function ConversationDetailPanel({
               </select>
               <button className="small-outline-button" type="submit">Simpan</button>
             </form>
-          </details>
+          </details> : null}
 
           {selectedConversation.lead ? (
             <details className="chat-context-section" open>
@@ -651,14 +671,14 @@ function ConversationDetailPanel({
             </details>
           ) : null}
 
-          <details className="chat-context-section">
+          {!readOnly ? <details className="chat-context-section">
             <summary>Catatan internal</summary>
             <form className="owner-notes-form" action={updateConversationNotesAction}>
               <input name="conversationId" type="hidden" value={selectedConversation.id} />
               <textarea name="ownerNotes" defaultValue={selectedConversation.ownerNotes ?? ""} placeholder="Follow up besok, minta foto lokasi..." aria-label="Catatan internal" />
               <button className="small-outline-button" type="submit">Simpan catatan</button>
             </form>
-          </details>
+          </details> : null}
         </aside>
       </div>
     </section>

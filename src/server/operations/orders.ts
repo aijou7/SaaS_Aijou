@@ -6,7 +6,7 @@ import { requireWorkspaceAccess } from "@/server/workspace-access";
 const roles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT];
 
 export async function getOrdersPage(userId: string) {
-  const access = await requireWorkspaceAccess(userId, roles);
+  const access = await requireWorkspaceAccess(userId);
   const [orders, products, rates, summary] = await Promise.all([
     prisma.order.findMany({
       where: { businessId: access.businessId },

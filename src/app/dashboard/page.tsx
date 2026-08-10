@@ -33,6 +33,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     redirect("/login" as Route);
   }
 
+  if (session.role === "AGENT") {
+    redirect("/conversations" as Route);
+  }
+
   const [dashboard, params] = await Promise.all([
     getFinanceDashboardSnapshot(session.userId),
     searchParams,
@@ -44,7 +48,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     !dashboard.onboardingCompleted
   ) {
     return (
-      <AppShell active="dashboard" businessName={dashboard.businessName}>
+      <AppShell active="dashboard" businessName={dashboard.businessName} workspaceRole={session.role ?? "VIEWER"}>
         <section className="new-workspace-dashboard">
           <div className="new-workspace-welcome">
             <span className="new-workspace-icon" aria-hidden="true">
@@ -108,7 +112,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   return (
-    <AppShell active="dashboard" businessName={dashboard.businessName}>
+    <AppShell active="dashboard" businessName={dashboard.businessName} workspaceRole={session.role ?? "VIEWER"}>
       <div className="dashboard-topbar">
         <div>
           <p className="eyebrow">Aijou control center</p>
@@ -198,16 +202,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <strong>Inbox</strong>
             <p>Aijou menjawab chat dengan konteks; tim Anda bisa mengambil alih kapan pun.</p>
           </Link>
-          <Link className="module-card" href="/training">
+          {session.role !== "VIEWER" ? <Link className="module-card" href="/training">
             <Sparkles size={22} aria-hidden="true" />
             <strong>Training</strong>
             <p>Knowledge, .txt, dan percakapan lama untuk membentuk cara Aijou membantu.</p>
-          </Link>
-          <Link className="module-card" href="/agent">
+          </Link> : null}
+          {session.role !== "VIEWER" ? <Link className="module-card" href="/agent">
             <Bot size={22} aria-hidden="true" />
             <strong>AI Agent</strong>
             <p>Atur gaya bahasa, batasan, dan kapan Aijou meneruskan chat ke tim.</p>
-          </Link>
+          </Link> : null}
           <Link className="module-card" href="/products">
             <ReceiptText size={22} aria-hidden="true" />
             <strong>Products</strong>
@@ -218,11 +222,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <strong>Payments</strong>
             <p>Xendit, QRIS, VA, dan payment status yang update otomatis.</p>
           </Link>
-          <Link className="module-card" href="/integrations">
+          {session.role !== "VIEWER" ? <Link className="module-card" href="/integrations">
             <ClipboardCheck size={22} aria-hidden="true" />
             <strong>Integrations</strong>
             <p>Web Live Chat dan Telegram siap dipakai; WhatsApp tersedia setelah setup Meta.</p>
-          </Link>
+          </Link> : null}
         </div>
       </section>
 

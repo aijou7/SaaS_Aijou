@@ -61,6 +61,7 @@ export function LiveConversationDetail(props: {
   initialDetail: ConversationDetail | null;
   initialPanel: ReactNode;
   quickReplies: QuickReply[];
+  readOnly?: boolean;
 }) {
   const [detail, setDetail] = useState<ConversationDetail | null>(
     props.initialDetail,
@@ -143,6 +144,7 @@ export function LiveConversationDetail(props: {
       detail={detail}
       loading={loading}
       quickReplies={props.quickReplies}
+      readOnly={Boolean(props.readOnly)}
     />
   );
 }
@@ -313,6 +315,7 @@ function ClientConversationPanel(props: {
   detail: ConversationDetail;
   quickReplies: QuickReply[];
   loading: boolean;
+  readOnly: boolean;
 }) {
   const { detail } = props;
   const outsideWhatsAppWindow =
@@ -343,7 +346,7 @@ function ClientConversationPanel(props: {
             messages={detail.messages}
           />
 
-          {outsideWhatsAppWindow ? (
+          {!props.readOnly && outsideWhatsAppWindow ? (
             <details className="whatsapp-template-panel">
               <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
@@ -356,7 +359,7 @@ function ClientConversationPanel(props: {
             </details>
           ) : null}
 
-          {props.quickReplies.length > 0 ? (
+          {!props.readOnly && props.quickReplies.length > 0 ? (
             <details className="quick-reply-strip">
               <summary>Gunakan balasan cepat</summary>
               <form action={sendOwnerReplyAction}>
@@ -374,22 +377,29 @@ function ClientConversationPanel(props: {
             </details>
           ) : null}
 
-          <ChatReplyComposer
-            conversationId={detail.id}
-            quickReplies={props.quickReplies}
-            blockedReason={outsideWhatsAppWindow ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru." : null}
-          />
+          {props.readOnly ? (
+            <div className="settings-note" role="status">
+              <strong>Mode hanya lihat</strong>
+              <p>Viewer dapat membaca riwayat chat, tetapi tidak dapat membalas atau mengubah status.</p>
+            </div>
+          ) : (
+            <ChatReplyComposer
+              conversationId={detail.id}
+              quickReplies={props.quickReplies}
+              blockedReason={outsideWhatsAppWindow ? "Jendela layanan WhatsApp 24 jam sudah berakhir. Kirim approved template Meta, atau tunggu pelanggan mengirim pesan baru." : null}
+            />
+          )}
         </div>
 
         <aside className="chat-context-panel" aria-label="Detail percakapan">
-          <section className="chat-context-section chat-context-controls">
+          {!props.readOnly ? <section className="chat-context-section chat-context-controls">
             <div className="chat-context-heading">
               <div><strong>Kendali chat</strong><span>Atur siapa yang menjawab pelanggan.</span></div>
               <ConversationModeControls conversationId={detail.id} status={detail.status} />
             </div>
-          </section>
+          </section> : null}
 
-          <details className="chat-context-section" open>
+          {!props.readOnly ? <details className="chat-context-section" open>
             <summary>Penanggung jawab</summary>
             <form className="conversation-assignment" action={assignConversationAction}>
               <input name="conversationId" type="hidden" value={detail.id} />
@@ -399,7 +409,7 @@ function ClientConversationPanel(props: {
               </select>
               <button className="small-outline-button" type="submit">Simpan</button>
             </form>
-          </details>
+          </details> : null}
 
           {detail.lead ? (
             <details className="chat-context-section" open>
@@ -414,14 +424,14 @@ function ClientConversationPanel(props: {
             </details>
           ) : null}
 
-          <details className="chat-context-section">
+          {!props.readOnly ? <details className="chat-context-section">
             <summary>Catatan internal</summary>
             <form className="owner-notes-form" action={updateConversationNotesAction}>
               <input name="conversationId" type="hidden" value={detail.id} />
               <textarea name="ownerNotes" defaultValue={detail.ownerNotes ?? ""} placeholder="Follow up besok, minta foto lokasi..." aria-label="Catatan internal" />
               <button className="small-outline-button" type="submit">Simpan catatan</button>
             </form>
-          </details>
+          </details> : null}
         </aside>
       </div>
     </section>
