@@ -4,6 +4,7 @@ import {
   buildContextAwareFallback,
   buildContextualCustomerReply,
   buildDerivedConversationContext,
+  buildOperationalFollowUpReply,
   polishCustomerReply,
 } from "../src/lib/customer-conversation";
 
@@ -184,8 +185,61 @@ describe("customer conversation continuity", () => {
     });
 
     assert.match(fallback, /website company profile/i);
-    assert.match(fallback, /bukan mengulang dari awal/i);
+    assert.match(fallback, /detail sebelumnya tetap tersimpan/i);
+    assert.doesNotMatch(fallback, /konteks.*sudah.*catat/i);
     assert.doesNotMatch(fallback, /^halo/i);
+  });
+
+  test("records a requested survey slot without pretending it is confirmed", () => {
+    const decision = buildOperationalFollowUpReply({
+      message: "Jl Amir Hamzah no 2, untuk besok jam 10 pagi bisa ya?",
+      conversationContext: [
+        "Customer: Bisa langsung survei ke lokasi?",
+        "Assistant: Bisa. Kirim alamat dan waktu kunjungan yang diinginkan.",
+      ].join("\n"),
+    });
+
+    assert.match(decision?.reply ?? "", /besok pukul 10\.00/i);
+    assert.match(decision?.reply ?? "", /belum final/i);
+    assert.match(decision?.handoffReason ?? "", /jadwal survei/i);
+    assert.doesNotMatch(decision?.reply ?? "", /dapat melakukan|jadwal.*(?:sudah|berhasil).*dikonfirmasi/i);
+  });
+
+  test("uses the current WhatsApp number for survey coordination", () => {
+    const decision = buildOperationalFollowUpReply({
+      message: "nomor whatsappnya yang saya gunakan ini",
+      conversationContext: [
+        "Customer: Saya minta survei besok jam 10.",
+        "Assistant: Nomor mana yang bisa dipakai untuk koordinasi kunjungan?",
+      ].join("\n"),
+    });
+
+    assert.match(decision?.reply ?? "", /nomor WhatsApp ini/i);
+    assert.match(decision?.reply ?? "", /setelah tim mengonfirmasi/i);
+  });
+
+  test("understands a short confirmation as the answer to the visit details", () => {
+    const decision = buildOperationalFollowUpReply({
+      message: "ya tepat",
+      conversationContext: [
+        "Customer: Saya minta survei di Jl Amir Hamzah besok jam 10.",
+        "Assistant: Apakah alamat dan waktu tersebut sudah tepat?",
+      ].join("\n"),
+    });
+
+    assert.match(decision?.reply ?? "", /detail alamat dan waktunya sudah benar/i);
+    assert.match(decision?.reply ?? "", /konfirmasi final/i);
+  });
+
+  test("routes an undocumented survey fee to the team without inventing a policy", () => {
+    const decision = buildOperationalFollowUpReply({
+      message: "apakah ada biaya survei?",
+      conversationContext: "Assistant: Kami bisa mengatur kunjungan teknisi ke lokasi.",
+    });
+
+    assert.match(decision?.reply ?? "", /belum tercantum/i);
+    assert.match(decision?.reply ?? "", /tidak akan menebak/i);
+    assert.doesNotMatch(decision?.reply ?? "", /tidak terpisah|quotation akhir/i);
   });
 
   test("strips repeat greetings and previously asked questions", () => {

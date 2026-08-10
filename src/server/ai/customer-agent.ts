@@ -2,6 +2,7 @@ import {
   buildContextAwareFallback,
   buildContextualCustomerReply,
   buildDerivedConversationContext,
+  buildOperationalFollowUpReply,
   polishCustomerReply,
 } from "@/lib/customer-conversation";
 import { buildPublishedPriceReply } from "@/lib/customer-pricing";
@@ -43,6 +44,14 @@ export async function buildCustomerServiceReplyAi(params: {
     return publishedPriceReply;
   }
 
+  const operationalReply = buildOperationalFollowUpReply({
+    message,
+    conversationContext,
+  });
+  if (operationalReply) {
+    return operationalReply.reply;
+  }
+
   const contextualReply = buildContextualCustomerReply({
     message,
     conversationContext,
@@ -72,6 +81,7 @@ export async function buildCustomerServiceReplyAi(params: {
       `Tone: ${settings.tone}.`,
       "Act like an experienced human technical customer-service representative: understand the need, answer it, give useful technical direction, and collect only details that are truly missing.",
       "Use natural Indonesian that matches the customer's level of formality. Be warm without sounding scripted.",
+      "For a short initial service request, respond conversationally in 1-3 sentences. Do not dump a checklist, numbered implementation plan, or technical lecture unless the customer explicitly asks how it will be built.",
       "Start with the answer, recommendation, or requested fact. Never praise the customer's idea, paraphrase their message, or explain generic benefits before answering.",
       "Never open with filler such as 'Membuat X adalah langkah yang tepat', 'Saya paham', 'Tentu', 'Baik', 'Menarik', or 'Ini dapat meningkatkan visibilitas/efisiensi bisnis'.",
       "Never claim you can remotely access, log in to, inspect, scan, or update a customer's router, device, server, or private system. You may guide them after they provide a brand/model, non-sensitive screenshot, status output, or log. Explicitly tell them not to share passwords or admin credentials.",
@@ -90,6 +100,8 @@ export async function buildCustomerServiceReplyAi(params: {
       "After stating a published starting price, briefly explain that final cost follows scope, integrations, quantity, or site conditions when relevant.",
       "You may mention a planning estimate only if the business knowledge, active catalog, or customer budget supports it. Make it clear when it is not a final quote.",
       "Do not provide final prices or guarantees.",
+      "Never confirm that a technician visit, meeting, deadline, or appointment is booked or available. Record the customer's requested slot and say the team must confirm availability first.",
+      "If a survey, visit, or other service fee is absent from approved knowledge and catalog, say the fee is not listed and route it to the team. Never substitute prices from unrelated services.",
       "If asked for a final price, explain that owner needs details first and ask clarifying questions.",
       "If the customer asks for human/admin/owner, say you will hand off to the owner.",
       "Do not claim services, prices, timelines, or guarantees that are not supported by the business context below.",
@@ -148,7 +160,7 @@ export async function buildCustomerServiceReplyAi(params: {
         reply: fallback,
         conversationContext,
         fallback:
-          "Konteksnya sudah saya catat. Tim kami bisa lanjut dari detail terakhir tanpa mengulang dari awal.",
+          "Saya belum punya dasar yang cukup untuk memastikan jawabannya. Saya akan menjaga detail percakapan ini dan tidak menebak informasi bisnis yang belum tercantum.",
         maxWords: responsePolicy.maxWords,
       });
 }

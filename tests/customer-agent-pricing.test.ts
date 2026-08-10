@@ -68,6 +68,19 @@ describe("published pricing grounding", () => {
     assert.equal(reply, null);
   });
 
+  test("does not substitute unrelated catalog prices for an unknown survey fee", () => {
+    const reply = buildPublishedPriceReply({
+      message: "Apakah ada biaya survei teknisi?",
+      conversationContext: [
+        "Customer: Saya mau pasang router untuk gedung dua lantai",
+        "Assistant: Kami bisa bantu survei lokasi.",
+      ].join("\n"),
+      products: catalog,
+    });
+
+    assert.equal(reply, null);
+  });
+
   test("reads structured starting prices synchronized from official knowledge", () => {
     const knowledge = [
       "Harga publik yang terdeteksi:",

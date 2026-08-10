@@ -5,6 +5,7 @@ import {
   SenderType,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { buildOperationalFollowUpReply } from "@/lib/customer-conversation";
 import {
   buildCustomerServiceReplyAi,
   isHandoffRequest,
@@ -105,20 +106,37 @@ export async function simulateClientChatMessage(userId: string, params: {
   // before they explicitly activate the agent.
   if (settings.isActive || result.aiReply) return result;
 
-  const [knowledgeContext, productCatalog] = await Promise.all([
+  const [knowledgeContext, productCatalog, conversationMessages] = await Promise.all([
     getActiveKnowledgeContext(business.id, params.message),
     getActiveProductCatalog(business.id),
+    prisma.whatsAppMessage.findMany({
+      where: { conversationId: result.conversationId, messageType: MessageType.TEXT },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: { senderType: true, messageBody: true },
+    }),
   ]);
+  const conversationContext = conversationMessages
+    .reverse()
+    .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Assistant"}: ${item.messageBody ?? ""}`)
+    .join("\n");
   const previewReply = await buildCustomerServiceReplyAi({
     businessId: business.id,
     message: params.message,
     knowledgeContext,
     productContext: productCatalog.context,
     products: productCatalog.items,
-    conversationContext: `Customer: ${params.message}`,
+    conversationContext,
     settings,
   });
-  const handoffRequested = isHandoffRequest(params.message);
+  const handoffRequested =
+    isHandoffRequest(params.message) ||
+    Boolean(
+      buildOperationalFollowUpReply({
+        message: params.message,
+        conversationContext,
+      }),
+    );
   const previewStatus = handoffRequested
     ? ConversationStatus.HUMAN_NEEDED
     : ConversationStatus.OPEN;

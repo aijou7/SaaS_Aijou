@@ -65,6 +65,15 @@ describe("AI reply regression quality gate", () => {
     assert.ok(result.violations.includes("generic_filler"));
   });
 
+  test("rejects truncated numbered answers", () => {
+    const result = evaluateAiResponseQuality({
+      reply: "1. Survei lokasi. 2. Tentukan access point. 3. Tarik kabel. 4.",
+    });
+
+    assert.equal(result.passed, false);
+    assert.ok(result.violations.includes("incomplete_reply"));
+  });
+
   test("deterministic short follow-ups pass the same quality gate", () => {
     const cases = [
       buildContextualCustomerReply({

@@ -13,6 +13,8 @@ const genericFillerPatterns = [
   /\btentu saja\b/i,
   /boleh ceritakan kebutuhan, target/i,
   /jawabanmu sudah saya catat.*tambahkan sedikit detail/i,
+  /konteks(?:nya|\s+.+)? sudah (?:saya )?catat/i,
+  /bukan mengulang dari awal/i,
 ];
 
 const unsupportedCapabilityPatterns = [
@@ -40,6 +42,9 @@ export function evaluateAiResponseQuality(params: {
   if (unsupportedCapabilityPatterns.some((pattern) => pattern.test(reply))) {
     violations.push("unsupported_remote_access");
   }
+  if (/\b\d+\.\s*$/.test(reply) || /\b(?:dan|atau|dengan|untuk|yang|serta)\s*[.!]?$/i.test(reply)) {
+    violations.push("incomplete_reply");
+  }
 
   const hasPriorAssistant = /(?:^|\n)(?:Assistant|AI):\s*\S/i.test(
     params.conversationContext ?? "",
@@ -66,6 +71,7 @@ export function evaluateAiResponseQuality(params: {
     repeated_greeting: 25,
     repeated_question: 45,
     unsupported_remote_access: 60,
+    incomplete_reply: 60,
   };
   const score = Math.max(
     0,

@@ -6,12 +6,18 @@ export type CustomerResponsePolicy = {
 export function buildCustomerResponsePolicy(message: string): CustomerResponsePolicy {
   const normalized = message.toLowerCase();
   const wordCount = message.trim().split(/\s+/).filter(Boolean).length;
-  const technical =
-    wordCount >= 28 ||
-    message.length >= 220 ||
+  const hasTechnicalSubject =
     /\b(?:api|database|server|network|jaringan|wifi|router|firewall|vlan|vpn|dns|cloud|hosting|deployment|integrasi|webhook|security|keamanan|arsitektur|infrastruktur|framework|software|aplikasi|dashboard|automation|otomasi|error|log|firmware|bandwidth|latency|topologi)\b/i.test(
       normalized,
     );
+  const asksForTechnicalDepth =
+    /\b(?:bagaimana|gimana|cara|rekomendasi|desain|design|arsitektur|topologi|konfigurasi|setup|troubleshoot|diagnosis|kenapa|error)\b/i.test(
+      normalized,
+    );
+  const technical =
+    wordCount >= 28 ||
+    message.length >= 220 ||
+    (hasTechnicalSubject && asksForTechnicalDepth);
 
   if (technical) {
     return {

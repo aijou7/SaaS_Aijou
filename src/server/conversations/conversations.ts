@@ -18,6 +18,8 @@ import {
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { emptyInboxLiveState } from "@/lib/inbox-live";
+import { buildOperationalFollowUpReply } from "@/lib/customer-conversation";
+import { buildPublishedPriceReply } from "@/lib/customer-pricing";
 import { ttlCache } from "@/lib/ttl-cache";
 import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 import { getAgentRuntimeSettings } from "@/server/agent/settings";
@@ -551,6 +553,7 @@ async function simulateCustomerMessageForResolvedBusiness(
     timeZone: settings.timeZone,
   });
   const outsideBusinessHours = settings.isActive && !hours.isOpen;
+  let operationalHandoffReason: string | null = null;
 
   if (!settings.isActive) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;
@@ -575,18 +578,40 @@ async function simulateCustomerMessageForResolvedBusiness(
         select: { senderType: true, messageBody: true },
       }),
     ]);
-    aiReply = await buildCustomerServiceReplyAi({
-      businessId: business.id,
-      message: input.message,
-      knowledgeContext,
-      productContext: productCatalog.context,
-      products: productCatalog.items,
-      conversationContext: messages
-        .reverse()
-        .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Assistant"}: ${item.messageBody ?? ""}`)
-        .join("\n"),
-      settings,
-    });
+    const conversationContext = messages
+      .reverse()
+      .map((item) => `${item.senderType === SenderType.CUSTOMER ? "Customer" : "Assistant"}: ${item.messageBody ?? ""}`)
+      .join("\n");
+    const hasPublishedPriceAnswer = Boolean(
+      buildPublishedPriceReply({
+        message: input.message,
+        conversationContext,
+        knowledgeContext,
+        products: productCatalog.items,
+      }),
+    );
+    const operationalFollowUp = hasPublishedPriceAnswer
+      ? null
+      : buildOperationalFollowUpReply({
+          message: input.message,
+          conversationContext,
+        });
+
+    if (operationalFollowUp) {
+      nextStatus = ConversationStatus.HUMAN_NEEDED;
+      operationalHandoffReason = operationalFollowUp.handoffReason;
+      aiReply = operationalFollowUp.reply;
+    } else {
+      aiReply = await buildCustomerServiceReplyAi({
+        businessId: business.id,
+        message: input.message,
+        knowledgeContext,
+        productContext: productCatalog.context,
+        products: productCatalog.items,
+        conversationContext,
+        settings,
+      });
+    }
   }
 
   // AI generation may take several seconds. Lock and re-read the conversation
@@ -647,11 +672,14 @@ async function simulateCustomerMessageForResolvedBusiness(
           outputText: finalReply,
           intent: outsideBusinessHours
             ? "outside_business_hours"
-            : handoffRequested
+            : handoffRequested || operationalHandoffReason
               ? "handoff_request"
               : "customer_service_reply",
-          confidenceScore: handoffRequested || outsideBusinessHours ? "0.95" : "0.82",
-          actionTaken: handoffRequested || outsideBusinessHours
+          confidenceScore:
+            handoffRequested || operationalHandoffReason || outsideBusinessHours
+              ? "0.95"
+              : "0.82",
+          actionTaken: handoffRequested || operationalHandoffReason || outsideBusinessHours
             ? "handoff_reply_created"
             : "customer_service_reply_created",
         },
@@ -677,11 +705,11 @@ async function simulateCustomerMessageForResolvedBusiness(
         conversationId: conversation.id,
         triggerId: customerMessage.id,
         contactName: contact.displayName ?? contact.phoneNumber,
-        reason: handoffRequested
+        reason: operationalHandoffReason ?? (handoffRequested
           ? "Customer meminta berbicara dengan manusia."
           : outsideBusinessHours
             ? "Pesan masuk di luar jam kerja AI."
-            : "AI tidak aktif atau membutuhkan bantuan operator.",
+            : "AI tidak aktif atau membutuhkan bantuan operator."),
       });
     }
 

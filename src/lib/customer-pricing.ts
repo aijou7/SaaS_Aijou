@@ -57,6 +57,7 @@ export function buildPublishedPriceReply(params: {
   }
 
   const latestQuery = normalizeSearchText(params.message);
+  const latestSubjectTerms = getPriceSubjectTerms(latestQuery);
   const fullQuery = normalizeSearchText(
     `${params.conversationContext?.slice(-3_000) ?? ""}\n${params.message}`,
   );
@@ -75,9 +76,11 @@ export function buildPublishedPriceReply(params: {
   const relevant = (
     latestMatches.length > 0
       ? latestMatches
-      : ranked
+      : latestSubjectTerms.length === 0
+        ? ranked
           .filter((item) => item.conversationScore > 0)
           .sort((left, right) => right.conversationScore - left.conversationScore)
+        : []
   ).slice(0, 3);
   const selected =
     relevant.length > 0
@@ -166,11 +169,13 @@ function scoreOfferMatch(label: string, query: string) {
 }
 
 function shouldListPublishedPrices(query: string) {
-  const remainingTerms = query
+  return getPriceSubjectTerms(query).length === 0;
+}
+
+function getPriceSubjectTerms(query: string) {
+  return query
     .split(" ")
     .filter((token) => token.length >= 3 && !priceQueryStopWords.has(token));
-
-  return remainingTerms.length === 0;
 }
 
 function normalizeSearchText(value: string) {
@@ -206,6 +211,9 @@ const priceQueryStopWords = new Set([
   "mulai",
   "dari",
   "untuk",
+  "kalau",
+  "kalo",
+  "jadi",
   "jasa",
   "layanan",
   "produk",

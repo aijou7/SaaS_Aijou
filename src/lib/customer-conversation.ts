@@ -1,5 +1,10 @@
 type ConversationTurn = { role: "customer" | "assistant"; text: string };
 
+export type OperationalFollowUpDecision = {
+  reply: string;
+  handoffReason: string;
+};
+
 type ConversationFacts = {
   hasAssistantReply: boolean;
   latestAssistantMessage: string | null;
@@ -34,6 +39,88 @@ export function buildDerivedConversationContext(
   return knownFacts.length
     ? knownFacts.join("\n")
     : "Belum ada fakta kebutuhan yang cukup spesifik.";
+}
+
+export function buildOperationalFollowUpReply(params: {
+  message: string;
+  conversationContext?: string;
+}): OperationalFollowUpDecision | null {
+  const turns = parseConversation(params.conversationContext);
+  const latestAssistant = normalize(
+    [...turns].reverse().find((turn) => turn.role === "assistant")?.text ?? "",
+  );
+  const recentTurns = turns.slice(-10);
+  const recentContext = normalize(
+    [...recentTurns.map((turn) => turn.text), params.message].join(" "),
+  );
+  const message = normalize(params.message);
+  const hasVisitContext =
+    /\b(?:survei|survey|kunjungan|visit|teknisi ke lokasi|datang ke lokasi|langsung ke lokasi)\b/.test(
+      recentContext,
+    );
+
+  if (!hasVisitContext) return null;
+
+  const asksSurveyFee =
+    /\b(?:harga|biaya|tarif|bayar|gratis)\b/.test(message) &&
+    (/\b(?:survei|survey|kunjungan|teknisi)\b/.test(message) ||
+      /\b(?:survei|survey|kunjungan)\b/.test(latestAssistant));
+  if (asksSurveyFee) {
+    return {
+      reply:
+        "Biaya survei belum tercantum di informasi resmi yang saya punya, jadi saya tidak akan menebak. Saya teruskan ke tim agar biaya dan jadwalnya dikonfirmasi di chat ini.",
+      handoffReason: "Customer meminta kepastian biaya survei teknisi.",
+    };
+  }
+
+  if (
+    /\b(?:nomor|no)\s*(?:whatsapp|wa)?(?:nya)?\b.*\b(?:ini|gunakan|pakai)\b/.test(
+      message,
+    ) ||
+    /\b(?:whatsapp|wa)\s+yang\s+(?:saya|aku)\s+(?:gunakan|pakai)\s+ini\b/.test(
+      message,
+    )
+  ) {
+    return {
+      reply:
+        "Siap, nomor WhatsApp ini saya pakai untuk koordinasi. Permintaan surveinya sudah diteruskan ke tim; jadwal baru dianggap tetap setelah tim mengonfirmasi di chat ini.",
+      handoffReason: "Customer memberikan nomor koordinasi untuk survei teknisi.",
+    };
+  }
+
+  const confirmsVisitDetails =
+    isShortAffirmative(message) &&
+    /\b(?:alamat|lokasi)\b.*\b(?:waktu|jam|jadwal|tepat|benar|sesuai)\b|\b(?:waktu|jam|jadwal)\b.*\b(?:alamat|lokasi|tepat|benar|sesuai)\b/.test(
+      latestAssistant,
+    );
+  if (confirmsVisitDetails) {
+    return {
+      reply:
+        "Sip, detail alamat dan waktunya sudah benar. Saya teruskan ke tim untuk mengecek ketersediaan teknisi; konfirmasi finalnya akan dikirim di chat ini.",
+      handoffReason: "Customer mengonfirmasi detail permintaan survei teknisi.",
+    };
+  }
+
+  const containsVisitSlot =
+    /\b(?:besok|lusa|hari\s+(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)|tanggal\s+\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b/.test(
+      message,
+    ) &&
+    /\b(?:jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/.test(message);
+  const followsPendingSlot =
+    /^(?:bisa|boleh)(?:\s+(?:tidak|nggak|ga|gak))?$/.test(message) &&
+    /\b(?:besok|lusa|tanggal|jam|pukul)\b/.test(recentContext);
+
+  if (containsVisitSlot || followsPendingSlot) {
+    const requestedSlot = describeRequestedSlot(params.message);
+    return {
+      reply: requestedSlot
+        ? `Saya catat permintaan survei ${requestedSlot}. Tim perlu mengecek ketersediaan teknisi dulu, jadi jadwalnya belum final. Konfirmasinya akan dikirim di chat ini.`
+        : "Permintaan waktunya sudah saya catat. Tim perlu mengecek ketersediaan teknisi dulu, jadi jadwalnya belum final. Konfirmasinya akan dikirim di chat ini.",
+      handoffReason: "Customer meminta konfirmasi jadwal survei teknisi.",
+    };
+  }
+
+  return null;
 }
 
 export function buildContextualCustomerReply(params: {
@@ -139,7 +226,7 @@ export function buildContextAwareFallback(params: {
     ]
       .filter(Boolean)
       .join(" ");
-    return `Oke, konteks ${facts.project}${details ? ` ${details}` : ""} sudah saya catat. Kita lanjut dari informasi itu, bukan mengulang dari awal. Bagian mana yang ingin kamu pastikan berikutnya: scope, proses pengerjaan, atau estimasi?`;
+    return `Untuk kebutuhan ${facts.project}${details ? ` ${details}` : ""}, saya belum punya dasar yang cukup untuk memastikan jawaban berikutnya tanpa menebak. Detail sebelumnya tetap tersimpan; sebutkan satu hal yang perlu dipastikan sekarang.`;
   }
   return facts.hasAssistantReply
     ? "Biar tidak salah arah, sebutkan perangkat atau layanan yang dimaksud dan kendala utamanya dalam satu kalimat."
@@ -289,7 +376,7 @@ function isBothAnswer(text: string) {
 }
 
 function isShortAffirmative(text: string) {
-  return /^(?:ya|iya|boleh|oke|ok|siap|lanjut|gas|gass|silakan|ayo)(?:\s+(?:deh|dong|ya|aja|gan|kak|bro))?$/.test(
+  return /^(?:ya|iya|boleh|oke|ok|siap|lanjut|gas|gass|silakan|ayo|betul|benar)(?:\s+(?:deh|dong|ya|aja|gan|kak|bro|tepat|betul|benar|sesuai))?$/.test(
     text,
   );
 }
@@ -311,6 +398,19 @@ function isGreeting(text: string) {
       tokens[0],
     )
   );
+}
+
+function describeRequestedSlot(value: string) {
+  const day = value.match(
+    /\b(besok|lusa|hari\s+(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)|tanggal\s+\d{1,2}(?:\s+[a-z]+)?(?:\s+\d{4})?)\b/i,
+  )?.[1];
+  const time = value.match(/\b(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?\b/i);
+  if (!day && !time) return null;
+
+  const timeLabel = time
+    ? `pukul ${time[1].padStart(2, "0")}.${time[2] ?? "00"}`
+    : null;
+  return [day?.toLowerCase(), timeLabel].filter(Boolean).join(" ");
 }
 
 function isWebsiteGoalQuestion(text: string) {
