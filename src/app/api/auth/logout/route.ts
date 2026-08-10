@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { noStoreHeaders, validateMutationRequest } from "@/lib/request-security";
+import { getSafeInternalRedirectPath } from "@/lib/safe-navigation";
 import { clearSessionCookie } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
@@ -8,7 +9,9 @@ export async function POST(request: NextRequest) {
 
   await clearSessionCookie();
 
-  return NextResponse.redirect(new URL("/login", request.url), {
+  const nextPath = getSafeInternalRedirectPath(request.nextUrl.searchParams.get("next"));
+
+  return NextResponse.redirect(new URL(nextPath ?? "/login", request.url), {
     status: 303,
     headers: noStoreHeaders,
   });

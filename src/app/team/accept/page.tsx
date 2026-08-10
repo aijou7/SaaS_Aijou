@@ -91,7 +91,10 @@ export default async function TeamAcceptPage({ searchParams }: TeamAcceptPagePro
                   Keluar, lalu buka kembali link undangan dengan akun yang sesuai.
                 </p>
               </div>
-              <form action="/api/auth/logout" method="post">
+              <form
+                action={`/api/auth/logout?next=${encodeURIComponent(nextPath)}`}
+                method="post"
+              >
                 <button className="ghost-button" type="submit">Keluar dari akun ini</button>
               </form>
             </>

@@ -103,6 +103,7 @@ function trustedOrigins(request: NextRequest) {
   const origins = new Set<string>();
   const candidates = [
     request.nextUrl.origin,
+    getForwardedRequestOrigin(request),
     process.env.NEXT_PUBLIC_APP_URL,
     toHttpsOrigin(process.env.VERCEL_URL),
     toHttpsOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL),
@@ -114,6 +115,28 @@ function trustedOrigins(request: NextRequest) {
   }
 
   return origins;
+}
+
+function getForwardedRequestOrigin(request: NextRequest) {
+  const host = firstForwardedValue(request.headers.get("x-forwarded-host")) ??
+    request.headers.get("host")?.trim();
+  if (!host || !isSafeHost(host)) return undefined;
+
+  const forwardedProtocol = firstForwardedValue(request.headers.get("x-forwarded-proto"));
+  const protocol = forwardedProtocol ?? request.nextUrl.protocol.replace(":", "");
+  if (protocol !== "http" && protocol !== "https") return undefined;
+
+  return `${protocol}://${host}`;
+}
+
+function firstForwardedValue(value: string | null) {
+  const first = value?.split(",", 1)[0]?.trim();
+  return first || undefined;
+}
+
+function isSafeHost(value: string) {
+  if (value.length > 253) return false;
+  return /^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|localhost)(?::\d{1,5})?$/i.test(value);
 }
 
 function normalizeOrigin(value: string | null) {
