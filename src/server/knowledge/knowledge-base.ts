@@ -4,6 +4,7 @@ import {
   Prisma,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 import {
   buildKnowledgePromptContext,
   normalizeKnowledgeTextInput,
@@ -316,7 +317,7 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
 
 export async function generateStarterKnowledge(userId: string) {
   const business = await prisma.business.findFirst({
-    where: { userId },
+    where: await activeWorkspaceAccessWhere(userId),
     select: {
       id: true,
       businessName: true,
@@ -428,7 +429,7 @@ function cleanOptional(value: string | null | undefined, maxLength: number) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true, websiteUrl: true },
   });
 }

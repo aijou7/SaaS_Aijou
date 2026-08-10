@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { workspaceAccessWhere } from "@/server/workspace-access";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 export async function getAiActivityPage(userId: string) {
   const business = await prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 

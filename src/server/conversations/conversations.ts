@@ -47,7 +47,7 @@ import { enqueueHumanTakeoverNotifications } from "@/server/notifications/notifi
 import {
   requireWorkspaceAccess,
   getWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 type SimulateMessageInput = {
@@ -1503,7 +1503,7 @@ async function upsertConversation(params: {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

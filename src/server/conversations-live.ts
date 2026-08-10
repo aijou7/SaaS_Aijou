@@ -4,6 +4,7 @@ import {
   type InboxLiveState,
 } from "@/lib/inbox-live";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 type InboxLiveRow = InboxLiveState;
 
@@ -13,8 +14,8 @@ type InboxLiveRow = InboxLiveState;
  * after this cursor changes.
  */
 export async function getInboxLiveState(userId: string): Promise<InboxLiveState> {
-  const business = await prisma.business.findUnique({
-    where: { userId },
+  const business = await prisma.business.findFirst({
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true },
   });
 

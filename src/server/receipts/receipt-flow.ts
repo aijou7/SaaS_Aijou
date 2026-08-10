@@ -10,7 +10,7 @@ import {
 } from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
+import { activeWorkspaceAccessWhere, requireWorkspaceAccess } from "@/server/workspace-access";
 import { extractReceiptFromMedia } from "@/server/receipts/ocr";
 import { downloadWhatsAppMedia } from "@/server/whatsapp/client";
 
@@ -391,7 +391,7 @@ async function findReceiptForBusiness(receiptId: string, businessId: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

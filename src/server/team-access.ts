@@ -14,7 +14,6 @@ import {
   isTeamInviteToken,
   normalizeTeamInviteEmail,
   parseWorkspaceRole,
-  strongerWorkspaceRole,
   type WorkspaceRoleValue,
 } from "@/lib/team-invites";
 import {
@@ -454,18 +453,9 @@ export async function acceptTeamInvite(
       data: { emailVerifiedAt: now },
     });
 
-    const existingMembership = await tx.workspaceMembership.findUnique({
-      where: {
-        businessId_userId: { businessId: invite.businessId, userId: user.id },
-      },
-      select: { role: true },
-    });
-    const resolvedRole = existingMembership
-      ? strongerWorkspaceRole(
-          existingMembership.role as WorkspaceRoleValue,
-          invite.role as WorkspaceRoleValue,
-        )
-      : (invite.role as WorkspaceRoleValue);
+    const resolvedRole = invite.business.userId === user.id
+      ? WorkspaceRole.OWNER
+      : invite.role;
 
     await tx.workspaceMembership.upsert({
       where: {
@@ -489,7 +479,7 @@ export async function acceptTeamInvite(
       userId: user.id,
       createdUser,
       passwordHash: createdUser ? user.passwordHash : null,
-      role: resolvedRole,
+      role: resolvedRole as WorkspaceRoleValue,
       businessId: invite.businessId,
     };
   });
@@ -509,7 +499,7 @@ async function findUsableTeamInvite(rawToken: string) {
       expiresAt: true,
       acceptedAt: true,
       revokedAt: true,
-      business: { select: { businessName: true } },
+      business: { select: { businessName: true, userId: true } },
       createdBy: { select: { name: true } },
     },
   }).then((invite) =>

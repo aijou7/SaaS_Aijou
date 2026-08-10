@@ -4,7 +4,7 @@ import { callGroqJson } from "@/server/ai/groq";
 import { sendConversationOwnerMessage } from "@/server/conversations/conversations";
 import {
   requireWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 type ProposalDraftAi = {
@@ -640,7 +640,7 @@ function formatRupiah(value: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

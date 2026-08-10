@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 import {
   requireWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 const defaultQuickReplies = [
@@ -225,7 +225,7 @@ function parseQuickReplyFormData(formData: FormData): QuickReplyInput {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

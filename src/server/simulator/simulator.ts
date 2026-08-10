@@ -22,6 +22,7 @@ import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
 import { storeIncomingWhatsAppMessage } from "@/server/whatsapp/store";
 import type { ExtractedWhatsAppMessage, WhatsAppWebhookPayload } from "@/server/whatsapp/payload";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 export async function simulateOwnerFinanceMessage(userId: string, message: string) {
   const business = await requireBusinessForUser(userId);
@@ -178,7 +179,7 @@ async function createAssistantMessage(conversationId: string, message: string) {
 
 async function requireBusinessForUser(userId: string) {
   const business = await prisma.business.findFirst({
-    where: { userId },
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true, whatsappNumber: true },
   });
 

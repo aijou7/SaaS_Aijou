@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { getWorkspaceAccess } from "@/server/workspace-access";
 import {
   escapeEmailHtml,
   getPublicAppUrl,
@@ -144,9 +145,11 @@ export async function deliverHumanTakeoverNotifications(
 
 export async function getNotificationCenter(userId: string, limit = 30) {
   const safeLimit = Math.min(100, Math.max(1, Math.round(limit)));
+  const access = await getWorkspaceAccess(userId);
+  if (!access) return { unread: 0, notifications: [] };
   const [notifications, unread] = await Promise.all([
     prisma.workspaceNotification.findMany({
-      where: { userId },
+      where: { userId, businessId: access.businessId },
       orderBy: { createdAt: "desc" },
       take: safeLimit,
       select: {
@@ -160,7 +163,9 @@ export async function getNotificationCenter(userId: string, limit = 30) {
         createdAt: true,
       },
     }),
-    prisma.workspaceNotification.count({ where: { userId, readAt: null } }),
+    prisma.workspaceNotification.count({
+      where: { userId, businessId: access.businessId, readAt: null },
+    }),
   ]);
 
   return {
@@ -176,15 +181,19 @@ export async function getNotificationCenter(userId: string, limit = 30) {
 
 export async function markNotificationRead(userId: string, notificationId: string) {
   if (!notificationId || notificationId.length > 180) return;
+  const access = await getWorkspaceAccess(userId);
+  if (!access) return;
   await prisma.workspaceNotification.updateMany({
-    where: { id: notificationId, userId, readAt: null },
+    where: { id: notificationId, userId, businessId: access.businessId, readAt: null },
     data: { readAt: new Date() },
   });
 }
 
 export async function markAllNotificationsRead(userId: string) {
+  const access = await getWorkspaceAccess(userId);
+  if (!access) return { count: 0 };
   return prisma.workspaceNotification.updateMany({
-    where: { userId, readAt: null },
+    where: { userId, businessId: access.businessId, readAt: null },
     data: { readAt: new Date() },
   });
 }

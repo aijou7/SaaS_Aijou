@@ -7,7 +7,7 @@ import { callGroqJson } from "@/server/ai/groq";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import {
   requireWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 type LeadSummary = {
@@ -222,7 +222,7 @@ type LeadSummaryCountsRow = {
 
 export async function getLeadsPage(userId: string, filters: LeadsPageFilters = {}) {
   const business = await prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 

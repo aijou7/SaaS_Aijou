@@ -260,6 +260,7 @@ model User {
   businesses            Business[]
   memberships           WorkspaceMembership[]
   authTokens            AuthToken[]
+  ownerEmailChanges     OwnerEmailChangeRequest[]
   feedback              Feedback[]
   teamInvitesCreated    TeamInvite[]           @relation("TeamInviteCreator")
   teamInvitesAccepted   TeamInvite[]           @relation("TeamInviteAcceptor")
@@ -325,6 +326,7 @@ model Business {
   shippingRates        ShippingRate[]
   workflows            AutomationWorkflow[]
   workflowRuns         AutomationRun[]
+  ownerEmailChanges    OwnerEmailChangeRequest[]
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
@@ -1062,6 +1064,28 @@ model AuthToken {
   @@index([userId, purpose, createdAt])
   @@index([expiresAt, usedAt])
   @@map("auth_tokens")
+}
+
+model OwnerEmailChangeRequest {
+  id                  String    @id
+  userId              String
+  businessId          String
+  currentEmail        String
+  newEmail            String
+  currentCodeHash     String
+  newCodeHash         String
+  attempts            Int       @default(0)
+  expiresAt           DateTime
+  consumedAt          DateTime?
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business            Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([userId, consumedAt, expiresAt])
+  @@index([businessId, createdAt])
+  @@index([newEmail, consumedAt])
+  @@map("owner_email_change_requests")
 }
 
 model WorkspaceMembership {

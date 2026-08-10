@@ -8,7 +8,7 @@ import {
 } from "@/server/integrations/credential-recovery";
 import { connectWhatsAppCloudApi } from "@/server/whatsapp/meta-connection";
 import { resolveWhatsAppVerifyToken } from "@/server/whatsapp/verify-token";
-import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { activeWorkspaceAccessWhere, requireWorkspaceAccess } from "@/server/workspace-access";
 
 export type WhatsAppSettingsInput = {
   wabaId?: string | null;
@@ -436,20 +436,7 @@ async function ensureWhatsAppSettings(businessId: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: {
-      OR: [
-        { userId },
-        {
-          memberships: {
-            some: {
-              userId,
-              isActive: true,
-              role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
-            },
-          },
-        },
-      ],
-    },
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

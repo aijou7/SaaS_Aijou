@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createSessionCookie, getSession } from "@/lib/session";
+import { getWorkspaceHome } from "@/lib/workspace-permissions";
+import { setActiveWorkspaceCookie } from "@/lib/workspace-cookie";
 import { isTeamManagementEnabled } from "@/lib/team-feature";
 import {
   acceptTeamInvite,
@@ -78,5 +80,6 @@ export async function acceptTeamInviteAction(
     redirect("/login?teamJoined=1");
   }
 
-  redirect("/dashboard?teamJoined=1");
+  await setActiveWorkspaceCookie(accepted.businessId);
+  redirect(`${getWorkspaceHome(accepted.role)}?teamJoined=1`);
 }

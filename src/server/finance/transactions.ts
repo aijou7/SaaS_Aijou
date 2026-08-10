@@ -9,7 +9,7 @@ import {
 } from "@/generated/prisma-beta/client";
 import { formatCurrencyIDR } from "@/lib/format";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
-import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
+import { activeWorkspaceAccessWhere, requireWorkspaceAccess } from "@/server/workspace-access";
 
 export type TransactionFilters = {
   status?: string;
@@ -500,7 +500,7 @@ function buildTransactionWhere(businessId: string, filters: TransactionFilters) 
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

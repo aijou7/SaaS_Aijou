@@ -9,6 +9,11 @@ import {
   cancelAccountDeletion,
   requestAccountDeletion,
 } from "@/server/auth/account-lifecycle";
+import {
+  confirmOwnerEmailChange,
+  getSafeOwnerEmailChangeError,
+  requestOwnerEmailChange,
+} from "@/server/auth/owner-email-change";
 
 export async function updateAccountProfileAction(formData: FormData) {
   const session = await getSession();
@@ -95,6 +100,45 @@ export async function cancelAccountDeletionAction() {
 
   await cancelAccountDeletion(session.userId);
   redirect("/account?deletionCancelled=1");
+}
+
+export async function requestOwnerEmailChangeAction(formData: FormData) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  let errorMessage = "";
+  try {
+    await requestOwnerEmailChange(session.userId, {
+      newEmail: String(formData.get("newEmail") ?? ""),
+      password: String(formData.get("password") ?? ""),
+    });
+  } catch (error) {
+    errorMessage = getSafeOwnerEmailChangeError(error);
+  }
+
+  if (errorMessage) redirect(`/account?emailError=${encodeURIComponent(errorMessage)}`);
+  redirect("/account?emailChange=requested");
+}
+
+export async function confirmOwnerEmailChangeAction(formData: FormData) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  let errorMessage = "";
+  try {
+    await confirmOwnerEmailChange(session.userId, {
+      requestId: String(formData.get("requestId") ?? ""),
+      currentCode: String(formData.get("currentCode") ?? ""),
+      newCode: String(formData.get("newCode") ?? ""),
+      password: String(formData.get("password") ?? ""),
+    });
+  } catch (error) {
+    errorMessage = getSafeOwnerEmailChangeError(error);
+  }
+
+  if (errorMessage) redirect(`/account?emailError=${encodeURIComponent(errorMessage)}`);
+  await clearSessionCookie();
+  redirect("/login?emailChanged=1");
 }
 
 function normalizeOwnerPhone(value: string) {

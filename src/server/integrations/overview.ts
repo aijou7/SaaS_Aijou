@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 export async function getIntegrationWorkspaceSummary(userId: string, includeWebSetup = false) {
   if (includeWebSetup) {
-    const business = await prisma.business.findUnique({
-      where: { userId },
+    const business = await prisma.business.findFirst({
+      where: await activeWorkspaceAccessWhere(userId),
       select: {
         businessName: true,
         websiteUrl: true,
@@ -34,8 +35,8 @@ export async function getIntegrationWorkspaceSummary(userId: string, includeWebS
     };
   }
 
-  const business = await prisma.business.findUnique({
-    where: { userId },
+  const business = await prisma.business.findFirst({
+    where: await activeWorkspaceAccessWhere(userId),
     select: { businessName: true },
   });
 

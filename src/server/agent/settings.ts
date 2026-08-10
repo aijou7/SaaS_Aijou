@@ -6,7 +6,7 @@ import { defaultBusinessHours } from "@/server/operations/business-hours";
 import { getBusinessActivationReadiness } from "@/server/business/profile";
 import {
   requireWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 export type AgentRuntimeSettings = {
@@ -220,7 +220,7 @@ async function ensureAgentSettings(businessId: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

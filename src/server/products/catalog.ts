@@ -5,7 +5,7 @@ import {
   type PublicCatalogItem,
 } from "@/lib/customer-pricing";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
-import { requireWorkspaceAccess, workspaceAccessWhere } from "@/server/workspace-access";
+import { activeWorkspaceAccessWhere, requireWorkspaceAccess } from "@/server/workspace-access";
 
 type ProductInput = {
   name: string;
@@ -158,7 +158,7 @@ export function parseProductFormData(formData: FormData): ProductInput {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

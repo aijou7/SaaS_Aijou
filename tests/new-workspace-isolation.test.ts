@@ -97,7 +97,7 @@ describe("new workspace isolation", () => {
       source("../src/server/team-access.ts"),
     ]);
 
-    assert.match(profile, /workspaceAccessWhere\(userId\)/);
+    assert.match(profile, /activeWorkspaceAccessWhere\(userId\)/);
     assert.match(profile, /requireWorkspaceAccess\(userId, onboardingManagerRoles\)/);
     assert.match(onboardingStatus, /session\.role !== "OWNER"/);
     assert.match(dashboard, /session\.role === "OWNER"/);

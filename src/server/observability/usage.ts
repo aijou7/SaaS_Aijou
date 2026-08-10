@@ -1,4 +1,5 @@
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 type UsageMetricsRow = {
   messages: number;
@@ -15,8 +16,8 @@ type UsageMetricsRow = {
 };
 
 export async function getUsageSnapshot(userId: string) {
-  const business = await prisma.business.findUnique({
-    where: { userId },
+  const business = await prisma.business.findFirst({
+    where: await activeWorkspaceAccessWhere(userId),
     select: {
       id: true,
       businessName: true,

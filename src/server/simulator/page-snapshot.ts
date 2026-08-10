@@ -5,6 +5,7 @@ import {
   TransactionType,
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 type SimulatorMetricRow = {
   totalThisMonth: number | string;
@@ -13,8 +14,8 @@ type SimulatorMetricRow = {
 };
 
 export async function getSimulatorPageSnapshot(userId: string) {
-  const business = await prisma.business.findUnique({
-    where: { userId },
+  const business = await prisma.business.findFirst({
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 

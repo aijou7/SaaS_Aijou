@@ -2,7 +2,6 @@ import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { workspaceAccessWhere } from "@/server/workspace-access";
 
 type MessageMediaContext = {
   params: Promise<{ id: string }>;
@@ -17,7 +16,7 @@ export async function GET(_request: Request, context: MessageMediaContext) {
   const message = await prisma.whatsAppMessage.findFirst({
     where: {
       id,
-      conversation: { business: workspaceAccessWhere(session.userId) },
+      conversation: { businessId: session.business?.id ?? "__no_workspace__" },
     },
     select: {
       mediaFile: {

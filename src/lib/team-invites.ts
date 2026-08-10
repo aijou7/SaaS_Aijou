@@ -3,13 +3,6 @@ import { createHash } from "node:crypto";
 export const workspaceRoleValues = ["OWNER", "ADMIN", "AGENT", "VIEWER"] as const;
 export type WorkspaceRoleValue = (typeof workspaceRoleValues)[number];
 
-const roleRank: Record<WorkspaceRoleValue, number> = {
-  OWNER: 4,
-  ADMIN: 3,
-  AGENT: 2,
-  VIEWER: 1,
-};
-
 export function parseWorkspaceRole(value: unknown): WorkspaceRoleValue | null {
   return typeof value === "string" && workspaceRoleValues.includes(value as WorkspaceRoleValue)
     ? (value as WorkspaceRoleValue)
@@ -20,15 +13,11 @@ export function canManageWorkspaceRole(
   actorRole: WorkspaceRoleValue,
   targetRole: WorkspaceRoleValue,
 ) {
+  // OWNER represents the single Business.userId and is never an invitation
+  // role. Ownership transfer is a separate two-party security operation.
+  if (targetRole === "OWNER") return false;
   if (actorRole === "OWNER") return true;
   return actorRole === "ADMIN" && (targetRole === "AGENT" || targetRole === "VIEWER");
-}
-
-export function strongerWorkspaceRole(
-  currentRole: WorkspaceRoleValue,
-  invitedRole: WorkspaceRoleValue,
-) {
-  return roleRank[currentRole] >= roleRank[invitedRole] ? currentRole : invitedRole;
 }
 
 export function normalizeTeamInviteEmail(value: string) {

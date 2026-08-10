@@ -175,8 +175,9 @@ export async function AppShell({
   children,
   workspaceRole: providedWorkspaceRole,
 }: AppShellProps) {
-  const session = providedWorkspaceRole ? null : await getSession();
+  const session = await getSession();
   const workspaceRole = providedWorkspaceRole ?? session?.role ?? "VIEWER";
+  const activeBusinessName = session?.business?.businessName ?? businessName ?? "Aijou AI";
   const activeModule = moduleByActive[active] ?? "settings";
   const requestedNavigationItem = moduleNavigation[activeModule].items.find(
     (item) => item.key === active,
@@ -258,10 +259,31 @@ export async function AppShell({
               <AijouLogo size={34} />
             </div>
             <div>
-              <strong>{businessName ?? "Aijou AI"}</strong>
+              <strong>{activeBusinessName}</strong>
               <span>{groqConfigured ? "AI agent terhubung" : "Workspace belum siap"}</span>
             </div>
           </div>
+
+          {session && session.workspaces.length > 1 ? (
+            <form className="workspace-switcher" action="/api/workspaces/active" method="post">
+              <label htmlFor="active-workspace">Workspace aktif</label>
+              <div>
+                <select
+                  id="active-workspace"
+                  name="businessId"
+                  defaultValue={session.business?.id ?? ""}
+                  aria-label="Pilih workspace aktif"
+                >
+                  {session.workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.businessName} · {getWorkspaceRoleLabel(workspace.role)}
+                    </option>
+                  ))}
+                </select>
+                <button className="ghost-button" type="submit">Buka</button>
+              </div>
+            </form>
+          ) : null}
 
           <p className="sidebar-context-heading">{activeNavigation.title}</p>
           <div className={`workspace-role-badge workspace-role-${workspaceRole.toLowerCase()}`}>

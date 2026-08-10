@@ -15,6 +15,7 @@ import {
   hashTelegramWebhookKey,
   isValidTelegramWebhookKey,
 } from "@/server/telegram/security";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 export type TelegramSettingsInput = {
   botToken?: string | null;
@@ -604,7 +605,7 @@ async function requireBotIdentity(botToken: string) {
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
+    where: await activeWorkspaceAccessWhere(userId),
     select: { id: true, businessName: true },
   });
 }

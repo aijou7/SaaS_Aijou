@@ -11,9 +11,12 @@ const maximumWebsiteBytes = 512 * 1024;
 const maximumWebsiteKnowledgeChars = 36_000;
 
 export async function syncBusinessWebsiteKnowledge(userId: string) {
-  const { prisma } = await import("@/lib/prisma");
+  const [{ prisma }, { activeWorkspaceAccessWhere }] = await Promise.all([
+    import("@/lib/prisma"),
+    import("@/server/workspace-access"),
+  ]);
   const business = await prisma.business.findFirst({
-    where: { userId },
+    where: await activeWorkspaceAccessWhere(userId),
     select: {
       id: true,
       websiteUrl: true,

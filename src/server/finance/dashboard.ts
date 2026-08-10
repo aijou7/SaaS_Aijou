@@ -7,6 +7,7 @@ import {
   WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
+import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
 
 type DashboardAggregateRow = {
   totalThisMonth: string;
@@ -24,22 +25,7 @@ type DashboardAggregateRow = {
 
 export async function getFinanceDashboardSnapshot(userId: string) {
   const business = await prisma.business.findFirst({
-    where: {
-      OR: [
-        { userId },
-        {
-          memberships: {
-            some: {
-              userId,
-              isActive: true,
-              role: {
-                in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.VIEWER],
-              },
-            },
-          },
-        },
-      ],
-    },
+    where: await activeWorkspaceAccessWhere(userId),
     select: {
       id: true,
       businessName: true,

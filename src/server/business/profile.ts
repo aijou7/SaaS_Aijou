@@ -16,7 +16,7 @@ import { normalizeWebOrigin } from "@/server/web/widget-security";
 import { activationTypes, recordActivationEvent } from "@/server/activation";
 import {
   requireWorkspaceAccess,
-  workspaceAccessWhere,
+  activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 
 const onboardingManagerRoles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] as const;
@@ -186,7 +186,7 @@ export function parseBusinessProfileFormData(formData: FormData): BusinessProfil
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: workspaceAccessWhere(userId),
+    where: await activeWorkspaceAccessWhere(userId),
     orderBy: { createdAt: "asc" },
     select: businessProfileSelect,
   });

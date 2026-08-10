@@ -88,9 +88,9 @@ test("shared read models include members while mutations retain role guards", ()
   const payments = readFileSync("src/server/payments/payments.ts", "utf8");
   const receipts = readFileSync("src/server/receipts/receipt-flow.ts", "utf8");
 
-  assert.match(dashboard, /WorkspaceRole\.VIEWER/);
+  assert.match(dashboard, /activeWorkspaceAccessWhere\(userId\)/);
   for (const source of [transactions, products, payments, receipts]) {
-    assert.match(source, /where: workspaceAccessWhere\(userId\)/);
+    assert.match(source, /where: await activeWorkspaceAccessWhere\(userId\)/);
     assert.match(source, /WorkspaceRole\.OWNER, WorkspaceRole\.ADMIN/);
   }
 });

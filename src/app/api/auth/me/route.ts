@@ -17,6 +17,7 @@ export async function GET() {
         email: session.email,
         role: session.role,
         business: session.business,
+        workspaces: session.workspaces,
       },
     },
     { headers: noStoreHeaders },

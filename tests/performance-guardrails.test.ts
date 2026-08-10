@@ -17,10 +17,10 @@ describe("production performance guardrails", () => {
       readFile(new URL("../src/app/conversations/page.tsx", import.meta.url), "utf8"),
     ]);
 
-    assert.match(sessionSource, /const ownedBusiness = user\.businesses\[0\] \?\? null/);
+    assert.match(sessionSource, /const workspaceMap = new Map/);
     assert.match(
       sessionSource,
-      /business:\s*ownedBusiness\s*\?\?\s*memberWorkspace\?\.business\s*\?\?\s*null/,
+      /activeWorkspaceId \? workspaceMap\.get\(activeWorkspaceId\)/,
     );
     assert.match(pageSource, /getConversationsInboxForBusiness\(business,\s*inboxFilters\)/);
     assert.match(pageSource, /Promise\.all\(\[/);

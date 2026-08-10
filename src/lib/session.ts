@@ -9,6 +9,7 @@ import {
   getSessionCookieName,
   getSessionCookieNamesToClear,
 } from "@/lib/session-cookie";
+import { clearActiveWorkspaceCookie, getActiveWorkspaceId } from "@/lib/workspace-cookie";
 
 const maxAgeSeconds = 60 * 60 * 24 * 7;
 
@@ -55,11 +56,13 @@ export async function clearSessionCookie() {
     // leave the authenticated session alive.
     cookieStore.set(name, "", getSessionCookieClearOptions(name));
   }
+  await clearActiveWorkspaceCookie();
 }
 
 export const getSession = cache(async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(getSessionCookieName())?.value;
+  const activeWorkspaceId = await getActiveWorkspaceId();
 
   if (!token) {
     return null;
@@ -82,7 +85,8 @@ export const getSession = cache(async function getSession() {
       status: true,
       lastSeenAt: true,
       businesses: {
-        take: 1,
+        orderBy: { createdAt: "asc" },
+        take: 50,
         select: {
           id: true,
           businessName: true,
@@ -91,7 +95,7 @@ export const getSession = cache(async function getSession() {
       memberships: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
-        take: 1,
+        take: 100,
         select: {
           role: true,
           business: {
@@ -131,16 +135,35 @@ export const getSession = cache(async function getSession() {
     });
   }
 
-  const ownedBusiness = user.businesses[0] ?? null;
-  const memberWorkspace = user.memberships[0] ?? null;
+  const workspaceMap = new Map<
+    string,
+    { id: string; businessName: string; role: "OWNER" | "ADMIN" | "AGENT" | "VIEWER" }
+  >();
+  for (const business of user.businesses) {
+    workspaceMap.set(business.id, { ...business, role: "OWNER" });
+  }
+  for (const membership of user.memberships) {
+    if (!workspaceMap.has(membership.business.id)) {
+      workspaceMap.set(membership.business.id, {
+        ...membership.business,
+        role: membership.role,
+      });
+    }
+  }
+  const workspaces = [...workspaceMap.values()];
+  const activeWorkspace =
+    (activeWorkspaceId ? workspaceMap.get(activeWorkspaceId) : null) ?? workspaces[0] ?? null;
 
   return {
     userId: user.id,
     name: user.name,
     email: user.email,
     exp: payload.exp,
-    role: ownedBusiness ? ("OWNER" as const) : memberWorkspace?.role ?? null,
-    business: ownedBusiness ?? memberWorkspace?.business ?? null,
+    role: activeWorkspace?.role ?? null,
+    business: activeWorkspace
+      ? { id: activeWorkspace.id, businessName: activeWorkspace.businessName }
+      : null,
+    workspaces,
   };
 });
 

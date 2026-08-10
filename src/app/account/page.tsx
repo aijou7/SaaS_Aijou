@@ -1,10 +1,12 @@
-import { KeyRound, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, LockKeyhole, MailCheck, ShieldCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   changePasswordAction,
+  confirmOwnerEmailChangeAction,
   cancelAccountDeletionAction,
   requestAccountDeletionAction,
+  requestOwnerEmailChangeAction,
   updateAccountProfileAction,
 } from "@/app/account/actions";
 import { AppShell } from "@/components/app-shell";
@@ -17,6 +19,8 @@ type AccountPageProps = {
     saved?: string;
     deleteError?: string;
     deletionCancelled?: string;
+    emailChange?: string;
+    emailError?: string;
   }>;
 };
 
@@ -24,7 +28,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [params, user, business] = await Promise.all([
+  const [params, user, business, pendingEmailChange] = await Promise.all([
     searchParams,
     prisma.user.findUnique({
       where: { id: session.userId },
@@ -38,10 +42,19 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         isPlatformAdmin: true,
       },
     }),
-    prisma.business.findFirst({
-      where: { userId: session.userId },
-      select: { businessName: true },
-    }),
+    Promise.resolve(session.business),
+    session.role === "OWNER" && session.business
+      ? prisma.ownerEmailChangeRequest.findFirst({
+          where: {
+            userId: session.userId,
+            businessId: session.business.id,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, newEmail: true, expiresAt: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!user) redirect("/login");
@@ -71,7 +84,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <KeyRound size={18} aria-hidden="true" />
               <span>
                 <strong>{user.email}</strong>
-                <small>{user.role.toLowerCase()} workspace</small>
+                <small>{formatWorkspaceAccountRole(session.role)}</small>
               </span>
             </div>
             <div className="checklist-item">
@@ -151,6 +164,86 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </form>
         </div>
       </section>
+
+      {session.role === "OWNER" ? (
+        <section className="section split-layout">
+          <div className="card">
+            <div className="section-title-row">
+              <div>
+                <p className="eyebrow">Identitas owner</p>
+                <h2>Ganti email login owner</h2>
+              </div>
+              <MailCheck size={24} aria-hidden="true" />
+            </div>
+            <p className="muted">
+              Ini mengganti email login akun yang sama, bukan memindahkan kepemilikan ke akun lain.
+              Kode terpisah dikirim ke email lama dan email baru, lalu semua sesi lama dicabut.
+            </p>
+            {params.emailError ? (
+              <div className="settings-note" role="alert">
+                <strong>Email belum diganti</strong>
+                <p>{params.emailError}</p>
+              </div>
+            ) : null}
+            {pendingEmailChange ? (
+              <form className="form-grid" action={confirmOwnerEmailChangeAction}>
+                <input name="requestId" type="hidden" value={pendingEmailChange.id} />
+                <div className="settings-note span-2" role="status">
+                  <strong>Verifikasi dua mailbox</strong>
+                  <p>
+                    Masukkan kode dari {user.email} dan {pendingEmailChange.newEmail}. Kode berlaku
+                    sampai {pendingEmailChange.expiresAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.
+                  </p>
+                </div>
+                <label>
+                  OTP email lama
+                  <input name="currentCode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required />
+                </label>
+                <label>
+                  OTP email baru
+                  <input name="newCode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required />
+                </label>
+                <label className="span-2">
+                  Konfirmasi password saat ini
+                  <input name="password" type="password" autoComplete="current-password" maxLength={128} required />
+                </label>
+                <button className="primary-button span-2" type="submit">Verifikasi dan ganti email</button>
+              </form>
+            ) : (
+              <form className="form-grid" action={requestOwnerEmailChangeAction}>
+                <label className="span-2">
+                  Email owner baru
+                  <input name="newEmail" type="email" autoComplete="email" maxLength={254} required />
+                </label>
+                <label className="span-2">
+                  Password saat ini
+                  <input name="password" type="password" autoComplete="current-password" maxLength={128} required />
+                </label>
+                <button className="primary-button span-2" type="submit">Kirim dua kode verifikasi</button>
+              </form>
+            )}
+          </div>
+
+          <div className="card">
+            <p className="eyebrow">SOP yang benar</p>
+            <h2>Email akun bukan role workspace</h2>
+            <div className="checklist">
+              <div className="checklist-item">
+                <ShieldCheck size={18} aria-hidden="true" />
+                <span><strong>Ganti email orang yang sama</strong><small>Pakai dua OTP dan password melalui form di samping.</small></span>
+              </div>
+              <div className="checklist-item">
+                <ShieldCheck size={18} aria-hidden="true" />
+                <span><strong>Email sudah punya akun</strong><small>Jangan digabung. Undang sebagai Admin, Agent, atau Viewer dari menu Tim & akses.</small></span>
+              </div>
+              <div className="checklist-item">
+                <ShieldCheck size={18} aria-hidden="true" />
+                <span><strong>Transfer kepemilikan</strong><small>Verifikasi target sebagai Admin dulu. Transfer owner harus menjadi tindakan terpisah dengan persetujuan kedua akun.</small></span>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="section">
         <div className="card">
@@ -236,4 +329,12 @@ function formatPasswordError(value: string) {
   };
 
   return messages[value] ?? value;
+}
+
+function formatWorkspaceAccountRole(role: string | null) {
+  if (role === "OWNER") return "Owner workspace aktif";
+  if (role === "ADMIN") return "Admin workspace aktif";
+  if (role === "AGENT") return "Agent workspace aktif";
+  if (role === "VIEWER") return "Viewer workspace aktif";
+  return "Anggota workspace";
 }

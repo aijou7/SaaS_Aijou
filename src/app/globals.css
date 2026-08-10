@@ -8103,6 +8103,46 @@ body {
 .settings-account strong { font-size: 14px; }
 .settings-account span { margin-top: 2px; color: var(--muted); font-size: 12px; }
 
+.workspace-switcher {
+  display: grid;
+  gap: 6px;
+  margin: 0 10px 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+.workspace-switcher label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.workspace-switcher > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.workspace-switcher select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--foreground);
+  font-size: 11px;
+}
+
+.workspace-switcher .ghost-button {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
 .primary-sidebar-nav {
   display: grid;
   gap: 3px;
