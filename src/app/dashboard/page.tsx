@@ -38,7 +38,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     searchParams,
   ]);
 
-  if (dashboard.isWorkspaceEmpty && !dashboard.onboardingCompleted) {
+  if (
+    session.role === "OWNER" &&
+    dashboard.isWorkspaceEmpty &&
+    !dashboard.onboardingCompleted
+  ) {
     return (
       <AppShell active="dashboard" businessName={dashboard.businessName}>
         <section className="new-workspace-dashboard">
@@ -130,7 +134,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </div>
       ) : null}
 
-      {!dashboard.onboardingCompleted ? (
+      {session.role === "OWNER" && !dashboard.onboardingCompleted ? (
         <section className="onboarding-panel">
           <div>
             <p className="eyebrow">Mulai bersama Aijou</p>

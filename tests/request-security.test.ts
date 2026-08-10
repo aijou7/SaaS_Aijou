@@ -14,16 +14,31 @@ function loginRequest(origin: string) {
   });
 }
 
-function proxiedCustomDomainRequest(origin: string, forwardedHost = "aijou.site") {
+function proxiedCustomDomainRequest(
+  origin: string,
+  forwardedHost = "aijou.site",
+  fetchSite = "same-origin",
+) {
   return new NextRequest("https://saa-s-aijou.vercel.app/api/auth/logout", {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
       host: "saa-s-aijou.vercel.app",
       origin,
-      "sec-fetch-site": "same-origin",
+      "sec-fetch-site": fetchSite,
       "x-forwarded-host": forwardedHost,
       "x-forwarded-proto": "https",
+    },
+  });
+}
+
+function sameOriginRequestWithoutUsableOrigin() {
+  return new NextRequest("https://internal-deployment.vercel.app/api/auth/logout", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      origin: "null",
+      "sec-fetch-site": "same-origin",
     },
   });
 }
@@ -78,9 +93,22 @@ describe("mutation request origin validation", () => {
     assert.equal(response, null);
   });
 
+  test("accepts a browser-attested same-origin form when a proxy or privacy tool omits Origin", () => {
+    const response = validateMutationRequest(
+      sameOriginRequestWithoutUsableOrigin(),
+      "form",
+    );
+
+    assert.equal(response, null);
+  });
+
   test("does not confuse a forwarded custom host with an arbitrary browser origin", async () => {
     const response = validateMutationRequest(
-      proxiedCustomDomainRequest("https://attacker.example"),
+      proxiedCustomDomainRequest(
+        "https://attacker.example",
+        "aijou.site",
+        "cross-site",
+      ),
       "form",
     );
 
@@ -90,7 +118,11 @@ describe("mutation request origin validation", () => {
 
   test("rejects malformed forwarded hosts instead of widening the trusted origin set", async () => {
     const response = validateMutationRequest(
-      proxiedCustomDomainRequest("https://aijou.site", "aijou.site/attacker.example"),
+      proxiedCustomDomainRequest(
+        "https://aijou.site",
+        "aijou.site/attacker.example",
+        "cross-site",
+      ),
       "form",
     );
 

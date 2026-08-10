@@ -88,4 +88,19 @@ describe("new workspace isolation", () => {
     assert.match(dashboard, /belum berisi chat, customer, lead, produk, transaksi/);
     assert.match(snapshot, /workspaceRecordCount/);
   });
+
+  test("invited members inherit the owner workspace without repeating onboarding", async () => {
+    const [profile, onboardingStatus, dashboard, teamAccess] = await Promise.all([
+      source("../src/server/business/profile.ts"),
+      source("../src/app/api/onboarding/status/route.ts"),
+      source("../src/app/dashboard/page.tsx"),
+      source("../src/server/team-access.ts"),
+    ]);
+
+    assert.match(profile, /workspaceAccessWhere\(userId\)/);
+    assert.match(profile, /requireWorkspaceAccess\(userId, onboardingManagerRoles\)/);
+    assert.match(onboardingStatus, /session\.role !== "OWNER"/);
+    assert.match(dashboard, /session\.role === "OWNER"/);
+    assert.doesNotMatch(teamAccess, /createEmptyOwnedWorkspace/);
+  });
 });

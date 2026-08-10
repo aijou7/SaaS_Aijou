@@ -13,6 +13,23 @@ export async function GET() {
     );
   }
 
+  // Onboarding belongs to the workspace owner, not to every invited account.
+  // Members inherit the owner's configured workspace and must never receive a
+  // fresh-business wizard after joining the team.
+  if (session.role !== "OWNER") {
+    return NextResponse.json(
+      {
+        onboardingCompleted: true,
+        readyToComplete: true,
+        completed: 0,
+        total: 0,
+        percent: 100,
+        checks: [],
+      },
+      { headers: { "Cache-Control": "private, no-store, max-age=0" } },
+    );
+  }
+
   try {
     const page = await getOnboardingGuideStatus(session.userId);
     if (page.onboardingCompleted || !page.readiness) {

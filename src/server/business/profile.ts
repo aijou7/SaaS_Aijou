@@ -1,4 +1,8 @@
-import { ConversationType, SenderType } from "@/generated/prisma-beta/client";
+import {
+  ConversationType,
+  SenderType,
+  WorkspaceRole,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { invalidateTtlCache } from "@/lib/ttl-cache";
 import {
@@ -10,6 +14,12 @@ import { getWhatsAppReadinessForBusiness } from "@/server/whatsapp/settings";
 import { getTelegramReadinessForBusiness } from "@/server/telegram/settings";
 import { normalizeWebOrigin } from "@/server/web/widget-security";
 import { activationTypes, recordActivationEvent } from "@/server/activation";
+import {
+  requireWorkspaceAccess,
+  workspaceAccessWhere,
+} from "@/server/workspace-access";
+
+const onboardingManagerRoles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] as const;
 
 export type BusinessProfileInput = {
   businessName: string;
@@ -41,10 +51,7 @@ export async function getBusinessProfilePage(userId: string) {
 }
 
 export async function getOnboardingGuideStatus(userId: string) {
-  const completion = await prisma.business.findFirst({
-    where: { userId },
-    select: { onboardingCompleted: true },
-  });
+  const completion = await getBusinessForUser(userId);
 
   if (completion?.onboardingCompleted) {
     return {
@@ -95,7 +102,8 @@ export async function getBusinessActivationReadiness(
 }
 
 export async function updateBusinessProfile(userId: string, input: BusinessProfileInput) {
-  const business = await getBusinessForUser(userId);
+  const access = await requireWorkspaceAccess(userId, onboardingManagerRoles);
+  const business = await getBusinessById(access.businessId);
 
   if (!business) {
     throw new Error("Business belum dibuat. Jalankan seed database dulu.");
@@ -139,7 +147,12 @@ export async function updateBusinessProfile(userId: string, input: BusinessProfi
 }
 
 export async function completeOnboarding(userId: string) {
-  const { business, readiness } = await loadBusinessReadiness(userId);
+  const access = await requireWorkspaceAccess(userId, onboardingManagerRoles);
+  const { business, readiness } = await loadBusinessReadiness(
+    userId,
+    undefined,
+    access.businessId,
+  );
 
   if (!business) {
     throw new Error("Business belum dibuat. Jalankan seed database dulu.");
@@ -173,30 +186,43 @@ export function parseBusinessProfileFormData(formData: FormData): BusinessProfil
 
 async function getBusinessForUser(userId: string) {
   return prisma.business.findFirst({
-    where: { userId },
-    select: {
-      id: true,
-      businessName: true,
-      businessType: true,
-      whatsappNumber: true,
-      serviceArea: true,
-      operatingHours: true,
-      mainServices: true,
-      websiteUrl: true,
-      widgetAllowedOrigin: true,
-      widgetLastSeenAt: true,
-      widgetKey: true,
-      address: true,
-      onboardingCompleted: true,
-    },
+    where: workspaceAccessWhere(userId),
+    orderBy: { createdAt: "asc" },
+    select: businessProfileSelect,
   });
 }
+
+async function getBusinessById(businessId: string) {
+  return prisma.business.findUnique({
+    where: { id: businessId },
+    select: businessProfileSelect,
+  });
+}
+
+const businessProfileSelect = {
+  id: true,
+  businessName: true,
+  businessType: true,
+  whatsappNumber: true,
+  serviceArea: true,
+  operatingHours: true,
+  mainServices: true,
+  websiteUrl: true,
+  widgetAllowedOrigin: true,
+  widgetLastSeenAt: true,
+  widgetKey: true,
+  address: true,
+  onboardingCompleted: true,
+} as const;
 
 async function loadBusinessReadiness(
   userId: string,
   agentOverride?: AgentReadinessOverride,
+  businessId?: string,
 ) {
-  const business = await getBusinessForUser(userId);
+  const business = businessId
+    ? await getBusinessById(businessId)
+    : await getBusinessForUser(userId);
 
   if (!business) {
     return {

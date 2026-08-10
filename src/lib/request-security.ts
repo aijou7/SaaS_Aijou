@@ -92,11 +92,17 @@ export async function readRequestBodyBuffer(request: Request, maxBytes: number) 
 
 function hasTrustedOrigin(request: NextRequest) {
   const origin = normalizeOrigin(request.headers.get("origin"));
-  if (!origin) {
-    return process.env.NODE_ENV !== "production";
+  if (origin && trustedOrigins(request).has(origin)) return true;
+
+  // Sec-Fetch-Site is a forbidden browser header: a cross-site page cannot
+  // forge `same-origin`. This keeps form mutations working behind hosting
+  // proxies/privacy tools that omit or rewrite Origin, without allowing a
+  // normal cross-site browser request through the CSRF guard.
+  if (request.headers.get("sec-fetch-site")?.toLowerCase() === "same-origin") {
+    return true;
   }
 
-  return trustedOrigins(request).has(origin);
+  return !origin && process.env.NODE_ENV !== "production";
 }
 
 function trustedOrigins(request: NextRequest) {
