@@ -85,4 +85,9 @@ describe("workspace activation readiness", () => {
     assert.equal(readiness.canActivateAgent, true);
     assert.equal(readiness.channels.telegram, true);
   });
+
+  test("allows onboarding to start with one owner-approved knowledge item", () => {
+    const readiness = buildActivationReadiness({ ...readyInput, activeKnowledgeCount: 1 });
+    assert.equal(readiness.checks.find((check) => check.key === "knowledge")?.done, true);
+  });
 });

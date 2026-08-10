@@ -11,6 +11,7 @@ import {
   setConversationTakeover,
   updateConversationOwnerNotes,
 } from "@/server/conversations/conversations";
+import { createConversationKnowledgeDraft } from "@/server/knowledge/knowledge-base";
 
 export type ConversationMode = "takeover" | "ai" | "resolved";
 
@@ -72,8 +73,24 @@ export async function sendOwnerReplyUiAction(
     const session = await getRequiredSession();
     const conversationId = String(formData.get("conversationId") ?? "");
     const message = String(formData.get("message") ?? "");
-    await sendOwnerConversationReply(session.userId, conversationId, message);
-    return { ok: true, message: "Balasan terkirim.", nonce: Date.now() };
+    const sent = await sendOwnerConversationReply(session.userId, conversationId, message);
+    const saveAsKnowledge = formData.get("saveAsKnowledge") === "on";
+    if (saveAsKnowledge) {
+      await createConversationKnowledgeDraft({
+        userId: session.userId,
+        conversationId,
+        messageId: sent.messageId,
+        content: message,
+      });
+      revalidatePath("/knowledge");
+    }
+    return {
+      ok: true,
+      message: saveAsKnowledge
+        ? "Balasan terkirim dan draft knowledge dibuat."
+        : "Balasan terkirim.",
+      nonce: Date.now(),
+    };
   } catch (error) {
     return {
       ok: false,

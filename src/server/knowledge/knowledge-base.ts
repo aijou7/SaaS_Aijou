@@ -1,16 +1,29 @@
+import {
+  KnowledgeReviewStatus,
+  KnowledgeSourceType,
+  Prisma,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import {
   buildKnowledgePromptContext,
   normalizeKnowledgeTextInput,
 } from "@/lib/knowledge-limits";
+import { rankRelevantKnowledge } from "@/lib/knowledge-retrieval";
 import { invalidateTtlCache, ttlCache } from "@/lib/ttl-cache";
 import { callGroqJson } from "@/server/ai/groq";
 
-type KnowledgeBaseInput = {
+export type KnowledgeBaseInput = {
   title: string;
   content: string;
   category?: string;
   isActive?: boolean;
+  sourceType?: KnowledgeSourceType;
+  reviewStatus?: KnowledgeReviewStatus;
+  sourceUrl?: string | null;
+  sourceName?: string | null;
+  sourceMessageId?: string | null;
+  priority?: number;
+  extractedMeta?: Prisma.InputJsonValue;
 };
 
 export async function getKnowledgeBasePage(
@@ -24,6 +37,7 @@ export async function getKnowledgeBasePage(
       business: null,
       entries: [],
       activeCount: 0,
+      draftCount: 0,
       pagination: { page: 1, pageCount: 1, pageSize: 20, total: 0 },
     };
   }
@@ -43,7 +57,7 @@ export async function getKnowledgeBasePage(
         }
       : {}),
   };
-  const [entries, total, activeCount] = await Promise.all([
+  const [entries, total, activeCount, draftCount] = await Promise.all([
     prisma.knowledgeBase.findMany({
       where,
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
@@ -55,18 +69,31 @@ export async function getKnowledgeBasePage(
         content: true,
         category: true,
         isActive: true,
+        sourceType: true,
+        reviewStatus: true,
+        sourceName: true,
+        sourceUrl: true,
+        priority: true,
         updatedAt: true,
       },
     }),
     prisma.knowledgeBase.count({ where }),
     prisma.knowledgeBase.count({
-      where: { businessId: business.id, isActive: true },
+      where: {
+        businessId: business.id,
+        isActive: true,
+        reviewStatus: KnowledgeReviewStatus.APPROVED,
+      },
+    }),
+    prisma.knowledgeBase.count({
+      where: { businessId: business.id, reviewStatus: KnowledgeReviewStatus.DRAFT },
     }),
   ]);
 
   return {
     business,
     activeCount,
+    draftCount,
     pagination: {
       page,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
@@ -80,23 +107,33 @@ export async function getKnowledgeBasePage(
   };
 }
 
-export async function getActiveKnowledgeContext(businessId: string) {
-  return ttlCache(`knowledge-context:${businessId}`, 60_000, () =>
-    getActiveKnowledgeContextFresh(businessId),
+export async function getActiveKnowledgeContext(
+  businessId: string,
+  query = "",
+) {
+  const normalizedQuery = query.trim().slice(0, 2_000);
+  return ttlCache(`knowledge-context:${businessId}:${normalizedQuery}`, 60_000, () =>
+    getActiveKnowledgeContextFresh(businessId, normalizedQuery),
   );
 }
 
-async function getActiveKnowledgeContextFresh(businessId: string) {
+async function getActiveKnowledgeContextFresh(businessId: string, query: string) {
   const entries = await prisma.knowledgeBase.findMany({
     where: {
       businessId,
       isActive: true,
+      reviewStatus: KnowledgeReviewStatus.APPROVED,
     },
-    orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
+    orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    take: 200,
     select: {
+      id: true,
       title: true,
       category: true,
       content: true,
+      sourceType: true,
+      priority: true,
+      updatedAt: true,
     },
   });
 
@@ -104,12 +141,16 @@ async function getActiveKnowledgeContextFresh(businessId: string) {
     return "Belum ada knowledge base. Jawab secara umum dan kumpulkan kebutuhan customer tanpa membuat klaim spesifik.";
   }
 
-  return buildKnowledgePromptContext(entries);
+  return buildKnowledgePromptContext(rankRelevantKnowledge(entries, query));
 }
 
 export async function createKnowledgeBaseEntry(userId: string, input: KnowledgeBaseInput) {
   const business = await requireBusinessForUser(userId);
   const normalized = normalizeKnowledgeTextInput(input);
+  const reviewStatus = input.reviewStatus ?? KnowledgeReviewStatus.APPROVED;
+  const priority = normalizePriority(
+    input.priority ?? defaultKnowledgePriority(input.sourceType ?? KnowledgeSourceType.MANUAL),
+  );
 
   const entry = await prisma.knowledgeBase.create({
     data: {
@@ -117,12 +158,43 @@ export async function createKnowledgeBaseEntry(userId: string, input: KnowledgeB
       title: normalized.title,
       content: normalized.content,
       category: normalized.category,
-      isActive: input.isActive ?? true,
+      isActive:
+        reviewStatus === KnowledgeReviewStatus.APPROVED
+          ? input.isActive ?? true
+          : false,
+      sourceType: input.sourceType ?? KnowledgeSourceType.MANUAL,
+      reviewStatus,
+      sourceUrl: cleanOptional(input.sourceUrl, 2_048),
+      sourceName: cleanOptional(input.sourceName, 255),
+      sourceMessageId: cleanOptional(input.sourceMessageId, 255),
+      priority,
+      extractedMeta: input.extractedMeta,
+      approvedAt: reviewStatus === KnowledgeReviewStatus.APPROVED ? new Date() : null,
     },
   });
   invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return entry;
+}
+
+export async function createConversationKnowledgeDraft(params: {
+  userId: string;
+  conversationId: string;
+  messageId: string;
+  content: string;
+}) {
+  const content = params.content.trim();
+  return createKnowledgeBaseEntry(params.userId, {
+    title: `Jawaban tim: ${content.slice(0, 90)}`,
+    category: "jawaban-tim",
+    content,
+    isActive: false,
+    sourceType: KnowledgeSourceType.CONVERSATION,
+    reviewStatus: KnowledgeReviewStatus.DRAFT,
+    sourceName: `Percakapan ${params.conversationId}`,
+    sourceMessageId: params.messageId,
+    priority: 75,
+  });
 }
 
 export async function updateKnowledgeBaseEntry(
@@ -134,7 +206,7 @@ export async function updateKnowledgeBaseEntry(
   const normalized = normalizeKnowledgeTextInput(input);
   const existing = await prisma.knowledgeBase.findFirst({
     where: { id: entryId, businessId: business.id },
-    select: { id: true },
+    select: { id: true, reviewStatus: true },
   });
 
   if (!existing) {
@@ -146,12 +218,45 @@ export async function updateKnowledgeBaseEntry(
       title: normalized.title,
       content: normalized.content,
       category: normalized.category,
-      isActive: input.isActive ?? true,
+      isActive:
+        existing.reviewStatus === KnowledgeReviewStatus.APPROVED
+          ? input.isActive ?? true
+          : false,
     },
   });
   invalidateTtlCache(`knowledge-context:${business.id}`);
 
   return entry;
+}
+
+export async function reviewKnowledgeBaseEntry(
+  userId: string,
+  entryId: string,
+  decision: "approve" | "reject",
+) {
+  const business = await requireBusinessForUser(userId);
+  const existing = await prisma.knowledgeBase.findFirst({
+    where: { id: entryId, businessId: business.id },
+    select: { id: true },
+  });
+  if (!existing) throw new Error("Knowledge base entry tidak ditemukan.");
+
+  await prisma.knowledgeBase.update({
+    where: { id: entryId },
+    data:
+      decision === "approve"
+        ? {
+            reviewStatus: KnowledgeReviewStatus.APPROVED,
+            isActive: true,
+            approvedAt: new Date(),
+          }
+        : {
+            reviewStatus: KnowledgeReviewStatus.REJECTED,
+            isActive: false,
+            approvedAt: null,
+          },
+  });
+  invalidateTtlCache(`knowledge-context:${business.id}`);
 }
 
 export async function deleteKnowledgeBaseEntry(userId: string, entryId: string) {
@@ -184,7 +289,12 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
   const entry = existing
     ? await prisma.knowledgeBase.update({
         where: { id: existing.id },
-        data: { content: template.content, isActive: true },
+        data: {
+          content: template.content,
+          isActive: true,
+          reviewStatus: KnowledgeReviewStatus.APPROVED,
+          approvedAt: new Date(),
+        },
       })
     : await prisma.knowledgeBase.create({
         data: {
@@ -193,6 +303,10 @@ export async function createKnowledgeTemplate(userId: string, templateKey: strin
           category: template.category,
           content: template.content,
           isActive: true,
+          sourceType: KnowledgeSourceType.MANUAL,
+          reviewStatus: KnowledgeReviewStatus.APPROVED,
+          priority: 80,
+          approvedAt: new Date(),
         },
       });
   invalidateTtlCache(`knowledge-context:${business.id}`);
@@ -268,7 +382,11 @@ export async function generateStarterKnowledge(userId: string) {
         data: {
           businessId: business.id,
           ...normalized,
-          isActive: true,
+          isActive: false,
+          sourceType: KnowledgeSourceType.ONBOARDING,
+          reviewStatus: KnowledgeReviewStatus.DRAFT,
+          priority: 90,
+          sourceName: "Generator knowledge awal",
         },
       });
     }),
@@ -287,6 +405,25 @@ export function parseKnowledgeBaseFormData(formData: FormData) {
     ...normalized,
     isActive: formData.get("isActive") === "on",
   } satisfies KnowledgeBaseInput;
+}
+
+function defaultKnowledgePriority(sourceType: KnowledgeSourceType) {
+  return {
+    [KnowledgeSourceType.MANUAL]: 90,
+    [KnowledgeSourceType.ONBOARDING]: 90,
+    [KnowledgeSourceType.CONVERSATION]: 75,
+    [KnowledgeSourceType.FILE]: 70,
+    [KnowledgeSourceType.WEBSITE]: 60,
+  }[sourceType];
+}
+
+function normalizePriority(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function cleanOptional(value: string | null | undefined, maxLength: number) {
+  const cleaned = value?.trim().slice(0, maxLength);
+  return cleaned || null;
 }
 
 async function getBusinessForUser(userId: string) {

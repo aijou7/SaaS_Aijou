@@ -566,7 +566,7 @@ async function simulateCustomerMessageForResolvedBusiness(
     aiReply = `${settings.agentName}: Baik, saya panggilkan owner/admin untuk lanjut bantu ya.`;
   } else if (currentConversation?.status !== ConversationStatus.HUMAN_NEEDED) {
     const [knowledgeContext, productCatalog, messages] = await Promise.all([
-      getActiveKnowledgeContext(business.id),
+      getActiveKnowledgeContext(business.id, input.message),
       getActiveProductCatalog(business.id),
       prisma.whatsAppMessage.findMany({
         where: { conversationId: conversation.id, messageType: MessageType.TEXT },

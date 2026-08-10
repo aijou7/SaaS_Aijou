@@ -1,5 +1,9 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import {
+  KnowledgeReviewStatus,
+  KnowledgeSourceType,
+} from "@/generated/prisma-beta/client";
 import { invalidateTtlCache } from "@/lib/ttl-cache";
 
 const websiteKnowledgeCategory = "website-sync";
@@ -45,6 +49,12 @@ export async function syncBusinessWebsiteKnowledge(userId: string) {
           title,
           content: extracted.content,
           isActive: true,
+          sourceType: KnowledgeSourceType.WEBSITE,
+          reviewStatus: KnowledgeReviewStatus.APPROVED,
+          sourceUrl: finalUrl.href,
+          sourceName: finalUrl.hostname,
+          priority: 60,
+          approvedAt: new Date(),
         },
       });
     }
@@ -56,6 +66,12 @@ export async function syncBusinessWebsiteKnowledge(userId: string) {
         category: websiteKnowledgeCategory,
         content: extracted.content,
         isActive: true,
+        sourceType: KnowledgeSourceType.WEBSITE,
+        reviewStatus: KnowledgeReviewStatus.APPROVED,
+        sourceUrl: finalUrl.href,
+        sourceName: finalUrl.hostname,
+        priority: 60,
+        approvedAt: new Date(),
       },
     });
   });

@@ -35,6 +35,11 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   typedRoutes: false,
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "5mb",
+    },
+  },
   turbopack: {
     // Runtime receipt cleanup intentionally accepts a verified, workspace-
     // scoped file path. NFT cannot prove that bound statically and reports the

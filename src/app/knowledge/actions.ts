@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { KnowledgeReviewStatus, KnowledgeSourceType } from "@/generated/prisma-beta/client";
 import { knowledgeImportMaxBytes } from "@/lib/knowledge-limits";
 import { getSession } from "@/lib/session";
 import {
@@ -10,8 +11,10 @@ import {
   deleteKnowledgeBaseEntry,
   generateStarterKnowledge,
   parseKnowledgeBaseFormData,
+  reviewKnowledgeBaseEntry,
   updateKnowledgeBaseEntry,
 } from "@/server/knowledge/knowledge-base";
+import { extractKnowledgeFile } from "@/server/knowledge/file-extraction";
 import { syncBusinessWebsiteKnowledge } from "@/server/knowledge/website-sync";
 
 export async function createKnowledgeBaseAction(formData: FormData) {
@@ -25,46 +28,36 @@ export async function importTextKnowledgeAction(formData: FormData) {
   const session = await getRequiredSession();
   const file = formData.get("file");
   const pastedText = String(formData.get("pastedText") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim() || "Imported WhatsApp conversation";
-  const category = String(formData.get("category") ?? "").trim() || "imported-chat";
+  const titleInput = String(formData.get("title") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim() || "imported";
   const hasFile = file instanceof File && file.size > 0;
 
   if (hasFile && file.size > knowledgeImportMaxBytes) {
     throw new Error(
-      `File terlalu besar. Maksimal ${Math.round(knowledgeImportMaxBytes / 1024)} KB per import; pecah file menjadi beberapa knowledge item.`,
+      `File terlalu besar. Maksimal ${Math.round(knowledgeImportMaxBytes / 1024 / 1024)} MB per import.`,
     );
   }
-
-  if (hasFile && !isSupportedTextFile(file)) {
-    throw new Error("Format file belum didukung. Gunakan file .txt, .md, atau .csv.");
-  }
-
-  const fileText = hasFile ? (await file.text()).trim() : "";
-  const content = [pastedText, fileText].filter(Boolean).join("\n\n--- imported file ---\n\n");
+  const extracted = hasFile ? await extractKnowledgeFile(file) : null;
+  const content = [pastedText, extracted?.content]
+    .filter(Boolean)
+    .join("\n\n--- isi file ---\n\n");
 
   if (!content) {
-    throw new Error("Upload .txt atau paste percakapan dulu.");
+    throw new Error("Upload file atau paste informasi dulu.");
   }
 
   await createKnowledgeBaseEntry(session.userId, {
-    title,
+    title: titleInput || (hasFile ? file.name.replace(/\.[^.]+$/, "") : "Import percakapan lama"),
     category,
     content,
-    isActive: true,
+    isActive: false,
+    sourceType: hasFile ? KnowledgeSourceType.FILE : KnowledgeSourceType.CONVERSATION,
+    reviewStatus: KnowledgeReviewStatus.DRAFT,
+    sourceName: hasFile ? file.name : "Teks yang ditempel owner",
+    extractedMeta: extracted?.metadata,
   });
   revalidateKnowledgePaths();
-  redirect("/knowledge?created=1");
-}
-
-function isSupportedTextFile(file: File) {
-  const filename = file.name.toLowerCase();
-  return (
-    !file.type ||
-    file.type.startsWith("text/") ||
-    filename.endsWith(".txt") ||
-    filename.endsWith(".md") ||
-    filename.endsWith(".csv")
-  );
+  redirect("/knowledge?imported=draft");
 }
 
 export async function updateKnowledgeBaseAction(formData: FormData) {
@@ -97,7 +90,19 @@ export async function generateStarterKnowledgeAction() {
 
   await generateStarterKnowledge(session.userId);
   revalidateKnowledgePaths();
-  redirect("/knowledge?created=1");
+  redirect("/knowledge?generated=draft");
+}
+
+export async function reviewKnowledgeBaseAction(formData: FormData) {
+  const session = await getRequiredSession();
+  const entryId = String(formData.get("entryId") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  if (decision !== "approve" && decision !== "reject") {
+    throw new Error("Keputusan review tidak valid.");
+  }
+  await reviewKnowledgeBaseEntry(session.userId, entryId, decision);
+  revalidateKnowledgePaths();
+  redirect(`/knowledge?reviewed=${decision === "approve" ? "approved" : "rejected"}`);
 }
 
 export async function syncWebsiteKnowledgeAction() {

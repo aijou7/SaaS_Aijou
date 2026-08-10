@@ -105,7 +105,7 @@ export async function simulateClientChatMessage(userId: string, params: {
   if (settings.isActive || result.aiReply) return result;
 
   const [knowledgeContext, productCatalog] = await Promise.all([
-    getActiveKnowledgeContext(business.id),
+    getActiveKnowledgeContext(business.id, params.message),
     getActiveProductCatalog(business.id),
   ]);
   const previewReply = await buildCustomerServiceReplyAi({

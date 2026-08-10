@@ -54,9 +54,36 @@ export async function getOnboardingGuideStatus(userId: string) {
   }
 
   const page = await loadBusinessReadiness(userId);
+  const agent = page.business
+    ? await prisma.agentSettings.findUnique({
+        where: { businessId: page.business.id },
+        select: {
+          agentName: true,
+          tone: true,
+          language: true,
+          openingMessage: true,
+          businessDescription: true,
+          handoffRules: true,
+          systemInstruction: true,
+        },
+      })
+    : null;
   return {
     onboardingCompleted: Boolean(page.business?.onboardingCompleted),
     readiness: page.readiness,
+    profile: page.business
+      ? {
+          businessName: page.business.businessName,
+          businessType: page.business.businessType,
+          whatsappNumber: page.business.whatsappNumber,
+          serviceArea: page.business.serviceArea,
+          operatingHours: page.business.operatingHours,
+          mainServices: page.business.mainServices,
+          websiteUrl: page.business.websiteUrl,
+          address: page.business.address,
+        }
+      : null,
+    agent,
   };
 }
 
@@ -206,7 +233,7 @@ async function loadBusinessReadiness(
   // five-connection serverless pool during a slow database wake-up.
   const [activeKnowledgeCount, agentSettings, whatsAppReadiness] = await Promise.all([
     prisma.knowledgeBase.count({
-      where: { businessId: business.id, isActive: true },
+      where: { businessId: business.id, isActive: true, reviewStatus: "APPROVED" },
     }),
     agentSettingsPromise,
     getWhatsAppReadinessForBusiness(business.id),

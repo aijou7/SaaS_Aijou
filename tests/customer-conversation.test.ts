@@ -71,7 +71,7 @@ describe("customer conversation continuity", () => {
     assert.equal(reply, "Masih di sini. Kirim saja pertanyaannya.");
   });
 
-  test("answers a broad website request with a concrete starter scope", () => {
+  test("delegates business-specific website scope to the grounded model", () => {
     const reply = buildContextualCustomerReply({
       message: "saya mau buat website",
       conversationContext:
@@ -79,24 +79,19 @@ describe("customer conversation continuity", () => {
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /website responsif/i);
-    assert.match(reply ?? "", /company profile, penjualan, atau portal internal/i);
-    assert.doesNotMatch(reply ?? "", /langkah yang tepat|visibilitas bisnis/i);
-    assert.equal((reply?.match(/\?/g) ?? []).length, 1);
+    assert.equal(reply, null);
   });
 
-  test("answers a dashboard request with a useful technical baseline", () => {
+  test("delegates dashboard scope to approved business context", () => {
     const reply = buildContextualCustomerReply({
       message: "Saya butuh custom dashboard",
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /KPI utama/i);
-    assert.match(reply ?? "", /role-based access/i);
-    assert.equal((reply?.match(/\?/g) ?? []).length, 1);
+    assert.equal(reply, null);
   });
 
-  test("proposes a starting point when the customer has no idea", () => {
+  test("lets the model resolve an open-ended answer from current context", () => {
     const reply = buildContextualCustomerReply({
       message: "aku gapunya ide",
       conversationContext:
@@ -104,25 +99,20 @@ describe("customer conversation continuity", () => {
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /untuk versi awal/i);
-    assert.match(reply ?? "", /beranda.*profil.*produk atau layanan/i);
-    assert.doesNotMatch(reply ?? "", /^halo/i);
+    assert.equal(reply, null);
   });
 
-  test("treats 'keduanya' as the previous either-or answer", () => {
+  test("delegates 'keduanya' to the immediately preceding model context", () => {
     const reply = buildContextualCustomerReply({
       message: "keduanya",
       conversationContext: websiteConversation,
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /dua fungsi/i);
-    assert.match(reply ?? "", /profil dan kredibilitas/i);
-    assert.match(reply ?? "", /produk atau layanan/i);
-    assert.doesNotMatch(reply ?? "", /apakah websitenya untuk/i);
+    assert.equal(reply, null);
   });
 
-  test("resolves 'keduanya' from a logo-and-color question", () => {
+  test("does not hardcode the meaning of a context-dependent answer", () => {
     const reply = buildContextualCustomerReply({
       message: "keduanya",
       conversationContext: [
@@ -132,32 +122,27 @@ describe("customer conversation continuity", () => {
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /logo dan panduan warna sudah ada/i);
-    assert.doesNotMatch(reply ?? "", /dua fungsi/i);
-    assert.doesNotMatch(reply ?? "", /sekaligus memperkenalkan produk/i);
+    assert.equal(reply, null);
   });
 
-  test("answers one-month feasibility using the known project", () => {
+  test("does not hardcode a one-month delivery promise", () => {
     const reply = buildContextualCustomerReply({
       message: "1 bulan bisa?",
       conversationContext: `${websiteConversation}\nCustomer: keduanya\nAssistant: Siap, berarti dua fungsi itu masuk scope.`,
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /cukup realistis/i);
-    assert.match(reply ?? "", /website company profile/i);
-    assert.match(reply ?? "", /preview desain/i);
+    assert.equal(reply, null);
   });
 
-  test("records 'bulan depan' without restarting discovery", () => {
+  test("lets conversation history resolve a timeline answer", () => {
     const reply = buildContextualCustomerReply({
       message: "bulan depan",
       conversationContext: `${websiteConversation}\nAssistant: Kapan targetnya?`,
       agentName: "Aijou",
     });
 
-    assert.match(reply ?? "", /targetnya bulan depan sudah saya catat/i);
-    assert.doesNotMatch(reply ?? "", /ceritakan kebutuhan/i);
+    assert.equal(reply, null);
   });
 
   test("continues a router diagnostic when the customer says 'boleh'", () => {

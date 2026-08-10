@@ -52,8 +52,8 @@ export function buildActivationReadiness(input: ActivationReadinessInput) {
     {
       key: "knowledge",
       label: "Knowledge base aktif",
-      description: "Minimal 3 knowledge aktif supaya jawaban tidak mengandalkan tebakan.",
-      done: input.activeKnowledgeCount >= 3,
+      description: "Minimal satu knowledge aktif sebagai sumber jawaban awal.",
+      done: input.activeKnowledgeCount >= 1,
       href: "/knowledge",
       requiredBeforeActivation: true,
     },

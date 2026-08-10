@@ -1,7 +1,7 @@
 export const knowledgeTitleMaxChars = 160;
 export const knowledgeCategoryMaxChars = 80;
 export const knowledgeContentMaxChars = 40_000;
-export const knowledgeImportMaxBytes = 64 * 1024;
+export const knowledgeImportMaxBytes = 4 * 1024 * 1024;
 export const knowledgePromptMaxChars = 24_000;
 
 type KnowledgeTextInput = {
@@ -14,6 +14,9 @@ export type KnowledgePromptEntry = {
   title: string;
   content: string;
   category?: string | null;
+  sourceType?: string | null;
+  priority?: number | null;
+  updatedAt?: Date | string | null;
 };
 
 export function normalizeKnowledgeTextInput(input: KnowledgeTextInput) {
@@ -54,7 +57,23 @@ export function buildKnowledgePromptContext(
     const title = entry.title.trim().slice(0, knowledgeTitleMaxChars) || "Untitled";
     const category = entry.category?.trim().slice(0, knowledgeCategoryMaxChars) || "general";
     const content = entry.content.trim().slice(0, knowledgeContentMaxChars);
-    return [`Title: ${title}`, `Category: ${category}`, content].filter(Boolean).join("\n");
+    const source = entry.sourceType?.trim() || "MANUAL";
+    const priority = Math.max(0, Math.min(100, entry.priority ?? 80));
+    const parsedUpdatedAt = entry.updatedAt ? new Date(entry.updatedAt) : null;
+    const updatedAt =
+      parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime())
+        ? parsedUpdatedAt.toISOString().slice(0, 10)
+        : null;
+    return [
+      `Title: ${title}`,
+      `Category: ${category}`,
+      `Source: ${source}`,
+      `Priority: ${priority}`,
+      updatedAt ? `Updated: ${updatedAt}` : null,
+      content,
+    ]
+      .filter(Boolean)
+      .join("\n");
   });
 
   return fitBlocksWithinBudget(blocks, Math.floor(maxChars));

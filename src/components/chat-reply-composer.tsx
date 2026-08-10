@@ -21,7 +21,7 @@ export function ChatReplyComposer(props: {
     if (!state.nonce) return;
     if (state.ok) {
       formRef.current?.reset();
-      showToast("Balasan berhasil dikirim.");
+      showToast(state.message || "Balasan berhasil dikirim.");
       window.dispatchEvent(new Event("aijou:inbox-state-changed"));
       inputRef.current?.focus();
     } else {
@@ -53,6 +53,7 @@ export function ChatReplyComposer(props: {
         </div>
       ) : null}
       <form
+        id={`reply-form-${props.conversationId}`}
         className="reply-form"
         action={action}
         ref={formRef}
@@ -84,6 +85,17 @@ export function ChatReplyComposer(props: {
           {pending ? "Mengirim…" : "Kirim"}
         </button>
       </form>
+      {!blocked ? (
+        <label className="checkbox-label composer-knowledge-option">
+          <input
+            form={`reply-form-${props.conversationId}`}
+            name="saveAsKnowledge"
+            type="checkbox"
+            disabled={pending}
+          />
+          Simpan balasan ini sebagai draft knowledge
+        </label>
+      ) : null}
       <small className="composer-hint">
         {blocked ? "Pesan bebas aktif lagi setelah pelanggan membalas." : "Enter untuk kirim · Shift + Enter untuk baris baru"}
       </small>

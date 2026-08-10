@@ -36,6 +36,8 @@ export async function GET() {
         total: page.readiness.total,
         percent: page.readiness.percent,
         checks: page.readiness.checks,
+        profile: page.profile,
+        agent: page.agent,
       },
       { headers: { "Cache-Control": "private, no-store, max-age=0" } },
     );

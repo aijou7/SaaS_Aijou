@@ -118,6 +118,20 @@ enum ReviewStatus {
   REJECTED
 }
 
+enum KnowledgeSourceType {
+  MANUAL
+  ONBOARDING
+  WEBSITE
+  FILE
+  CONVERSATION
+}
+
+enum KnowledgeReviewStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
 enum LeadStatus {
   NEW
   NEED_FOLLOW_UP
@@ -521,17 +535,27 @@ model Receipt {
 }
 
 model KnowledgeBase {
-  id         String   @id @default(cuid())
-  businessId String
-  title      String
-  content    String
-  category   String?
-  isActive   Boolean  @default(true)
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String                @id @default(cuid())
+  businessId      String
+  title           String
+  content         String
+  category        String?
+  isActive        Boolean               @default(true)
+  sourceType      KnowledgeSourceType   @default(MANUAL)
+  reviewStatus    KnowledgeReviewStatus @default(APPROVED)
+  sourceUrl       String?
+  sourceName      String?
+  sourceMessageId String?
+  priority        Int                   @default(80)
+  extractedMeta   Json?
+  approvedAt      DateTime?
+  business        Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  @@index([businessId, isActive])
+  @@index([businessId, isActive, reviewStatus, priority])
+  @@index([businessId, sourceType, updatedAt])
+  @@index([sourceMessageId])
   @@map("knowledge_base")
 }
 

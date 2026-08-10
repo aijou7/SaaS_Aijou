@@ -30,8 +30,15 @@ import {
   useState,
   useTransition,
   type ComponentType,
+  type FormEvent,
 } from "react";
-import { completeOnboardingUiAction } from "@/app/setup/actions";
+import {
+  completeOnboardingUiAction,
+  saveOnboardingAgentUiAction,
+  saveOnboardingBusinessUiAction,
+  saveOnboardingKnowledgeUiAction,
+  type CompleteOnboardingResult,
+} from "@/app/setup/actions";
 import { showToast } from "@/components/toast-center";
 
 type GuideKey =
@@ -59,6 +66,25 @@ type GuideStatus = {
   total: number;
   percent: number;
   checks: GuideCheck[];
+  profile?: {
+    businessName?: string | null;
+    businessType?: string | null;
+    whatsappNumber?: string | null;
+    serviceArea?: string | null;
+    operatingHours?: string | null;
+    mainServices?: string | null;
+    websiteUrl?: string | null;
+    address?: string | null;
+  } | null;
+  agent?: {
+    agentName?: string | null;
+    tone?: string | null;
+    language?: string | null;
+    openingMessage?: string | null;
+    businessDescription?: string | null;
+    handoffRules?: string | null;
+    systemInstruction?: string | null;
+  } | null;
 };
 
 type GuideCopy = {
@@ -92,7 +118,7 @@ const guideCopy: Record<GuideKey, GuideCopy> = {
   knowledge: {
     eyebrow: "Sumber jawaban",
     title: "Bekali Aijou dengan knowledge bisnis",
-    body: "Tambahkan minimal tiga informasi aktif seperti layanan, FAQ, prosedur, atau harga yang boleh dipublikasikan.",
+    body: "Tambahkan informasi awal seperti layanan, FAQ, prosedur, atau harga yang boleh dipublikasikan.",
     tip: "Mulai dari pertanyaan customer yang paling sering muncul. Knowledge dapat ditambah dan diperbarui kapan saja.",
     action: "Tambah knowledge",
     icon: Sparkles,
@@ -138,6 +164,7 @@ export function OnboardingGuide() {
   const [selectedKey, setSelectedKey] = useState<GuideKey | null>(null);
   const [checking, setChecking] = useState(false);
   const [completing, startCompleting] = useTransition();
+  const [saving, startSaving] = useTransition();
   const dialogRef = useRef<HTMLElement>(null);
   const initialPathRef = useRef(pathname);
 
@@ -250,6 +277,21 @@ export function OnboardingGuide() {
   const finalStep = status.readyToComplete;
   const copy = selectedCheck ? guideCopy[selectedCheck.key] : null;
   const SelectedIcon = copy?.icon ?? Rocket;
+  const submitInline = (
+    event: FormEvent<HTMLFormElement>,
+    action: (formData: FormData) => Promise<CompleteOnboardingResult>,
+  ) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startSaving(async () => {
+      const result = await action(formData);
+      showToast(result.message, result.ok ? "success" : "error");
+      if (result.ok) {
+        setSelectedKey(null);
+        await loadStatus();
+      }
+    });
+  };
 
   return (
     <div
@@ -357,6 +399,52 @@ export function OnboardingGuide() {
             </div>
           ) : null}
 
+          {!finalStep && selectedCheck?.key === "business-profile" ? (
+            <form
+              className="form-grid onboarding-guide-inline-form"
+              onSubmit={(event) => submitInline(event, saveOnboardingBusinessUiAction)}
+            >
+              <label>Nama bisnis<input name="businessName" defaultValue={status.profile?.businessName ?? ""} required /></label>
+              <label>Jenis bisnis<input name="businessType" defaultValue={status.profile?.businessType ?? ""} placeholder="Konsultan IT, retail, klinik…" required /></label>
+              <label className="span-2">Layanan utama<textarea name="mainServices" defaultValue={status.profile?.mainServices ?? ""} placeholder="Layanan yang boleh ditawarkan Aijou" required /></label>
+              <label>Area layanan<input name="serviceArea" defaultValue={status.profile?.serviceArea ?? ""} placeholder="Lombok dan remote seluruh Indonesia" required /></label>
+              <label>Jam operasional<input name="operatingHours" defaultValue={status.profile?.operatingHours ?? ""} placeholder="Senin–Sabtu, 09.00–18.00 WITA" required /></label>
+              <label>WhatsApp bisnis<input name="whatsappNumber" defaultValue={status.profile?.whatsappNumber ?? ""} placeholder="628…" /></label>
+              <label>Website<input name="websiteUrl" type="url" defaultValue={status.profile?.websiteUrl ?? ""} placeholder="https://bisnis.com" /></label>
+              <label className="span-2">Alamat publik<input name="address" defaultValue={status.profile?.address ?? ""} /></label>
+              <button className="primary-button span-2" type="submit" disabled={saving}>{saving ? "Menyimpan…" : "Simpan dan lanjut"}</button>
+            </form>
+          ) : null}
+
+          {!finalStep && selectedCheck?.key === "agent-config" ? (
+            <form
+              className="form-grid onboarding-guide-inline-form"
+              onSubmit={(event) => submitInline(event, saveOnboardingAgentUiAction)}
+            >
+              <label>Nama agent<input name="agentName" defaultValue={status.agent?.agentName ?? "Aijou AI"} required /></label>
+              <label>Gaya bahasa<input name="tone" defaultValue={status.agent?.tone ?? "ramah, natural, ringkas, dan teknis saat diperlukan"} required /></label>
+              <label>Bahasa<select name="language" defaultValue={status.agent?.language ?? "id"}><option value="id">Bahasa Indonesia</option><option value="en">English</option></select></label>
+              <label>Pesan pembuka<input name="openingMessage" defaultValue={status.agent?.openingMessage ?? "Halo, ada yang bisa saya bantu?"} /></label>
+              <label className="span-2">Deskripsi tambahan bisnis<textarea name="businessDescription" defaultValue={status.agent?.businessDescription ?? ""} placeholder="Konteks tambahan yang belum ada di profil bisnis" /></label>
+              <label className="span-2">Kapan serahkan ke manusia<textarea name="handoffRules" defaultValue={status.agent?.handoffRules ?? "Serahkan ke tim jika customer meminta manusia, komplain, meminta harga final, atau keputusan membutuhkan otorisasi owner."} required /></label>
+              <label className="span-2">Instruksi utama<textarea name="systemInstruction" defaultValue={status.agent?.systemInstruction ?? "Jawab langsung, natural, padat, dan berdasarkan fakta bisnis yang sudah disetujui. Jangan mengarang harga, layanan, atau janji."} required /></label>
+              <button className="primary-button span-2" type="submit" disabled={saving}>{saving ? "Menyimpan…" : "Simpan dan lanjut"}</button>
+            </form>
+          ) : null}
+
+          {!finalStep && selectedCheck?.key === "knowledge" ? (
+            <form
+              className="form-grid onboarding-guide-inline-form"
+              onSubmit={(event) => submitInline(event, saveOnboardingKnowledgeUiAction)}
+            >
+              <label>Judul<input name="title" defaultValue="Informasi bisnis utama" required /></label>
+              <label>Kategori<input name="category" defaultValue="onboarding" required /></label>
+              <label className="span-2">Informasi yang boleh disampaikan AI<textarea name="content" placeholder="Contoh: Kami melayani instalasi jaringan, pembuatan website, dan AI agent. Harga final ditentukan setelah scope dikonfirmasi." required /></label>
+              <p className="muted span-2">Informasi ini ditulis langsung oleh owner, sehingga aktif setelah disimpan. Import file dan percakapan tetap melalui tahap review.</p>
+              <button className="primary-button span-2" type="submit" disabled={saving}>{saving ? "Menyimpan…" : "Simpan dan lanjut"}</button>
+            </form>
+          ) : null}
+
           {!finalStep && selectedCheck?.key === "channel" ? (
             <div className="onboarding-channel-options" aria-label="Pilih channel pertama">
               <GuideChannelLink href="/integrations" label="Web Live Chat" detail="Paling cepat untuk dites" icon={MessageCircle} onNavigate={minimize} />
@@ -398,7 +486,10 @@ export function OnboardingGuide() {
                 <Rocket size={17} aria-hidden="true" />
                 {completing ? "Mengaktifkan…" : "Selesaikan dan gunakan Aijou"}
               </button>
-            ) : selectedCheck?.key !== "channel" && copy ? (
+            ) : selectedCheck?.key !== "channel" &&
+              selectedCheck?.key !== "business-profile" &&
+              selectedCheck?.key !== "agent-config" &&
+              selectedCheck?.key !== "knowledge" && copy ? (
               <Link className="primary-button" href={selectedCheck!.href as Route} onClick={minimize}>
                 {copy.action}
                 <ExternalLink size={16} aria-hidden="true" />
