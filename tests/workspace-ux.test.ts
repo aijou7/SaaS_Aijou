@@ -9,7 +9,7 @@ const liveConversation = readFileSync("src/components/live-conversation-detail.t
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
 const styles = readFileSync("src/app/globals.css", "utf8");
 
-test("workspace navigation favors five clear task areas", () => {
+test("workspace keeps five primary tasks on top and contextual submenus on the left", () => {
   for (const label of [
     "Percakapan",
     "AI & Knowledge",
@@ -19,8 +19,10 @@ test("workspace navigation favors five clear task areas", () => {
   ]) {
     assert.match(appShell, new RegExp(`label: \"${label.replace("&", "&")}\"`));
   }
-  assert.doesNotMatch(appShell, /<nav className="top-nav"/);
-  assert.match(appShell, /primary-sidebar-nav/);
+  assert.match(appShell, /<nav className="workspace-primary-nav"/);
+  assert.doesNotMatch(appShell, /<nav className="primary-sidebar-nav"/);
+  assert.match(appShell, /sidebar-context-heading/);
+  assert.match(appShell, /<nav className="settings-nav"/);
 });
 
 test("workspace typography and controls remain comfortably readable", () => {

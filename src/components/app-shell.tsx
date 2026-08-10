@@ -161,14 +161,6 @@ type AppShellProps = {
 export function AppShell({ active, businessName, children }: AppShellProps) {
   const activeModule = moduleByActive[active] ?? "settings";
   const activeNavigation = moduleNavigation[activeModule];
-  const activePrimaryNavigation =
-    primaryNavigation.find((item) => item.module === activeModule) ?? primaryNavigation[4];
-  const activePage =
-    activeNavigation.items.find((item) => item.key === active) ??
-    Object.values(moduleNavigation)
-      .flatMap((module) => module.items)
-      .find((item) => item.key === active) ??
-    activeNavigation.items[0];
   const groqConfigured = Boolean(process.env.GROQ_API_KEY);
 
   return (
@@ -191,10 +183,23 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           </div>
         </div>
 
-        <div className="topbar-context" aria-label="Halaman aktif">
-          <span>{activePrimaryNavigation.label}</span>
-          <strong>{activePage.label}</strong>
-        </div>
+        <nav className="workspace-primary-nav" aria-label="Navigasi utama">
+          {primaryNavigation.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.module === activeModule;
+            return (
+              <IntentPrefetchLink
+                className={isActive ? "top-nav-item active" : "top-nav-item"}
+                href={item.href}
+                key={item.module}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <Icon size={17} aria-hidden="true" />
+                <span>{item.label}</span>
+              </IntentPrefetchLink>
+            );
+          })}
+        </nav>
 
         <div className="topbar-actions">
           <Link className="top-icon-button" href="/setup" aria-label="Bantuan" data-tooltip="Bantuan">
@@ -216,24 +221,6 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
               <span>{groqConfigured ? "AI agent terhubung" : "Workspace belum siap"}</span>
             </div>
           </div>
-
-          <nav className="primary-sidebar-nav" aria-label="Navigasi utama">
-            {primaryNavigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.module === activeModule;
-              return (
-                <IntentPrefetchLink
-                  className={isActive ? "primary-sidebar-item active" : "primary-sidebar-item"}
-                  href={item.href}
-                  key={item.module}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>{item.label}</span>
-                </IntentPrefetchLink>
-              );
-            })}
-          </nav>
 
           <p className="sidebar-context-heading">{activeNavigation.title}</p>
           <nav className="settings-nav" aria-label={`Menu ${activeNavigation.title}`}>
