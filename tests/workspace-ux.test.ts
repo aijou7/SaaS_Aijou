@@ -42,3 +42,16 @@ test("conversation view prioritizes the message thread and hides secondary actio
   assert.match(modeControls, /primaryMode/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) 300px/);
 });
+
+test("data-entry dialogs stay anchored to the viewport and scroll internally", () => {
+  const contentEnterAnimation = styles.match(
+    /@keyframes content-enter\s*\{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(contentEnterAnimation);
+  assert.doesNotMatch(contentEnterAnimation, /transform:/);
+  assert.match(styles, /\.ops-modal\s*\{[^}]*max-height:\s*calc\(100dvh - 48px\)/s);
+  assert.match(styles, /\.ops-modal\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(styles, /\.product-modal\s*\{[^}]*max-height:\s*calc\(100dvh - 48px\)/s);
+  assert.match(styles, /\.product-modal-backdrop\s*\{[^}]*overflow-y:\s*auto/s);
+});
