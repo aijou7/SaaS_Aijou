@@ -7,6 +7,15 @@ const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
+const opsModal = readFileSync("src/components/ops-modal.tsx", "utf8");
+const operationForms = [
+  "broadcasts",
+  "complaints",
+  "customers",
+  "orders",
+  "shipping",
+  "workflows",
+].map((page) => readFileSync(`src/app/${page}/page.tsx`, "utf8"));
 const styles = readFileSync("src/app/globals.css", "utf8");
 
 test("workspace keeps five primary tasks on top and contextual submenus on the left", () => {
@@ -44,14 +53,27 @@ test("conversation view prioritizes the message thread and hides secondary actio
 });
 
 test("data-entry dialogs stay anchored to the viewport and scroll internally", () => {
-  const contentEnterAnimation = styles.match(
-    /@keyframes content-enter\s*\{[\s\S]*?\n\}/,
-  )?.[0];
+  const appMainInnerRule = styles.match(/\.app-main-inner\s*\{[^}]*\}/)?.[0];
 
-  assert.ok(contentEnterAnimation);
-  assert.doesNotMatch(contentEnterAnimation, /transform:/);
-  assert.match(styles, /\.ops-modal\s*\{[^}]*max-height:\s*calc\(100dvh - 48px\)/s);
-  assert.match(styles, /\.ops-modal\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.ok(appMainInnerRule);
+  assert.doesNotMatch(appMainInnerRule, /animation:|transform:/);
+  assert.match(styles, /\.ops-modal\s*\{[^}]*max-height:\s*calc\(100dvh - 32px\)/s);
+  assert.match(styles, /\.ops-modal-body\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(styles, /\.ops-modal-footer\s*\{/);
+  assert.doesNotMatch(styles, /\.ops-modal-backdrop\s*\{[^}]*backdrop-filter:/s);
+  assert.match(styles, /body:has\(\.ops-modal-backdrop\)[\s\S]*?overflow:\s*hidden/);
   assert.match(styles, /\.product-modal\s*\{[^}]*max-height:\s*calc\(100dvh - 48px\)/s);
   assert.match(styles, /\.product-modal-backdrop\s*\{[^}]*overflow-y:\s*auto/s);
+});
+
+test("operational forms share a fixed header, scrollable body, and fixed action area", () => {
+  assert.match(opsModal, /className="ops-modal-head"/);
+  assert.match(opsModal, /className="ops-modal-body"/);
+  assert.match(opsModal, /className="ops-modal-footer"/);
+  assert.match(opsModal, /aria-modal="true"/);
+
+  for (const form of operationForms) {
+    assert.match(form, /<OpsModal/);
+    assert.doesNotMatch(form, /<div className="ops-modal-backdrop"/);
+  }
 });
