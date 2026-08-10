@@ -3,6 +3,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { formatAiConfidence, getAiActivityCopy } from "@/lib/ai-activity-labels";
 import { formatCurrencyIDR } from "@/lib/format";
 import { getSession } from "@/lib/session";
 import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
@@ -57,8 +58,8 @@ export default async function ReportsPage() {
           <section className="core-card">
             <div className="section-header">
               <div>
-                <h2>Aktivitas Aijou terbaru</h2>
-                <p className="muted">Keputusan Aijou berdasarkan percakapan terakhir.</p>
+                <h2>Yang baru dilakukan Aijou</h2>
+                <p className="muted">Yang baru saja Aijou kerjakan untuk pelanggan dan tim.</p>
               </div>
               <Link className="ghost-button" href="/ai-activity">
                 Lihat semua
@@ -71,19 +72,18 @@ export default async function ReportsPage() {
                   <p>Coba kirim chat dari Simulator.</p>
                 </div>
               ) : (
-                dashboard.latestAiActions.map((action) => (
-                  <Link className="activity-row" href="/ai-activity" key={action.id}>
-                    <span>
-                      <strong>{action.actionTaken}</strong>
-                      <small>{action.intent}</small>
-                    </span>
-                    <span className="status">
-                      {action.confidenceScore === null
-                        ? "-"
-                        : `${Math.round(action.confidenceScore * 100)}%`}
-                    </span>
-                  </Link>
-                ))
+                dashboard.latestAiActions.map((action) => {
+                  const copy = getAiActivityCopy(action.actionTaken, action.intent);
+                  return (
+                    <Link className="activity-row" href="/ai-activity" key={action.id}>
+                      <span>
+                        <strong>{copy.title}</strong>
+                        <small>{copy.description}</small>
+                      </span>
+                      <span className="status">{formatAiConfidence(action.confidenceScore)}</span>
+                    </Link>
+                  );
+                })
               )}
             </div>
           </section>

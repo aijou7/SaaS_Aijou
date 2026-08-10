@@ -12,6 +12,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { formatAiConfidence, getAiActivityCopy } from "@/lib/ai-activity-labels";
 import { formatCurrencyIDR } from "@/lib/format";
 import { getSession } from "@/lib/session";
 import { getFinanceDashboardSnapshot } from "@/server/finance/dashboard";
@@ -232,11 +233,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <div className="queue-grid">
             <Link className="queue-item" href="/transactions?status=PENDING_CONFIRMATION">
               <strong>{dashboard.pendingTransactionCount}</strong>
-              <span>Pending payments</span>
+              <span>Menunggu konfirmasi pembayaran</span>
             </Link>
             <Link className="queue-item" href="/reports">
               <strong>{dashboard.confirmedCount}</strong>
-              <span>Paid records</span>
+              <span>Pembayaran selesai</span>
             </Link>
             <Link className="queue-item" href="/conversations?status=HUMAN_NEEDED">
               <strong>{dashboard.humanNeededCount}</strong>
@@ -244,15 +245,15 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </Link>
             <Link className="queue-item" href="/conversations?unread=1">
               <strong>{dashboard.unreadConversationCount}</strong>
-              <span>Unread chat</span>
+              <span>Belum dibaca</span>
             </Link>
             <Link className="queue-item" href="/leads">
               <strong>{dashboard.hotLeadCount}</strong>
-              <span>Hot leads</span>
+              <span>Prospek potensial</span>
             </Link>
             <Link className="queue-item" href="/leads">
               <strong>{dashboard.dueFollowUpCount}</strong>
-              <span>Follow-up due</span>
+              <span>Perlu ditindaklanjuti</span>
             </Link>
             <Link className="queue-item" href="/leads">
               <strong>{dashboard.newLeadCount}</strong>
@@ -264,8 +265,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <div className="card">
           <div className="section-header">
             <div>
-              <h2>Aktivitas Aijou terbaru</h2>
-              <p className="muted">Keputusan terbaru yang dibuat berdasarkan percakapan.</p>
+              <h2>Yang baru dilakukan Aijou</h2>
+              <p className="muted">Yang baru saja Aijou kerjakan untuk membantu pelanggan dan tim.</p>
             </div>
             <Link className="ghost-button" href="/ai-activity">
               Lihat semua
@@ -281,33 +282,34 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
           ) : (
             <div className="activity-list">
-              {dashboard.latestAiActions.map((action) => (
-                <Link
-                  className="activity-row"
-                  href={
-                    action.conversationId
-                      ? `/conversations?conversationId=${action.conversationId}`
-                      : "/ai-activity"
-                  }
-                  key={action.id}
-                >
-                  <span>
-                    <strong>{action.actionTaken}</strong>
-                    <small>{action.intent}</small>
-                  </span>
-                  <span
-                    className={
-                      action.confidenceScore !== null && action.confidenceScore < 0.7
-                        ? "status status-warning"
-                        : "status"
+              {dashboard.latestAiActions.map((action) => {
+                const copy = getAiActivityCopy(action.actionTaken, action.intent);
+                return (
+                  <Link
+                    className="activity-row"
+                    href={
+                      action.conversationId
+                        ? `/conversations?conversationId=${action.conversationId}`
+                        : "/ai-activity"
                     }
+                    key={action.id}
                   >
-                    {action.confidenceScore === null
-                      ? "-"
-                      : `${Math.round(action.confidenceScore * 100)}%`}
-                  </span>
-                </Link>
-              ))}
+                    <span>
+                      <strong>{copy.title}</strong>
+                      <small>{copy.description}</small>
+                    </span>
+                    <span
+                      className={
+                        action.confidenceScore !== null && action.confidenceScore < 0.7
+                          ? "status status-warning"
+                          : "status"
+                      }
+                    >
+                      {formatAiConfidence(action.confidenceScore)}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

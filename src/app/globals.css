@@ -3714,6 +3714,29 @@ sup {
   gap: 10px;
 }
 
+.activity-row > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.activity-row strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.activity-row small {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+
+.activity-row > .status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .checklist,
 .setup-step-list,
 .env-list {

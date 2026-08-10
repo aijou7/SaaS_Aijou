@@ -3,8 +3,9 @@ import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { formatAiConfidence, getAiActivityCopy } from "@/lib/ai-activity-labels";
 import { getSession } from "@/lib/session";
-import { formatConfidence, getAiActivityPage } from "@/server/observability/ai-activity";
+import { getAiActivityPage } from "@/server/observability/ai-activity";
 
 export default async function AiActivityPage() {
   const session = await getSession();
@@ -19,52 +20,54 @@ export default async function AiActivityPage() {
     <AppShell active="ai-activity" businessName={page.business?.businessName}>
 
         <section className="hero compact-hero">
-          <p className="eyebrow">Observability</p>
-          <h1>Lihat keputusan AI, confidence, dan action yang diambil.</h1>
+          <p className="eyebrow">Aktivitas AI</p>
+          <h1>Pahami apa yang Aijou lakukan di setiap percakapan.</h1>
           <p>
-            Halaman ini membantu debug extraction, customer replies, lead summary, receipt OCR,
-            dan handoff behavior tanpa buka database.
+            Lihat balasan yang dibuat, informasi yang dirangkum, dan percakapan yang diteruskan
+            kepada tim.
           </p>
         </section>
 
         <section className="grid" aria-label="AI activity summary">
           <div className="card">
             <Activity size={22} aria-hidden="true" />
-            <h2>Total Logs</h2>
+            <h2>Total aktivitas</h2>
             <div className="metric">{page.summary.totalLogs}</div>
-            <p className="muted">Semua AI decision logs.</p>
+            <p className="muted">Semua pekerjaan yang sudah dicatat Aijou.</p>
           </div>
           <div className="card">
             <AlertTriangle size={22} aria-hidden="true" />
-            <h2>Low Confidence</h2>
+            <h2>Perlu ditinjau</h2>
             <div className="metric">{page.summary.lowConfidence}</div>
-            <p className="muted">Confidence di bawah 70%.</p>
+            <p className="muted">Aktivitas dengan tingkat keyakinan di bawah 70%.</p>
           </div>
           <div className="card">
             <GitPullRequestArrow size={22} aria-hidden="true" />
-            <h2>Handoff Related</h2>
+            <h2>Diteruskan ke tim</h2>
             <div className="metric">{page.summary.handoffRelated}</div>
-            <p className="muted">Log yang terkait handoff/takeover.</p>
+            <p className="muted">Percakapan yang membutuhkan bantuan manusia.</p>
           </div>
         </section>
 
         <section className="section">
           <div className="card">
             <div className="section-header">
-              <h2>Latest AI Logs</h2>
-              <span className="muted">{page.logs.length} recent logs</span>
+              <h2>Aktivitas terbaru</h2>
+              <span className="muted">{page.logs.length} aktivitas terakhir</span>
             </div>
             {page.logs.length === 0 ? (
-              <p className="muted">Belum ada AI log. Coba pakai Simulator dulu.</p>
+              <p className="muted">Belum ada aktivitas. Coba uji Aijou melalui simulator.</p>
             ) : (
               <div className="transaction-list">
-                {page.logs.map((log) => (
+                {page.logs.map((log) => {
+                  const copy = getAiActivityCopy(log.actionTaken, log.intent);
+                  return (
                   <details className="transaction-item" key={log.id}>
                     <summary>
                       <span>
-                        <strong>{log.actionTaken}</strong>
+                        <strong>{copy.title}</strong>
                         <small>
-                          {log.intent} · {log.contactName} ·{" "}
+                          {copy.description} · {log.contactName} ·{" "}
                           {new Date(log.createdAt).toLocaleString("id-ID")}
                         </small>
                       </span>
@@ -75,21 +78,21 @@ export default async function AiActivityPage() {
                             : "status"
                         }
                       >
-                        {formatConfidence(log.confidenceScore)}
+                        {formatAiConfidence(log.confidenceScore)}
                       </span>
                     </summary>
                     <div className="ai-log-grid">
                       <div>
-                        <h3>Input</h3>
+                        <h3>Pesan pelanggan</h3>
                         <pre className="ocr-box">{log.inputText || "-"}</pre>
                       </div>
                       <div>
-                        <h3>Output</h3>
+                        <h3>Hasil Aijou</h3>
                         <pre className="ocr-box">{log.outputText || "-"}</pre>
                       </div>
                     </div>
                     <details className="nested-detail">
-                      <summary>Structured output</summary>
+                      <summary>Detail teknis</summary>
                       <pre className="ocr-box">
                         {JSON.stringify(log.structuredOutput ?? {}, null, 2)}
                       </pre>
@@ -100,12 +103,13 @@ export default async function AiActivityPage() {
                           className="ghost-button"
                           href={`/conversations?conversationId=${log.conversationId}`}
                         >
-                          Open conversation
+                          Buka percakapan
                         </Link>
                       </div>
                     ) : null}
                   </details>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
