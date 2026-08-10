@@ -18,7 +18,10 @@ describe("new workspace isolation", () => {
   });
 
   test("bootstrap creates access records but no customer or demo data", async () => {
-    const bootstrap = await source("../src/server/auth/workspace-bootstrap.ts");
+    const [bootstrap, defaults] = await Promise.all([
+      source("../src/server/auth/workspace-bootstrap.ts"),
+      source("../src/server/agent/defaults.ts"),
+    ]);
     const required = ["business", "agentSettings", "workspaceMembership", "activationEvent"];
     const forbidden = [
       "contact",
@@ -45,6 +48,30 @@ describe("new workspace isolation", () => {
       assert.doesNotMatch(bootstrap, new RegExp(`tx\\.${model}\\.(?:create|upsert|createMany)\\(`));
     }
     assert.match(bootstrap, /businessType:\s*null/);
+    assert.match(bootstrap, /newWorkspaceAgentDefaults\(input\.businessName\)/);
+    assert.doesNotMatch(defaults, /Aijou Teknologi Digital/);
+  });
+
+  test("keeps the minimizable onboarding and complete official channel guides", async () => {
+    const [onboarding, channels] = await Promise.all([
+      source("../src/components/onboarding-guide.tsx"),
+      source("../src/components/channel-setup-guide.tsx"),
+    ]);
+
+    assert.match(onboarding, /Minimalkan/);
+    assert.match(onboarding, /ChannelOnboardingChoices/);
+    assert.match(channels, /business\.facebook\.com\/overview/);
+    assert.match(channels, /developers\.facebook\.com\/apps\/creation/);
+    assert.match(channels, /business\.facebook\.com\/settings\/system-users/);
+    assert.match(channels, /whatsapp_business_management/);
+    assert.match(channels, /whatsapp_business_messaging/);
+    assert.match(channels, /WABA ID/);
+    assert.match(channels, /Phone Number ID/);
+    assert.match(channels, /App Secret/);
+    assert.match(channels, /@BotFather/);
+    assert.match(channels, /\/newbot/);
+    assert.match(channels, /\/start/);
+    assert.match(channels, /webhook/);
   });
 
   test("verified owners land on a clean dashboard before setup", async () => {

@@ -1,9 +1,11 @@
-import { KeyRound, PlugZap, RadioTower, ShieldCheck } from "lucide-react";
+import { PlugZap, RadioTower, ShieldCheck } from "lucide-react";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
+import { WhatsAppSetupGuide } from "@/components/channel-setup-guide";
 import { getSession } from "@/lib/session";
+import { getAgentSettingsPage } from "@/server/agent/settings";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
 
 type WhatsAppSettingsPageProps = {
@@ -19,7 +21,10 @@ export default async function WhatsAppSettingsPage({
     redirect("/login" as Route);
   }
 
-  const page = await getWhatsAppSettingsPage(session.userId);
+  const [page, agentPage] = await Promise.all([
+    getWhatsAppSettingsPage(session.userId),
+    getAgentSettingsPage(session.userId),
+  ]);
   const params = searchParams ? await searchParams : {};
   const feedback = getWhatsAppFeedback(params);
   const webhookUrl =
@@ -169,39 +174,18 @@ export default async function WhatsAppSettingsPage({
           </form>
         </div>
 
-        <div className="card">
-          <h2>Meta setup guide</h2>
-          <div className="checklist">
-            <div className="checklist-item">
-              <KeyRound size={18} aria-hidden="true" />
-              <span>
-                <strong>1. Copy token dari Meta</strong>
-                <small>Siapkan permanent access token, WABA ID, Phone Number ID, dan app secret.</small>
-              </span>
-            </div>
-            <div className="checklist-item">
-              <RadioTower size={18} aria-hidden="true" />
-              <span>
-                <strong>2. Set callback URL</strong>
-                <small>Aijou memasang callback HTTPS dan verify token otomatis ke WABA.</small>
-              </span>
-            </div>
-            <div className="checklist-item">
-              <PlugZap size={18} aria-hidden="true" />
-              <span>
-                <strong>3. Activate</strong>
-                <small>Centang aktif lalu simpan. Status Ready hanya muncul setelah Meta menerima setup.</small>
-              </span>
-            </div>
-          </div>
-          <div className="settings-note">
-            <strong>Security</strong>
-            <p>
-              Credential dienkripsi per workspace sebelum disimpan. Jangan pernah membagikan
-              access token, verify token, app secret, atau encryption key lewat chat.
-            </p>
-          </div>
-        </div>
+        <WhatsAppSetupGuide
+          credentialsStored={Boolean(
+            page.settings?.wabaId &&
+              page.settings.phoneNumberId &&
+              page.settings.accessTokenSet &&
+              page.settings.appSecretSet
+          )}
+          channelReady={page.ready}
+          inboundDetected={Boolean(page.diagnostics.lastInboundAt)}
+          agentActive={agentPage.settings.isActive}
+          compact
+        />
       </section>
 
       <section className="section">

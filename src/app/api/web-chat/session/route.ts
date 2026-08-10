@@ -109,10 +109,10 @@ export async function POST(request: NextRequest) {
   return json(request, {
     token: session.token,
     expiresAt: new Date(session.payload.exp).toISOString(),
-    agent: business.agentSettings?.agentName || "Aijou AI",
+    agent: business.agentSettings?.agentName || "AI Assistant",
     greeting:
       business.agentSettings?.openingMessage ||
-      `Halo, saya ${business.agentSettings?.agentName || "Aijou"}. Ceritakan kebutuhanmu, ya.`,
+      `Halo, saya ${business.agentSettings?.agentName || "AI Assistant"}. Ceritakan kebutuhanmu, ya.`,
     businessName: business.businessName,
     verified: true,
   });

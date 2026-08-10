@@ -24,7 +24,7 @@ const defaultQuickReplies = [
   },
   {
     name: "Minta kontak",
-    content: "Boleh kirim nomor WhatsApp aktif? Nanti tim Aijou follow up dari sana.",
+    content: "Boleh kirim nomor WhatsApp aktif? Nanti tim kami follow up dari sana.",
     shortcut: "/kontak",
     category: "Follow-up",
     sortOrder: 30,

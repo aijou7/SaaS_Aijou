@@ -71,7 +71,7 @@ export async function getAgentSettingsPage(userId: string) {
         afterHoursMessage: true,
         isActive: true,
       },
-    })) ?? defaultAgentSettings();
+    })) ?? defaultAgentSettings(business.businessName);
 
   return {
     business,
@@ -233,16 +233,14 @@ async function requireBusinessForUser(userId: string) {
   return { id: access.businessId, businessName: access.businessName };
 }
 
-function defaultAgentSettings(): AgentRuntimeSettings {
+function defaultAgentSettings(businessName = ""): AgentRuntimeSettings {
   return {
-    ...newWorkspaceAgentDefaults(
-    "Aijou Teknologi Digital membantu bisnis membangun website, software, automation, AI agent, dan infrastruktur jaringan yang stabil.",
-    ),
+    ...newWorkspaceAgentDefaults(businessName),
     businessHoursEnabled: false,
     businessHours: defaultBusinessHours,
     timeZone: "Asia/Makassar",
     afterHoursMode: "HANDOFF",
-    afterHoursMessage: "Terima kasih, pesanmu sudah masuk. Tim kami akan melanjutkan saat jam operasional berikutnya.",
+    afterHoursMessage: "Terima kasih, pesanmu sudah masuk. Tim akan melanjutkan saat jam operasional berikutnya.",
   };
 }
 

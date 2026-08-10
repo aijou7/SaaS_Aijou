@@ -25,8 +25,18 @@ describe("workspace activation readiness", () => {
   test("keeps a newly-created workspace agent inactive", () => {
     const defaults = newWorkspaceAgentDefaults("Aijou Studio");
 
-    assert.equal(defaults.businessDescription, "Aijou Studio");
+    assert.equal(defaults.agentName, "Aijou Studio AI");
+    assert.equal(defaults.businessDescription, null);
+    assert.equal(defaults.handoffRules, null);
+    assert.equal(defaults.systemInstruction, null);
     assert.equal(defaults.isActive, false);
+  });
+
+  test("uses a neutral fallback when signup has no usable business name", () => {
+    const defaults = newWorkspaceAgentDefaults("   ");
+
+    assert.equal(defaults.agentName, "AI Assistant");
+    assert.equal(JSON.stringify(defaults).includes("Aijou Teknologi Digital"), false);
   });
 
   test("does not treat the signup placeholder as a completed business profile", () => {

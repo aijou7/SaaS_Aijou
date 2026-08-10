@@ -63,7 +63,7 @@ export async function saveOnboardingAgentUiAction(
     formData.delete("isActive");
     await updateAgentSettings(session.userId, parseAgentSettingsFormData(formData));
     revalidateSetupPaths();
-    return { ok: true, message: "Karakter dan batasan Aijou tersimpan." };
+    return { ok: true, message: "Identitas dan batasan AI tersimpan." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Pengaturan AI gagal disimpan." };
   }
@@ -86,7 +86,7 @@ export async function saveOnboardingKnowledgeUiAction(
       sourceName: "Panduan setup",
     });
     revalidateSetupPaths();
-    return { ok: true, message: "Knowledge awal aktif dan siap dipakai Aijou." };
+    return { ok: true, message: "Knowledge awal aktif dan siap dipakai AI." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Knowledge gagal disimpan." };
   }

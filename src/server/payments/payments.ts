@@ -271,7 +271,7 @@ export async function createPaymentLinkForTransaction(
       {
         reference_id: transaction.id,
         type: "DIGITAL_SERVICE",
-        name: (transaction.description || "Aijou order").slice(0, 255),
+        name: (transaction.description || "Service order").slice(0, 255),
         category: "SERVICES",
         net_unit_amount: amount,
         quantity: 1,

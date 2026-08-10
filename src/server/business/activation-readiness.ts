@@ -43,7 +43,7 @@ export function buildActivationReadiness(input: ActivationReadinessInput) {
     },
     {
       key: "agent-config",
-      label: "Suara dan batasan Aijou siap",
+      label: "Suara dan batasan AI siap",
       description: "Nama agent, instruksi, dan aturan handoff sudah ditinjau owner.",
       done: input.agentConfigured,
       href: "/agent",
@@ -86,7 +86,7 @@ export function buildActivationReadiness(input: ActivationReadinessInput) {
     {
       key: "agent-active",
       label: "Auto-reply diaktifkan owner",
-      description: "Aktifkan Aijou secara eksplisit setelah semua pemeriksaan di atas siap.",
+      description: "Aktifkan AI secara eksplisit setelah semua pemeriksaan di atas siap.",
       done: input.agentActive,
       href: "/agent",
       requiredBeforeActivation: false,

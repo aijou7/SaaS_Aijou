@@ -61,7 +61,7 @@ type NavigationItem = {
 
 const topNavigation = [
   { href: "/conversations", label: "Percakapan", icon: MessageCircle, module: "inbox" as ModuleKey },
-  { href: "/agent", label: "Aijou AI", icon: Bot, module: "agent" as ModuleKey },
+  { href: "/agent", label: "AI Agent", icon: Bot, module: "agent" as ModuleKey },
   { href: "/knowledge", label: "Knowledge", icon: Tags, module: "training" as ModuleKey },
   { href: "/products", label: "Produk", icon: Package, module: "products" as ModuleKey },
   { href: "/payments", label: "Pembayaran", icon: WalletCards, module: "payments" as ModuleKey },
@@ -97,10 +97,10 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     ],
   },
   agent: {
-    title: "Aijou AI",
+    title: "AI Agent",
     items: [
       { href: "/agent", label: "Kepribadian", icon: Bot, key: "agent" },
-      { href: "/ai-activity", label: "Aktivitas Aijou", icon: Activity, key: "ai-activity" },
+      { href: "/ai-activity", label: "Aktivitas AI", icon: Activity, key: "ai-activity" },
     ],
   },
   training: {
@@ -130,7 +130,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     items: [
       { href: "/reports", label: "Ringkasan", icon: TrendingUp, key: "reports" },
       { href: "/transactions", label: "Laporan penjualan", icon: WalletCards, key: "report-sales" },
-      { href: "/ai-activity", label: "Performa Aijou", icon: Activity, key: "report-ai" },
+      { href: "/ai-activity", label: "Performa AI", icon: Activity, key: "report-ai" },
     ],
   },
   integrations: {
@@ -274,7 +274,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
               </div>
               <div>
                 <strong>{businessName ?? "Aijou AI"}</strong>
-                <span>{groqConfigured ? "Aijou AI terhubung" : "Workspace Aijou"}</span>
+                <span>{groqConfigured ? "AI agent terhubung" : "Workspace belum siap"}</span>
               </div>
             </div>
 
@@ -310,7 +310,7 @@ export function AppShell({ active, businessName, children }: AppShellProps) {
           <div className="app-main-inner">
             <div className="workspace-bar">
               <div>
-                <p className="workspace-kicker">Aijou workspace</p>
+                <p className="workspace-kicker">Business workspace</p>
                 <strong>{activeSettingsItem?.label ?? "Dashboard"}</strong>
               </div>
               <div className="workspace-meta" aria-label="Workspace status">

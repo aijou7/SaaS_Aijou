@@ -16,7 +16,6 @@ import {
   RadioTower,
   RefreshCw,
   Rocket,
-  Send,
   Sparkles,
 } from "lucide-react";
 import type { Route } from "next";
@@ -39,6 +38,7 @@ import {
   saveOnboardingKnowledgeUiAction,
   type CompleteOnboardingResult,
 } from "@/app/setup/actions";
+import { ChannelOnboardingChoices } from "@/components/channel-setup-guide";
 import { showToast } from "@/components/toast-center";
 
 type GuideKey =
@@ -102,22 +102,22 @@ const guideCopy: Record<GuideKey, GuideCopy> = {
   "business-profile": {
     eyebrow: "Fondasi bisnis",
     title: "Mulai dari konteks bisnis yang benar",
-    body: "Isi jenis bisnis, layanan utama, area pelayanan, dan jam operasional. Informasi ini menjadi dasar setiap jawaban Aijou.",
+    body: "Isi jenis bisnis, layanan utama, area pelayanan, dan jam operasional. Informasi ini menjadi dasar setiap jawaban AI milik bisnismu.",
     tip: "Tulis informasi yang memang boleh disampaikan kepada customer. Detail internal bisa ditambahkan nanti.",
     action: "Isi profil bisnis",
     icon: Building2,
   },
   "agent-config": {
     eyebrow: "Kepribadian AI",
-    title: "Tentukan cara Aijou berbicara dan menyerahkan chat",
+    title: "Tentukan identitas AI sesuai merek bisnismu",
     body: "Atur nama agent, gaya komunikasi, instruksi utama, dan kondisi ketika percakapan harus diambil alih tim.",
     tip: "Gunakan bahasa yang biasa dipakai tim customer service Anda agar jawaban terasa konsisten.",
-    action: "Atur Aijou AI",
+    action: "Atur AI agent",
     icon: Bot,
   },
   knowledge: {
     eyebrow: "Sumber jawaban",
-    title: "Bekali Aijou dengan knowledge bisnis",
+    title: "Bekali AI dengan knowledge bisnis",
     body: "Tambahkan informasi awal seperti layanan, FAQ, prosedur, atau harga yang boleh dipublikasikan.",
     tip: "Mulai dari pertanyaan customer yang paling sering muncul. Knowledge dapat ditambah dan diperbarui kapan saja.",
     action: "Tambah knowledge",
@@ -134,7 +134,7 @@ const guideCopy: Record<GuideKey, GuideCopy> = {
   groq: {
     eyebrow: "Mesin AI",
     title: "Pastikan provider AI tersedia",
-    body: "Aijou memeriksa koneksi provider AI secara otomatis. Langkah ini biasanya sudah disiapkan oleh platform.",
+    body: "Platform memeriksa koneksi provider AI secara otomatis. Langkah ini biasanya sudah disiapkan untuk seluruh workspace.",
     tip: "Jika status belum siap, buka pemeriksaan readiness atau hubungi pengelola platform. Anda tidak perlu memasukkan API key pribadi.",
     action: "Lihat pemeriksaan",
     icon: RadioTower,
@@ -150,7 +150,7 @@ const guideCopy: Record<GuideKey, GuideCopy> = {
   "agent-active": {
     eyebrow: "Aktivasi akhir",
     title: "Aktifkan auto-reply setelah hasil tes sesuai",
-    body: "Periksa kembali instruksi dan hasil simulator, lalu aktifkan Aijou secara eksplisit. Setelah aktif, pesan baru pada channel terhubung dapat dibalas otomatis.",
+    body: "Periksa kembali instruksi dan hasil simulator, lalu aktifkan AI secara eksplisit. Setelah aktif, pesan baru pada channel terhubung dapat dibalas otomatis dengan identitas bisnismu.",
     tip: "Human takeover tetap tersedia kapan saja setelah workspace aktif.",
     action: "Tinjau dan aktifkan",
     icon: Rocket,
@@ -312,7 +312,7 @@ export function OnboardingGuide() {
           <div className="onboarding-guide-brand">
             <span><Rocket size={18} aria-hidden="true" /></span>
             <div>
-              <strong>Siapkan Aijou</strong>
+              <strong>Siapkan workspace</strong>
               <small>{status.completed}/{status.total} langkah siap</small>
             </div>
           </div>
@@ -406,7 +406,7 @@ export function OnboardingGuide() {
             >
               <label>Nama bisnis<input name="businessName" defaultValue={status.profile?.businessName ?? ""} required /></label>
               <label>Jenis bisnis<input name="businessType" defaultValue={status.profile?.businessType ?? ""} placeholder="Konsultan IT, retail, klinik…" required /></label>
-              <label className="span-2">Layanan utama<textarea name="mainServices" defaultValue={status.profile?.mainServices ?? ""} placeholder="Layanan yang boleh ditawarkan Aijou" required /></label>
+              <label className="span-2">Layanan utama<textarea name="mainServices" defaultValue={status.profile?.mainServices ?? ""} placeholder="Layanan yang boleh ditawarkan AI kepada pelanggan" required /></label>
               <label>Area layanan<input name="serviceArea" defaultValue={status.profile?.serviceArea ?? ""} placeholder="Lombok dan remote seluruh Indonesia" required /></label>
               <label>Jam operasional<input name="operatingHours" defaultValue={status.profile?.operatingHours ?? ""} placeholder="Senin–Sabtu, 09.00–18.00 WITA" required /></label>
               <label>WhatsApp bisnis<input name="whatsappNumber" defaultValue={status.profile?.whatsappNumber ?? ""} placeholder="628…" /></label>
@@ -421,7 +421,7 @@ export function OnboardingGuide() {
               className="form-grid onboarding-guide-inline-form"
               onSubmit={(event) => submitInline(event, saveOnboardingAgentUiAction)}
             >
-              <label>Nama agent<input name="agentName" defaultValue={status.agent?.agentName ?? "Aijou AI"} required /></label>
+              <label>Nama agent<input name="agentName" defaultValue={status.agent?.agentName ?? "AI Assistant"} required /></label>
               <label>Gaya bahasa<input name="tone" defaultValue={status.agent?.tone ?? "ramah, natural, ringkas, dan teknis saat diperlukan"} required /></label>
               <label>Bahasa<select name="language" defaultValue={status.agent?.language ?? "id"}><option value="id">Bahasa Indonesia</option><option value="en">English</option></select></label>
               <label>Pesan pembuka<input name="openingMessage" defaultValue={status.agent?.openingMessage ?? "Halo, ada yang bisa saya bantu?"} /></label>
@@ -446,11 +446,7 @@ export function OnboardingGuide() {
           ) : null}
 
           {!finalStep && selectedCheck?.key === "channel" ? (
-            <div className="onboarding-channel-options" aria-label="Pilih channel pertama">
-              <GuideChannelLink href="/integrations" label="Web Live Chat" detail="Paling cepat untuk dites" icon={MessageCircle} onNavigate={minimize} />
-              <GuideChannelLink href="/integrations?platform=telegram" label="Telegram" detail="Cukup gunakan bot token" icon={Send} onNavigate={minimize} />
-              <GuideChannelLink href="/whatsapp" label="WhatsApp" detail="Butuh credential Meta" icon={RadioTower} onNavigate={minimize} />
-            </div>
+            <ChannelOnboardingChoices onNavigate={minimize} />
           ) : null}
 
           <footer>
@@ -484,7 +480,7 @@ export function OnboardingGuide() {
                 }}
               >
                 <Rocket size={17} aria-hidden="true" />
-                {completing ? "Mengaktifkan…" : "Selesaikan dan gunakan Aijou"}
+                {completing ? "Mengaktifkan…" : "Selesaikan dan gunakan workspace"}
               </button>
             ) : selectedCheck?.key !== "channel" &&
               selectedCheck?.key !== "business-profile" &&
@@ -499,23 +495,6 @@ export function OnboardingGuide() {
         </div>
       </section>
     </div>
-  );
-}
-
-function GuideChannelLink(props: {
-  href: string;
-  label: string;
-  detail: string;
-  icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
-  onNavigate: () => void;
-}) {
-  const Icon = props.icon;
-  return (
-    <Link href={props.href as Route} onClick={props.onNavigate}>
-      <span><Icon size={19} aria-hidden={true} /></span>
-      <span><strong>{props.label}</strong><small>{props.detail}</small></span>
-      <ExternalLink size={15} aria-hidden="true" />
-    </Link>
   );
 }
 

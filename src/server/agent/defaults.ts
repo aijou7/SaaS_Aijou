@@ -4,9 +4,9 @@ export type NewWorkspaceAgentSettings = {
   language: string;
   openingMessage: string | null;
   closingMessage: string | null;
-  businessDescription: string;
-  handoffRules: string;
-  systemInstruction: string;
+  businessDescription: string | null;
+  handoffRules: string | null;
+  systemInstruction: string | null;
   isActive: boolean;
 };
 
@@ -16,20 +16,22 @@ export type NewWorkspaceAgentSettings = {
  * agent is allowed to answer a real channel.
  */
 export function newWorkspaceAgentDefaults(
-  businessDescription =
-    "Aijou membantu bisnis menjawab pelanggan, merapikan follow-up, dan menjaga kendali tetap di tim.",
+  businessName = "",
 ): NewWorkspaceAgentSettings {
+  const normalizedBusinessName = businessName.trim().slice(0, 58);
   return {
-    agentName: "Aijou",
+    agentName: normalizedBusinessName
+      ? `${normalizedBusinessName} AI`
+      : "AI Assistant",
     tone: "friendly, helpful, concise",
     language: "id",
     openingMessage: null,
     closingMessage: null,
-    businessDescription,
-    handoffRules:
-      "Handoff jika customer meminta manusia, meminta harga final, komplain, atau kebutuhan perlu keputusan owner.",
-    systemInstruction:
-      "Jawab inti pertanyaan terlebih dahulu dengan singkat dan natural. Berikan saran teknis konkret dari konteks yang tersedia, hindari basa-basi dan klaim generik, lalu ajukan maksimal satu pertanyaan yang benar-benar diperlukan.",
+    businessDescription: null,
+    // The owner must review these fields during onboarding. Keeping them empty
+    // prevents a fresh workspace from being marked configured automatically.
+    handoffRules: null,
+    systemInstruction: null,
     isActive: false,
   };
 }

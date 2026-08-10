@@ -87,7 +87,8 @@ export async function generateProposalDraftFromLead(userId: string, leadId: stri
   const result = await callGroqJson<ProposalDraftAi>({
     fallback,
     system: [
-      "You create practical Indonesian proposal/quotation drafts for Aijou Teknologi Digital.",
+      "You create practical Indonesian proposal/quotation drafts for the workspace business named in the user data.",
+      "Never replace that business identity with the platform provider's brand.",
       "Return only valid JSON.",
       "This is a draft, not a final legally binding quote.",
       "Do not invent exact prices, hardware models, guarantees, or timelines if not present.",
@@ -459,10 +460,10 @@ function buildFallbackProposalDraft(params: {
     nextSteps: [
       lead.nextStep ?? "Jadwalkan sesi discovery untuk memetakan kebutuhan detail.",
       "Kumpulkan data pendukung seperti denah, jumlah user/titik, sistem existing, dan prioritas MVP.",
-      "Owner Aijou menyiapkan quotation final setelah scope tervalidasi.",
+      `Tim ${params.businessName} menyiapkan quotation final setelah scope tervalidasi.`,
     ],
     disclaimer:
-      "Draft ini adalah estimasi awal untuk bahan diskusi, bukan penawaran final. Harga, timeline, dan scope final perlu divalidasi oleh owner Aijou setelah discovery/survey.",
+      `Draft ini adalah estimasi awal untuk bahan diskusi, bukan penawaran final. Harga, timeline, dan scope final perlu divalidasi oleh tim ${params.businessName} setelah discovery/survey.`,
   };
 }
 

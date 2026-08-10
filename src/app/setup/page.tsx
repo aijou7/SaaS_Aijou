@@ -46,12 +46,12 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
     <AppShell active="setup" businessName={page.business?.businessName}>
       <section className="hero compact-hero">
         <p className="eyebrow">
-          {params.welcome === "1" ? "Selamat datang di Aijou" : "Setup workspace"}
+          {params.welcome === "1" ? "Selamat datang di workspace baru" : "Setup workspace"}
         </p>
         <h1>Siapkan konteks, uji alurnya, lalu aktifkan saat benar-benar siap.</h1>
         <p>
           Mulai dari profil dan knowledge, coba lewat simulator, lalu hubungkan Web Live
-          Chat atau Telegram. Auto-reply tetap nonaktif sampai Anda menyalakannya sendiri.
+          Chat, Telegram, atau WhatsApp. Auto-reply tetap nonaktif sampai Anda menyalakannya sendiri.
         </p>
         <div className="hero-actions">
           <Link className="primary-button" href={firstMissing?.href ?? "/dashboard"}>
@@ -67,7 +67,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
         <div className="settings-note" role="status">
           <strong>Workspace berhasil dibuat</strong>
           <p>
-            Aijou masih dalam mode aman dan belum membalas channel secara otomatis.
+            AI agent masih dalam mode aman dan belum membalas channel secara otomatis.
             Ikuti checklist di bawah, lakukan tes, lalu aktifkan saat sudah yakin.
           </p>
         </div>
@@ -75,7 +75,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
       {params.error === "not_ready" ? (
         <div className="settings-note" role="alert">
           <strong>Onboarding belum bisa diselesaikan</strong>
-          <p>Lengkapi seluruh item yang masih berstatus Needs setup, termasuk aktivasi Aijou.</p>
+          <p>Lengkapi seluruh item yang masih berstatus Needs setup, termasuk aktivasi AI.</p>
         </div>
       ) : null}
 
@@ -92,7 +92,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <Sparkles size={22} aria-hidden="true" />
           <h2>Knowledge Aktif</h2>
           <div className="metric">{page.readiness.activeKnowledgeCount}</div>
-          <p className="muted">Minimal 3 item aktif diperlukan sebelum auto-reply.</p>
+          <p className="muted">Minimal 1 item yang disetujui diperlukan sebelum auto-reply.</p>
         </div>
         <div className="card">
           <MessageCircle size={22} aria-hidden="true" />

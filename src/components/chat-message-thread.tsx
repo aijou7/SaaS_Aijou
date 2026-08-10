@@ -107,7 +107,7 @@ function formatTime(value: string) {
 function formatLabel(value: string) {
   if (value === "CUSTOMER") return "Pelanggan";
   if (value === "USER") return "Tim";
-  if (value === "AI") return "Aijou AI";
+  if (value === "AI") return "AI Agent";
   return "Sistem";
 }
 function bubbleClass(sender: string) {

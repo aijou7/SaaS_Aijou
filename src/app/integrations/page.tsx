@@ -19,7 +19,12 @@ import {
 import { WidgetSnippetCopy } from "@/app/integrations/widget-snippet-copy";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
+import {
+  TelegramSetupGuide,
+  WhatsAppSetupGuide,
+} from "@/components/channel-setup-guide";
 import { getSession } from "@/lib/session";
+import { getAgentSettingsPage } from "@/server/agent/settings";
 import { getIntegrationWorkspaceSummary } from "@/server/integrations/overview";
 import { getTelegramSettingsForUser } from "@/server/telegram/settings";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
@@ -53,14 +58,16 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
   const selectedPlatform = platforms.some((platform) => platform.key === requestedPlatform)
     ? requestedPlatform
     : undefined;
-  const whatsAppPage =
-    selectedPlatform === "whatsapp" ? await getWhatsAppSettingsPage(session.userId) : null;
-  const telegramPage =
-    selectedPlatform === "telegram" ? await getTelegramSettingsForUser(session.userId) : null;
-  const workspace =
+  const [whatsAppPage, telegramPage, agentPage, workspace] = await Promise.all([
+    selectedPlatform === "whatsapp" ? getWhatsAppSettingsPage(session.userId) : null,
+    selectedPlatform === "telegram" ? getTelegramSettingsForUser(session.userId) : null,
+    selectedPlatform === "telegram" || selectedPlatform === "whatsapp"
+      ? getAgentSettingsPage(session.userId)
+      : null,
     selectedPlatform !== "whatsapp" && selectedPlatform !== "telegram"
-      ? await getIntegrationWorkspaceSummary(session.userId, selectedPlatform === "live-chat")
-      : null;
+      ? getIntegrationWorkspaceSummary(session.userId, selectedPlatform === "live-chat")
+      : null,
+  ]);
   const businessName =
     whatsAppPage?.business?.businessName ??
     telegramPage?.business?.businessName ??
@@ -262,6 +269,14 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               </div>
             </div>
 
+            <TelegramSetupGuide
+              tokenStored={telegramPage.settings.configured}
+              identityVerified={Boolean(telegramPage.settings.botUsername)}
+              channelReady={telegramPage.readiness}
+              agentActive={Boolean(agentPage?.settings.isActive)}
+              compact
+            />
+
             <form className="form-grid" action={saveTelegramSettingsAction}>
               <label className="span-2">
                 Bot token dari @BotFather
@@ -378,6 +393,18 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <p>{whatsAppPage.configurationIssue}</p>
               </div>
             ) : null}
+            <WhatsAppSetupGuide
+              credentialsStored={Boolean(
+                whatsAppPage.settings?.wabaId &&
+                  whatsAppPage.settings.phoneNumberId &&
+                  whatsAppPage.settings.accessTokenSet &&
+                  whatsAppPage.settings.appSecretSet
+              )}
+              channelReady={whatsAppPage.ready}
+              inboundDetected={Boolean(whatsAppPage.diagnostics.lastInboundAt)}
+              agentActive={Boolean(agentPage?.settings.isActive)}
+              compact
+            />
             <form
               className="form-grid"
               action={updateWhatsAppSettingsAction}

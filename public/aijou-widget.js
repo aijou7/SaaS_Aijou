@@ -35,7 +35,7 @@
     '</style>' +
     '<button class="launcher" type="button" aria-label="Buka chat Aijou" aria-haspopup="dialog" aria-expanded="false" aria-controls="aijou-chat-panel">AI</button>' +
     '<section class="panel" id="aijou-chat-panel" role="dialog" aria-modal="false" aria-labelledby="aijou-chat-title" tabindex="-1">' +
-    '<header class="head"><span class="mark" aria-hidden="true">AI</span><span class="head-copy"><strong class="agent-name" id="aijou-chat-title">Aijou AI</strong><small>Online untuk membantu</small></span><button class="close" type="button" aria-label="Tutup chat">&times;</button></header>' +
+    '<header class="head"><span class="mark" aria-hidden="true">AI</span><span class="head-copy"><strong class="agent-name" id="aijou-chat-title">AI Assistant</strong><small>Online untuk membantu</small></span><button class="close" type="button" aria-label="Tutup chat">&times;</button></header>' +
     '<div class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>' +
     '<div><form class="composer"><input maxlength="1200" autocomplete="off" placeholder="Ceritakan kebutuhanmu..." aria-label="Pesan"/><button type="submit">Kirim</button></form><div class="error" role="alert" aria-live="assertive" hidden></div></div>' +
     '</section>';
@@ -334,7 +334,7 @@
     errorBox.textContent = "";
   }
   function applyWidgetConfig(config) {
-    var configuredName = script.dataset.agentName || config.agentName || "Aijou AI";
+    var configuredName = script.dataset.agentName || config.agentName || "AI Assistant";
     var configuredGreeting = script.dataset.greeting || config.greeting || defaultGreeting;
     agentName.textContent = configuredName;
     if (greetingBubble && !historyLoaded) greetingBubble.textContent = configuredGreeting;
