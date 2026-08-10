@@ -1,5 +1,4 @@
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 import { knowledgeContentMaxChars, knowledgeImportMaxBytes } from "@/lib/knowledge-limits";
 
 export type ExtractedKnowledgeFile = {
@@ -64,6 +63,16 @@ export async function extractKnowledgeFile(file: File): Promise<ExtractedKnowled
 }
 
 async function extractPdf(file: File): Promise<ExtractedKnowledgeFile> {
+  // pdfjs expects browser geometry globals even in Node. Load the native
+  // canvas implementation only when a PDF is actually imported so ordinary
+  // knowledge page rendering stays lightweight and server-safe.
+  const canvas = await import("@napi-rs/canvas");
+  Object.assign(globalThis, {
+    DOMMatrix: globalThis.DOMMatrix ?? canvas.DOMMatrix,
+    ImageData: globalThis.ImageData ?? canvas.ImageData,
+    Path2D: globalThis.Path2D ?? canvas.Path2D,
+  });
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(await file.arrayBuffer()) });
   try {
     const result = await parser.getText();

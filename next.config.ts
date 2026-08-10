@@ -35,6 +35,7 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   typedRoutes: false,
   poweredByHeader: false,
+  serverExternalPackages: ["@napi-rs/canvas", "pdf-parse", "pdfjs-dist"],
   experimental: {
     serverActions: {
       bodySizeLimit: "5mb",
