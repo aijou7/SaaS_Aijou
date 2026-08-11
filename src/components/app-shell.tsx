@@ -336,10 +336,35 @@ export async function AppShell({
 
         <section className="app-main">
           <div className="app-main-inner">
+            {subscriptionEntitlements?.status === "TRIALING" ? (
+              <div className="workspace-plan-banner trial" role="status">
+                <div>
+                  <strong>Trial {subscriptionEntitlements.planName} aktif</strong>
+                  <span>
+                    {subscriptionEntitlements.trialEndsAt
+                      ? `Berakhir ${formatPlanDate(subscriptionEntitlements.trialEndsAt)}. Data dan human chat tetap aman setelah trial.`
+                      : "Trial sedang aktif."}
+                  </span>
+                </div>
+                {canWorkspace(workspaceRole, "workspace:manage") ? <Link href="/subscription">Lihat paket</Link> : null}
+              </div>
+            ) : subscriptionEntitlements && !subscriptionEntitlements.accessActive && subscriptionEntitlements.plan !== "BETA" ? (
+              <div className="workspace-plan-banner expired" role="alert">
+                <div><strong>AI auto-reply sedang berhenti</strong><span>Trial atau paket belum aktif. Pesan tetap masuk dan masih bisa dibalas oleh tim.</span></div>
+                {canWorkspace(workspaceRole, "workspace:manage") ? <Link href="/subscription">Aktifkan paket</Link> : null}
+              </div>
+            ) : null}
             {children}
           </div>
         </section>
       </div>
     </main>
   );
+}
+
+function formatPlanDate(value: Date) {
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeZone: "Asia/Makassar",
+  }).format(value);
 }

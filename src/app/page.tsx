@@ -16,6 +16,9 @@ import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingPricing } from "@/components/marketing-pricing";
+import { getPublicTrialAvailability } from "@/server/subscriptions/subscriptions";
+
+export const dynamic = "force-dynamic";
 
 const industries = [
   { icon: Hotel, title: "Hotel & Villa", description: "Jawab tamu, kualifikasi booking, dan teruskan kebutuhan khusus." },
@@ -34,7 +37,8 @@ const workflowSteps = [
   { title: "Kerjakan bersama", description: "AI menjawab yang rutin, manusia mengambil keputusan penting." },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const trialAvailability = await getPublicTrialAvailability();
   return (
     <main className="marketing-page">
       <MarketingHeader />
@@ -123,7 +127,7 @@ export default function LandingPage() {
         </ol>
       </section>
 
-      <MarketingPricing />
+      <MarketingPricing trialAvailability={trialAvailability} />
 
       <section className="marketing-final">
         <div><p>PRIVATE BETA</p><h2>Bawa satu percakapan nyata. Lihat bagaimana Aijou menanganinya.</h2></div>

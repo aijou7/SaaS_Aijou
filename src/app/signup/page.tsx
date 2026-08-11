@@ -18,6 +18,7 @@ import {
   normalizeBillingCycle,
   normalizePublicPlanId,
 } from "@/lib/subscription-plans";
+import { getPublicTrialAvailability } from "@/server/subscriptions/subscriptions";
 
 export const metadata: Metadata = {
   title: "Daftar beta | Aijou AI",
@@ -35,11 +36,15 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const selectedPlan = normalizePublicPlanId(planParam);
   const selectedBilling = normalizeBillingCycle(billingParam);
   const selectedPlanDefinition = getSubscriptionPlan(selectedPlan)!;
-  const invite = token ? await inspectBetaInvite(token) : null;
+  const [invite, trialAvailability] = await Promise.all([
+    token ? inspectBetaInvite(token) : Promise.resolve(null),
+    getPublicTrialAvailability(),
+  ]);
   const publicSignupEnabled = isPublicSignupEnabled();
   const publicSignupReady = isPublicSignupReady(isTransactionalEmailConfigured());
   const canSignup = Boolean(invite) || publicSignupReady;
   const isInvite = Boolean(invite);
+  const selectedPlanHasTrial = selectedPlanDefinition.trialDays > 0 && trialAvailability.available;
 
   return (
     <main className="page login-page auth-page signup-page">
@@ -87,7 +92,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <p className="muted">
               {isInvite
                 ? "Selesaikan data owner untuk menerima undangan ini."
-                : selectedPlanDefinition.trialDays
+                : selectedPlanHasTrial
                   ? "Tidak perlu kartu kredit. Masukkan OTP dari email untuk memulai trial."
                   : "Masukkan OTP dari email, lalu selesaikan pembayaran untuk mengaktifkan paket."}
             </p>
@@ -112,8 +117,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 <div className="settings-note signup-plan-summary" role="status">
                   <strong>{selectedPlanDefinition.name} · {selectedBilling === "annual" ? "Tahunan" : "Bulanan"}</strong>
                   <p>
-                    {selectedPlanDefinition.trialDays
-                      ? `Coba gratis ${selectedPlanDefinition.trialDays} hari. `
+                    {selectedPlanHasTrial
+                      ? `Coba gratis ${selectedPlanDefinition.trialDays} hari untuk ${trialAvailability.remaining} slot terverifikasi yang tersisa. `
                       : "Paket aktif setelah pembayaran terverifikasi. "}
                     Setelahnya {formatIdr(getPlanPrice(selectedPlan, selectedBilling))}
                     {selectedBilling === "annual" ? "/tahun" : "/bulan"}.

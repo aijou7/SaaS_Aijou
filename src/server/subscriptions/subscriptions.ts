@@ -14,6 +14,9 @@ import {
 } from "@/lib/subscription-plans";
 import { prisma } from "@/lib/prisma";
 
+export const PUBLIC_TRIAL_LIMIT = 100;
+const publicTrialCounterKey = "public_trial_claims";
+
 const betaEntitlements: SubscriptionFeature[] = [
   "CORE_INBOX",
   "WEB_CHAT",
@@ -95,12 +98,22 @@ export async function activateVerifiedWorkspaceSubscriptions(
     const publicPlan = toPublicPlanId(subscription.plan as StoredPlanId);
     const definition = publicPlan ? getSubscriptionPlan(publicPlan) : null;
     if (definition?.trialDays) {
+      const claimNumber = await claimPublicTrialSlot(tx);
+      if (!claimNumber) {
+        await tx.workspaceSubscription.update({
+          where: { id: subscription.id },
+          data: { status: WorkspaceSubscriptionStatus.PENDING_PAYMENT },
+        });
+        continue;
+      }
       await tx.workspaceSubscription.update({
         where: { id: subscription.id },
         data: {
           status: WorkspaceSubscriptionStatus.TRIALING,
           trialStartsAt: now,
           trialEndsAt: new Date(now.getTime() + definition.trialDays * 86_400_000),
+          trialClaimNumber: claimNumber,
+          trialClaimedAt: now,
           activatedAt: now,
         },
       });
@@ -111,6 +124,33 @@ export async function activateVerifiedWorkspaceSubscriptions(
       });
     }
   }
+}
+
+export async function getPublicTrialAvailability() {
+  const counter = await prisma.platformCounter.findUnique({
+    where: { key: publicTrialCounterKey },
+    select: { value: true },
+  });
+  const claimed = Math.min(PUBLIC_TRIAL_LIMIT, Math.max(0, counter?.value ?? 0));
+  return {
+    limit: PUBLIC_TRIAL_LIMIT,
+    claimed,
+    remaining: Math.max(0, PUBLIC_TRIAL_LIMIT - claimed),
+    available: claimed < PUBLIC_TRIAL_LIMIT,
+  };
+}
+
+async function claimPublicTrialSlot(tx: Prisma.TransactionClient) {
+  const rows = await tx.$queryRaw<Array<{ value: number }>>(Prisma.sql`
+    INSERT INTO "platform_counters" ("key", "value", "updatedAt")
+    VALUES (${publicTrialCounterKey}, 1, CURRENT_TIMESTAMP)
+    ON CONFLICT ("key") DO UPDATE SET
+      "value" = "platform_counters"."value" + 1,
+      "updatedAt" = CURRENT_TIMESTAMP
+    WHERE "platform_counters"."value" < ${PUBLIC_TRIAL_LIMIT}
+    RETURNING "value"
+  `);
+  return rows[0]?.value ?? null;
 }
 
 export async function getWorkspaceEntitlements(

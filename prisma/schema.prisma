@@ -305,6 +305,7 @@ model User {
   notifications         WorkspaceNotification[]
   transactions          Transaction[]
   assignedComplaints    Complaint[]            @relation("ComplaintAssignee")
+  platformAuditLogs     PlatformAuditLog[]      @relation("PlatformAuditActor")
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -365,6 +366,7 @@ model Business {
   workflows            AutomationWorkflow[]
   workflowRuns         AutomationRun[]
   ownerEmailChanges    OwnerEmailChangeRequest[]
+  platformAuditLogs    PlatformAuditLog[]
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
@@ -1051,6 +1053,12 @@ model WorkspaceSubscription {
   status                WorkspaceSubscriptionStatus @default(PENDING_ACTIVATION)
   trialStartsAt         DateTime?
   trialEndsAt           DateTime?
+  trialClaimNumber      Int?                        @unique
+  trialClaimedAt        DateTime?
+  trialReminder7SentAt  DateTime?
+  trialReminder3SentAt  DateTime?
+  trialReminder1SentAt  DateTime?
+  trialExpiredNotifiedAt DateTime?
   currentPeriodStartsAt DateTime?
   currentPeriodEndsAt   DateTime?
   cancelAtPeriodEnd     Boolean                     @default(false)
@@ -1127,6 +1135,17 @@ model SignupRateLimit {
 
   @@index([expiresAt])
   @@map("signup_rate_limits")
+}
+
+/// Small atomic counters for scarce platform-wide allocations such as the
+/// first 100 verified public trials. Updates use a guarded SQL increment so
+/// concurrent serverless requests cannot oversubscribe the quota.
+model PlatformCounter {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_counters")
 }
 
 /// Durable, privacy-preserving counters for authentication and public API
@@ -1374,4 +1393,24 @@ model AuditLog {
 
   @@index([businessId, entityType, entityId])
   @@map("audit_logs")
+}
+
+model PlatformAuditLog {
+  id         String    @id @default(cuid())
+  actorId    String
+  businessId String?
+  targetType String
+  targetId   String
+  action     String
+  reason     String?
+  beforeJson Json?
+  afterJson  Json?
+  actor      User      @relation("PlatformAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([businessId, createdAt])
+  @@map("platform_audit_logs")
 }

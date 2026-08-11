@@ -17,7 +17,11 @@ function formatPrice(value: number) {
   return `Rp${rupiah.format(value)}`;
 }
 
-export function MarketingPricing() {
+export function MarketingPricing({
+  trialAvailability,
+}: {
+  trialAvailability: { available: boolean; remaining: number; limit: number };
+}) {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
   const annual = billingCycle === "annual";
 
@@ -29,7 +33,10 @@ export function MarketingPricing() {
           <h2 id="marketing-pricing-title">Mulai bulanan. Lebih hemat saat tahunan.</h2>
         </div>
         <div className="marketing-pricing-intro">
-          <p>Bayar 10 bulan untuk akses 12 bulan. Starter dan Growth dapat uji coba gratis selama 30 hari.</p>
+          <p>
+            Bayar 10 bulan untuk akses 12 bulan. Starter dan Growth mendapat trial 30 hari
+            untuk {trialAvailability.limit} workspace terverifikasi pertama.
+          </p>
           <div className="marketing-billing-toggle" role="group" aria-label="Pilih periode pembayaran">
             <button
               type="button"
@@ -64,7 +71,9 @@ export function MarketingPricing() {
               <header>
                 <div className="marketing-plan-badges">
                   {plan.recommended ? <span className="recommended-badge"><Sparkles size={13} /> Paling populer</span> : null}
-                  {plan.trialDays > 0 ? <span className="trial-badge">Gratis 30 hari</span> : <span className="assisted-badge">Onboarding dibantu</span>}
+                  {plan.trialDays > 0 && trialAvailability.available
+                    ? <span className="trial-badge">Gratis 30 hari · {trialAvailability.remaining} slot</span>
+                    : <span className="assisted-badge">{plan.trialDays > 0 ? "Trial sudah penuh" : "Onboarding dibantu"}</span>}
                 </div>
                 <h3>{plan.name}</h3>
                 <p>{plan.description}</p>
@@ -96,12 +105,16 @@ export function MarketingPricing() {
               </ul>
 
               <Link className="marketing-plan-cta" href={signupHref}>
-                {plan.trialDays > 0 ? "Mulai trial gratis" : "Pilih Business"}
+                {plan.trialDays > 0 && trialAvailability.available
+                  ? "Mulai trial gratis"
+                  : plan.trialDays > 0 ? `Pilih ${plan.name}` : "Pilih Business"}
                 <ArrowRight size={16} aria-hidden="true" />
               </Link>
               <small className="marketing-plan-footnote">
-                {plan.trialDays > 0
-                  ? "Uji coba 30 hari tidak membutuhkan kartu kredit."
+                {plan.trialDays > 0 && trialAvailability.available
+                  ? "Slot diklaim setelah OTP email berhasil, selama kuota masih tersedia."
+                  : plan.trialDays > 0
+                    ? "Kuota 100 trial pertama sudah habis; paket aktif setelah pembayaran."
                   : "Paket Business tidak termasuk free trial dan aktif setelah pembayaran terverifikasi."}
               </small>
             </article>

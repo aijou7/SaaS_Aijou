@@ -118,7 +118,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             <div className="settings-note" role="status">Profil owner berhasil disimpan.</div>
           ) : null}
           {user.isPlatformAdmin ? (
-            <Link className="ghost-button" href="/beta/invites">Kelola private beta invite</Link>
+            <div className="quick-actions">
+              <Link className="primary-button" href="/developer">Buka developer console</Link>
+              <Link className="ghost-button" href="/beta/invites">Kelola private beta invite</Link>
+            </div>
           ) : null}
         </div>
 

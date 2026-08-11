@@ -8,6 +8,7 @@ import {
 } from "@/server/auth/account-lifecycle";
 import { prunePublicSignupRateLimits } from "@/server/auth/public-signup";
 import { pruneBackgroundJobs } from "@/server/jobs/background-jobs";
+import { processTrialLifecycle } from "@/server/subscriptions/trial-lifecycle";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     ["security_limits", pruneDurableRateLimits],
     ["auth_tokens", pruneAuthTokens],
     ["account_purge", () => purgeDeletionPendingAccounts()],
+    ["trial_lifecycle", () => processTrialLifecycle()],
   ] as const;
   const settled = await Promise.allSettled(tasks.map(([, task]) => task()));
   settled.forEach((result, index) => {
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest) {
       prunedSecurityLimits: value(2),
       prunedAuthTokens: value(3),
       purgedAccounts: value(4),
+      trialLifecycle: value(5),
       elapsedMs: Date.now() - startedAt,
     },
     { headers: { "Cache-Control": "no-store" } },
