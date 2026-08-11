@@ -59,6 +59,7 @@ test("public pricing explains that the first 100 verified workspaces receive tri
 test("developer route preserves its login destination and distinguishes platform access", () => {
   const session = read("src/lib/session.ts");
   const page = read("src/app/developer/page.tsx");
+  const login = read("src/app/login/page.tsx");
   const migration = read(
     "prisma/migrations/20260811190000_assign_contact_platform_admin/migration.sql",
   );
@@ -68,6 +69,9 @@ test("developer route preserves its login destination and distinguishes platform
   assert.match(page, /redirect\("\/login\?next=%2Fdeveloper"\)/);
   assert.match(page, /if \(!session\.isPlatformAdmin\) return <DeveloperAccessDenied \/>/);
   assert.doesNotMatch(page, /catch \{\s*redirect\("\/dashboard"\)/);
+  assert.match(login, /isDeveloperLogin = nextPath === "\/developer"/);
+  assert.match(login, /Gunakan akun platform admin, bukan akun owner workspace biasa/);
+  assert.match(login, /Browser dapat mengisi akun owner lama secara otomatis/);
   assert.match(migration, /LOWER\("email"\) = 'contact@aijoutek\.pro'/);
   assert.doesNotMatch(migration, /"role"\s*=|businessName|LIMIT 1/);
 });

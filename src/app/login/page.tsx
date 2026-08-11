@@ -18,6 +18,7 @@ type LoginPageProps = {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const [session, params] = await Promise.all([getSession(), searchParams]);
   const nextPath = getSafeInternalRedirectPath(params.next);
+  const isDeveloperLogin = nextPath === "/developer";
 
   if (session) {
     redirect(nextPath ?? "/dashboard");
@@ -59,10 +60,23 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <section className="login-panel auth-form-panel">
           <div className="auth-panel-heading">
-            <p className="eyebrow">Masuk ke Aijou</p>
-            <h2>Selamat datang kembali.</h2>
-            <p className="muted">Masukkan akun workspace Anda.</p>
+            <p className="eyebrow">{isDeveloperLogin ? "Developer Console" : "Masuk ke Aijou"}</p>
+            <h2>{isDeveloperLogin ? "Masuk sebagai platform admin." : "Selamat datang kembali."}</h2>
+            <p className="muted">
+              {isDeveloperLogin
+                ? "Gunakan akun platform admin, bukan akun owner workspace biasa."
+                : "Masukkan akun workspace Anda."}
+            </p>
           </div>
+          {isDeveloperLogin ? (
+            <div className="settings-note" role="status">
+              <strong>Periksa email yang terisi</strong>
+              <p>
+                Browser dapat mengisi akun owner lama secara otomatis. Ganti dengan akun platform admin
+                sebelum masuk.
+              </p>
+            </div>
+          ) : null}
           {params.passwordChanged === "1" ? (
             <div className="settings-note" role="status">
               <strong>Password berhasil diubah</strong>
