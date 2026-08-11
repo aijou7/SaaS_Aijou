@@ -63,6 +63,13 @@ test("developer route preserves its login destination and distinguishes platform
   const migration = read(
     "prisma/migrations/20260811190000_assign_contact_platform_admin/migration.sql",
   );
+  const accountMigration = read(
+    "prisma/migrations/20260811200000_ensure_contact_platform_admin/migration.sql",
+  );
+  const existingAccountUpdate = accountMigration.slice(
+    accountMigration.indexOf('UPDATE "users"'),
+    accountMigration.indexOf('WHERE LOWER("email")', accountMigration.indexOf('UPDATE "users"')),
+  );
 
   assert.match(session, /isPlatformAdmin: true/);
   assert.match(session, /isPlatformAdmin: user\.isPlatformAdmin/);
@@ -74,4 +81,10 @@ test("developer route preserves its login destination and distinguishes platform
   assert.match(login, /Browser dapat mengisi akun owner lama secara otomatis/);
   assert.match(migration, /LOWER\("email"\) = 'contact@aijoutek\.pro'/);
   assert.doesNotMatch(migration, /"role"\s*=|businessName|LIMIT 1/);
+  assert.match(accountMigration, /IF EXISTS/);
+  assert.match(accountMigration, /INSERT INTO "users"/);
+  assert.match(accountMigration, /intentionally unusable credential/);
+  assert.match(accountMigration, /'contact@aijoutek\.pro'/);
+  assert.match(accountMigration, /"isPlatformAdmin" = true/);
+  assert.doesNotMatch(existingAccountUpdate, /"passwordHash"\s*=/);
 });
