@@ -38,6 +38,7 @@ test("developer mutations require platform access, confirmation, reason, and aud
   const actions = read("src/app/developer/actions.ts");
   const service = read("src/server/admin-cockpit.ts");
   const page = read("src/app/developer/page.tsx");
+  const dialog = read("src/app/developer/developer-workspace-dialog.tsx");
 
   assert.match(actions, /await requirePlatformAdmin\(session\.userId\)/);
   assert.match(actions, /formData\.get\("confirmed"\) !== "yes"/);
@@ -45,6 +46,12 @@ test("developer mutations require platform access, confirmation, reason, and aud
   assert.match(service, /tx\.platformAuditLog\.create/g);
   assert.match(service, /Workspace ini bukan penerima kuota 100 trial pertama/);
   assert.doesNotMatch(page, /accessToken|serverKey|appSecret|snapToken/);
+  assert.match(page, /<DeveloperWorkspaceDialog/);
+  assert.doesNotMatch(page, /<details className="developer-action-menu">/);
+  assert.match(dialog, /<dialog/);
+  assert.match(dialog, /dialog\.showModal\(\)/);
+  assert.match(dialog, /aria-labelledby=\{titleId\}/);
+  assert.match(dialog, /event\.target === event\.currentTarget/);
 });
 
 test("public pricing explains that the first 100 verified workspaces receive trial", () => {

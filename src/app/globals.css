@@ -197,22 +197,29 @@
 .developer-status.warning { color: #9b5b08; background: #fff4d9; }
 .developer-status.danger { color: #a12035; background: #ffe8ec; }
 
-.developer-action-menu { position: relative; }
-.developer-action-menu > summary { display: inline-flex; align-items: center; justify-content: center; min-width: 72px; min-height: 38px; padding: 0 12px; color: #1747c5; border: 1px solid #b9c9ed; border-radius: 8px; font-weight: 750; cursor: pointer; list-style: none; transition: background 180ms ease, border-color 180ms ease; }
-.developer-action-menu > summary:hover { border-color: #2456df; background: #edf3ff; }
-.developer-action-menu[open] > summary { color: #fff; border-color: #2456df; background: #2456df; }
-.developer-action-panel { position: absolute; z-index: 20; top: 45px; right: 0; width: min(680px, 80vw); max-height: min(660px, 76vh); overflow-y: auto; padding: 14px; border: 1px solid #cfdaea; border-radius: 14px; background: #fff; box-shadow: 0 22px 70px rgba(20, 37, 70, .2); }
-.developer-action-panel section { padding: 13px; border: 1px solid #e1e8f2; border-radius: 10px; }
-.developer-action-panel section + section { margin-top: 10px; }
-.developer-action-panel h3 { margin: 0 0 3px; font-size: 14px; }
-.developer-action-panel section > p { margin-bottom: 10px; color: #6b7890; font-size: 11px; }
-.developer-action-panel form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.developer-action-panel label { display: grid; gap: 5px; color: #5b6980; font-size: 11px; font-weight: 700; }
-.developer-action-panel input,
-.developer-action-panel select { min-height: 40px; font-size: 13px; }
-.developer-action-panel .developer-confirm { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 8px 10px; border-radius: 8px; background: #f6f8fc; }
+.developer-manage-button { display: inline-flex; align-items: center; justify-content: center; min-width: 78px; min-height: 40px; padding: 0 14px; color: #1747c5; border: 1px solid #b9c9ed; border-radius: 9px; background: #fff; font: inherit; font-weight: 750; cursor: pointer; transition: color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.developer-manage-button:hover { color: #fff; border-color: #2456df; background: #2456df; box-shadow: 0 8px 20px rgba(36, 86, 223, .2); }
+.developer-manage-button:focus-visible { outline: 3px solid rgba(36, 86, 223, .24); outline-offset: 2px; }
+.developer-action-dialog { width: min(920px, calc(100vw - 32px)); max-width: none; max-height: min(820px, calc(100vh - 32px)); margin: auto; padding: 0; overflow: hidden; color: #132039; border: 1px solid #cbd7e8; border-radius: 18px; background: #fff; box-shadow: 0 30px 100px rgba(15, 30, 60, .28); }
+.developer-action-dialog::backdrop { background: rgba(15, 23, 42, .58); backdrop-filter: blur(3px); }
+.developer-action-dialog-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: min(820px, calc(100vh - 32px)); }
+.developer-action-dialog-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px 17px; border-bottom: 1px solid #dfe6f0; background: #fff; }
+.developer-action-dialog-header h2 { margin: 4px 0 2px; font-size: 22px; line-height: 1.2; }
+.developer-action-dialog-header > div > p:last-child { color: #66758d; font-size: 12px; }
+.developer-dialog-close { display: grid; flex: 0 0 auto; place-items: center; width: 44px; height: 44px; color: #4b5c76; border: 1px solid #d8e0ec; border-radius: 10px; background: #f8fafc; cursor: pointer; }
+.developer-dialog-close:hover { color: #173f9f; border-color: #b8c9ec; background: #eef4ff; }
+.developer-dialog-close:focus-visible { outline: 3px solid rgba(36, 86, 223, .24); outline-offset: 2px; }
+.developer-action-dialog-body { display: grid; gap: 14px; padding: 18px 22px 24px; overflow-y: auto; overscroll-behavior: contain; }
+.developer-action-dialog-body section { padding: 17px; border: 1px solid #e1e8f2; border-radius: 12px; background: #fff; }
+.developer-action-dialog-body h3 { margin: 0 0 4px; font-size: 16px; }
+.developer-action-dialog-body section > p { margin-bottom: 14px; color: #6b7890; font-size: 12px; }
+.developer-action-dialog-body form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.developer-action-dialog-body label { display: grid; gap: 6px; color: #526179; font-size: 12px; font-weight: 700; }
+.developer-action-dialog-body input,
+.developer-action-dialog-body select { min-height: 44px; font-size: 14px; }
+.developer-action-dialog-body .developer-confirm { grid-column: 1 / -1; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 10px 12px; border-radius: 9px; background: #f6f8fc; }
 .developer-confirm input { width: 17px; min-height: auto; height: 17px; }
-.developer-action-panel button { grid-column: 1 / -1; min-height: 42px; }
+.developer-action-dialog-body form > button { grid-column: 1 / -1; min-height: 44px; }
 
 .developer-two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .developer-compact-list { display: grid; gap: 8px; max-height: 480px; overflow-y: auto; }
@@ -249,14 +256,17 @@
   .developer-lifecycle-action label { justify-content: flex-start; }
   .developer-metrics { grid-template-columns: 1fr; }
   .developer-trial-card { padding: 15px; }
-  .developer-action-panel { position: fixed; inset: 76px 10px 10px; width: auto; max-height: none; }
-  .developer-action-panel form { grid-template-columns: 1fr; }
+  .developer-action-dialog { width: calc(100vw - 20px); max-height: calc(100vh - 20px); border-radius: 14px; }
+  .developer-action-dialog-shell { max-height: calc(100vh - 20px); }
+  .developer-action-dialog-header { padding: 16px; }
+  .developer-action-dialog-body { padding: 14px 16px 18px; }
+  .developer-action-dialog-body form { grid-template-columns: 1fr; }
   .developer-section { padding: 12px; }
   .developer-filter > * { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .developer-action-menu > summary { transition: none; }
+  .developer-manage-button { transition: none; }
 }
 
 .table-link-button {

@@ -21,6 +21,7 @@ import {
   runTrialLifecycleAction,
   setDeveloperUserStatusAction,
 } from "@/app/developer/actions";
+import { DeveloperWorkspaceDialog } from "@/app/developer/developer-workspace-dialog";
 import { AijouLogo } from "@/components/aijou-logo";
 import {
   SubscriptionBillingCycle,
@@ -131,9 +132,10 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                       <td><small>AI {workspace.agentSettings?.isActive ? "aktif" : "mati"}</small><small>WA {workspace.whatsAppSettings?.isActive ? "live" : "belum"} · Telegram {workspace.telegramSettings?.isActive ? "live" : "belum"}</small><small>{workspace._count.conversations} percakapan</small></td>
                       <td>{formatDateTime(workspace.user.lastSeenAt ?? workspace.updatedAt)}</td>
                       <td>
-                        <details className="developer-action-menu">
-                          <summary>Kelola</summary>
-                          <div className="developer-action-panel">
+                        <DeveloperWorkspaceDialog
+                          workspaceName={workspace.businessName}
+                          ownerEmail={workspace.user.email}
+                        >
                             <section>
                               <h3>Aktifkan paket manual</h3>
                               <p>Gunakan setelah pembayaran manual benar-benar diterima.</p>
@@ -171,8 +173,7 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                                 </form>
                               </section>
                             ) : null}
-                          </div>
-                        </details>
+                        </DeveloperWorkspaceDialog>
                       </td>
                     </tr>
                   );
