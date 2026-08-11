@@ -5822,6 +5822,7 @@ sup {
 .marketing-section,
 .marketing-industries,
 .marketing-workflow,
+.marketing-pricing,
 .marketing-final,
 .marketing-footer,
 .feature-intro,
@@ -5833,7 +5834,8 @@ sup {
 }
 
 .marketing-section,
-.marketing-industries {
+.marketing-industries,
+.marketing-pricing {
   padding-block: 110px;
 }
 
@@ -6121,6 +6123,270 @@ sup {
   color: #718096;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.marketing-pricing {
+  position: relative;
+}
+
+.marketing-pricing::before {
+  content: "";
+  position: absolute;
+  inset: 50px -80px auto auto;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(109, 216, 244, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.marketing-pricing-head {
+  position: relative;
+  z-index: 1;
+}
+
+.marketing-pricing-intro {
+  display: grid;
+  gap: 20px;
+}
+
+.marketing-pricing-intro > p {
+  margin: 0;
+  color: #68768a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.marketing-billing-toggle {
+  width: fit-content;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  border: 1px solid #dce5f0;
+  border-radius: 12px;
+  background: #f5f8fc;
+}
+
+.marketing-billing-toggle button {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 8px;
+  color: #596a80;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.marketing-billing-toggle button span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #116a47;
+  background: #dff8eb;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.marketing-billing-toggle button.active {
+  color: #17243a;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(34, 58, 92, 0.11);
+}
+
+.marketing-billing-toggle button:focus-visible,
+.marketing-plan-cta:focus-visible {
+  outline: 3px solid rgba(34, 81, 230, 0.22);
+  outline-offset: 2px;
+}
+
+.marketing-pricing-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+}
+
+.marketing-price-card {
+  min-width: 0;
+  padding: 27px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dce5f0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 15px 42px rgba(37, 58, 91, 0.07);
+}
+
+.marketing-price-card.recommended {
+  border-color: #6f94ff;
+  background: linear-gradient(180deg, #f5f8ff, #fff 32%);
+  box-shadow: 0 22px 55px rgba(34, 81, 230, 0.14);
+}
+
+.marketing-plan-badges {
+  min-height: 27px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.marketing-plan-badges > span {
+  min-height: 25px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.recommended-badge {
+  color: #fff;
+  background: var(--mk-blue);
+}
+
+.trial-badge {
+  color: #116a47;
+  background: #dff8eb;
+}
+
+.assisted-badge {
+  color: #735019;
+  background: #fff1ce;
+}
+
+.marketing-price-card h3 {
+  margin: 20px 0 8px;
+  color: #101926;
+  font-size: 23px;
+  letter-spacing: -0.035em;
+}
+
+.marketing-price-card header > p {
+  min-height: 48px;
+  margin: 0;
+  color: #6c7b90;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.marketing-plan-price {
+  margin-top: 25px;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.marketing-plan-price strong {
+  color: #101926;
+  font-size: clamp(29px, 2.5vw, 38px);
+  letter-spacing: -0.055em;
+}
+
+.marketing-plan-price > span {
+  color: #728198;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.marketing-plan-saving {
+  min-height: 59px;
+  margin-top: 13px;
+  padding: 10px 12px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border-radius: 10px;
+  color: #31506e;
+  background: #f1f6fb;
+}
+
+.marketing-plan-saving strong {
+  font-size: 10px;
+}
+
+.marketing-plan-saving span {
+  color: #6f8095;
+  font-size: 9px;
+}
+
+.marketing-price-card ul {
+  margin: 24px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  list-style: none;
+}
+
+.marketing-price-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #405068;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.marketing-price-card li svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #159660;
+}
+
+.marketing-plan-cta {
+  min-height: 46px;
+  margin-top: auto;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--mk-blue);
+  border-radius: 10px;
+  color: var(--mk-blue);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.marketing-price-card.recommended .marketing-plan-cta,
+.marketing-plan-cta:hover {
+  color: #fff;
+  background: var(--mk-blue);
+}
+
+.marketing-plan-cta:hover {
+  transform: translateY(-1px);
+}
+
+.marketing-plan-footnote {
+  min-height: 35px;
+  margin-top: 11px;
+  color: #7a889b;
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.marketing-pricing-note {
+  max-width: 760px;
+  margin: 24px auto 0;
+  color: #77869a;
+  font-size: 10px;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .marketing-final {
@@ -6596,8 +6862,13 @@ sup {
   }
 
   .marketing-industry-grid,
+  .marketing-pricing-grid,
   .features-index-directory {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketing-price-card:last-child {
+    grid-column: 1 / -1;
   }
 
   .marketing-workflow,
@@ -6720,7 +6991,8 @@ sup {
   }
 
   .marketing-section,
-  .marketing-industries {
+  .marketing-industries,
+  .marketing-pricing {
     padding-block: 78px;
   }
 
@@ -6732,10 +7004,28 @@ sup {
   }
 
   .marketing-industry-grid,
+  .marketing-pricing-grid,
   .features-index-directory,
   .feature-outcomes,
   .feature-related-grid {
     grid-template-columns: 1fr;
+  }
+
+  .marketing-price-card:last-child {
+    grid-column: auto;
+  }
+
+  .marketing-billing-toggle {
+    width: 100%;
+  }
+
+  .marketing-billing-toggle button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .marketing-price-card {
+    padding: 24px 20px;
   }
 
   .features-index-hero {

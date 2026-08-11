@@ -140,6 +140,7 @@ export function MarketingNavigation({ groups }: { groups: MarketingNavigationGro
         </div>
         <Link href="/#industries" onClick={closeNavigation}>Industri</Link>
         <Link href="/#workflow" onClick={closeNavigation}>Cara kerja</Link>
+        <Link href="/#pricing" onClick={closeNavigation}>Harga</Link>
       </nav>
 
       <button

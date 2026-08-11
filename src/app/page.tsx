@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { AijouLogo } from "@/components/aijou-logo";
 import { MarketingHeader } from "@/components/marketing-header";
+import { MarketingPricing } from "@/components/marketing-pricing";
 
 const industries = [
   { icon: Hotel, title: "Hotel & Villa", description: "Jawab tamu, kualifikasi booking, dan teruskan kebutuhan khusus." },
@@ -121,6 +122,8 @@ export default function LandingPage() {
           ))}
         </ol>
       </section>
+
+      <MarketingPricing />
 
       <section className="marketing-final">
         <div><p>PRIVATE BETA</p><h2>Bawa satu percakapan nyata. Lihat bagaimana Aijou menanganinya.</h2></div>
