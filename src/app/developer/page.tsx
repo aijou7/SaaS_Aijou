@@ -42,18 +42,13 @@ type DeveloperPageProps = {
 };
 
 export default async function DeveloperPage({ searchParams }: DeveloperPageProps) {
-  const session = await getSession();
-  if (!session) redirect("/login");
-  const params = await searchParams;
-  let page: Awaited<ReturnType<typeof getDeveloperConsole>>;
-  try {
-    page = await getDeveloperConsole(session.userId, {
-      q: params.q,
-      subscriptionStatus: params.status,
-    });
-  } catch {
-    redirect("/dashboard");
-  }
+  const [session, params] = await Promise.all([getSession(), searchParams]);
+  if (!session) redirect("/login?next=%2Fdeveloper");
+  if (!session.isPlatformAdmin) return <DeveloperAccessDenied />;
+  const page = await getDeveloperConsole(session.userId, {
+    q: params.q,
+    subscriptionStatus: params.status,
+  });
 
   return (
     <main className="developer-page">
@@ -210,6 +205,27 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
           ))}</div> : <Empty icon={CheckCircle2} text="Antrean bersih. Tidak ada job gagal." />}
         </section>
       </div>
+    </main>
+  );
+}
+
+function DeveloperAccessDenied() {
+  return (
+    <main className="developer-page">
+      <header className="developer-header">
+        <div className="developer-brand">
+          <AijouLogo size={38} />
+          <div><strong>Aijou Developer</strong><span>Platform operations</span></div>
+        </div>
+        <Link className="secondary-button" href="/dashboard"><ArrowLeft size={16} /> Kembali ke workspace</Link>
+      </header>
+      <section className="developer-access-denied">
+        <div className="developer-icon-box"><ShieldCheck size={21} /></div>
+        <p className="eyebrow">Akses terbatas</p>
+        <h1>Akun ini adalah owner workspace, bukan pengelola platform.</h1>
+        <p>Developer console hanya tersedia untuk akun internal Aijou yang diberi akses platform secara khusus.</p>
+        <Link className="primary-button" href="/dashboard">Buka workspace</Link>
+      </section>
     </main>
   );
 }

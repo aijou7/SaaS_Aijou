@@ -83,6 +83,7 @@ export const getSession = cache(async function getSession() {
       emailVerifiedAt: true,
       passwordHash: true,
       status: true,
+      isPlatformAdmin: true,
       lastSeenAt: true,
       businesses: {
         orderBy: { createdAt: "asc" },
@@ -158,6 +159,7 @@ export const getSession = cache(async function getSession() {
     userId: user.id,
     name: user.name,
     email: user.email,
+    isPlatformAdmin: user.isPlatformAdmin,
     exp: payload.exp,
     role: activeWorkspace?.role ?? null,
     business: activeWorkspace

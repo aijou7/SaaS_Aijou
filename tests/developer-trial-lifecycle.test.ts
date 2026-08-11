@@ -55,3 +55,19 @@ test("public pricing explains that the first 100 verified workspaces receive tri
   assert.match(pricing, /Slot diklaim setelah OTP email berhasil/);
   assert.match(signup, /selectedPlanHasTrial/);
 });
+
+test("developer route preserves its login destination and distinguishes platform access", () => {
+  const session = read("src/lib/session.ts");
+  const page = read("src/app/developer/page.tsx");
+  const migration = read(
+    "prisma/migrations/20260811190000_assign_contact_platform_admin/migration.sql",
+  );
+
+  assert.match(session, /isPlatformAdmin: true/);
+  assert.match(session, /isPlatformAdmin: user\.isPlatformAdmin/);
+  assert.match(page, /redirect\("\/login\?next=%2Fdeveloper"\)/);
+  assert.match(page, /if \(!session\.isPlatformAdmin\) return <DeveloperAccessDenied \/>/);
+  assert.doesNotMatch(page, /catch \{\s*redirect\("\/dashboard"\)/);
+  assert.match(migration, /LOWER\("email"\) = 'contact@aijoutek\.pro'/);
+  assert.doesNotMatch(migration, /"role"\s*=|businessName|LIMIT 1/);
+});
