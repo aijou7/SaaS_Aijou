@@ -289,17 +289,22 @@ export async function activateWorkspacePlanAsAdmin(
   },
 ) {
   await requirePlatformAdmin(adminUserId);
-  const plan = parsePaidPlan(input.plan);
-  const billingCycle = input.billingCycle === SubscriptionBillingCycle.ANNUAL
+  const plan = parseDeveloperPlan(input.plan);
+  const isLegacyBeta = plan === SubscriptionPlan.BETA;
+  const billingCycle = isLegacyBeta
+    ? SubscriptionBillingCycle.MONTHLY
+    : input.billingCycle === SubscriptionBillingCycle.ANNUAL
     ? SubscriptionBillingCycle.ANNUAL
     : SubscriptionBillingCycle.MONTHLY;
   const durationDays = Math.trunc(input.durationDays);
   const reason = cleanReason(input.reason);
-  if (durationDays < 1 || durationDays > 366) {
+  if (!isLegacyBeta && (durationDays < 1 || durationDays > 366)) {
     throw new DeveloperConsoleError("INVALID_DURATION", "Masa aktif harus 1–366 hari.");
   }
   const now = new Date();
-  const periodEnd = new Date(now.getTime() + durationDays * 86_400_000);
+  const periodEnd = isLegacyBeta
+    ? null
+    : new Date(now.getTime() + durationDays * 86_400_000);
 
   return prisma.$transaction(async (tx) => {
     const business = await tx.business.findUnique({
@@ -314,16 +319,24 @@ export async function activateWorkspacePlanAsAdmin(
         plan,
         billingCycle,
         status: WorkspaceSubscriptionStatus.ACTIVE,
-        currentPeriodStartsAt: now,
+        currentPeriodStartsAt: isLegacyBeta ? null : now,
         currentPeriodEndsAt: periodEnd,
+        trialStartsAt: null,
+        trialEndsAt: null,
         activatedAt: now,
       },
       update: {
         plan,
         billingCycle,
         status: WorkspaceSubscriptionStatus.ACTIVE,
-        currentPeriodStartsAt: now,
+        currentPeriodStartsAt: isLegacyBeta ? null : now,
         currentPeriodEndsAt: periodEnd,
+        trialStartsAt: null,
+        trialEndsAt: null,
+        trialReminder7SentAt: null,
+        trialReminder3SentAt: null,
+        trialReminder1SentAt: null,
+        trialExpiredNotifiedAt: null,
         graceEndsAt: null,
         canceledAt: null,
         cancelAtPeriodEnd: false,
@@ -343,7 +356,7 @@ export async function activateWorkspacePlanAsAdmin(
           plan,
           billingCycle,
           status: WorkspaceSubscriptionStatus.ACTIVE,
-          currentPeriodEndsAt: periodEnd.toISOString(),
+          currentPeriodEndsAt: periodEnd?.toISOString() ?? null,
         },
       },
     });
@@ -454,11 +467,12 @@ export async function recordPlatformAdminAction(
   });
 }
 
-function parsePaidPlan(value: string) {
+function parseDeveloperPlan(value: string) {
+  if (value === SubscriptionPlan.BETA) return SubscriptionPlan.BETA;
   if (value === SubscriptionPlan.STARTER) return SubscriptionPlan.STARTER;
   if (value === SubscriptionPlan.GROWTH) return SubscriptionPlan.GROWTH;
   if (value === SubscriptionPlan.BUSINESS) return SubscriptionPlan.BUSINESS;
-  throw new DeveloperConsoleError("INVALID_PLAN", "Paket berbayar tidak valid.");
+  throw new DeveloperConsoleError("INVALID_PLAN", "Paket developer tidak valid.");
 }
 
 function cleanReason(value: string) {

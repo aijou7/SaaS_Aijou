@@ -8,6 +8,7 @@ import {
   CreditCard,
   Database,
   History,
+  LogOut,
   Search,
   ShieldCheck,
   Users,
@@ -61,6 +62,9 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
         <div className="developer-header-actions">
           <span className="developer-secure-label"><ShieldCheck size={16} /> Akses platform</span>
           <Link className="secondary-button" href="/dashboard"><ArrowLeft size={16} /> Kembali ke workspace</Link>
+          <form action="/api/auth/logout" method="post">
+            <button className="secondary-button" type="submit"><LogOut size={16} /> Keluar</button>
+          </form>
         </div>
       </header>
 
@@ -126,7 +130,7 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                       <td><strong>{workspace.businessName}</strong><small>{workspace.user.name} · {workspace.user.email}</small><small>{workspace._count.memberships} anggota · {workspace._count.contacts} pelanggan</small></td>
                       <td>
                         <span className={`developer-status ${statusTone(subscription?.status)}`}>{subscription ? statusLabel(subscription.status) : "Legacy"}</span>
-                        <small>{subscription?.plan ?? "BETA"}{subscription?.trialClaimNumber ? ` · trial #${subscription.trialClaimNumber}` : ""}</small>
+                        <small>{subscription?.plan === SubscriptionPlan.BETA ? "BETA Legacy" : subscription?.plan ?? "BETA Legacy"}{subscription?.status === WorkspaceSubscriptionStatus.TRIALING && subscription.trialClaimNumber ? ` · trial #${subscription.trialClaimNumber}` : ""}</small>
                         <small>{subscription?.trialEndsAt ? `Trial sampai ${formatDate(subscription.trialEndsAt)}` : subscription?.currentPeriodEndsAt ? `Aktif sampai ${formatDate(subscription.currentPeriodEndsAt)}` : "—"}</small>
                       </td>
                       <td><small>AI {workspace.agentSettings?.isActive ? "aktif" : "mati"}</small><small>WA {workspace.whatsAppSettings?.isActive ? "live" : "belum"} · Telegram {workspace.telegramSettings?.isActive ? "live" : "belum"}</small><small>{workspace._count.conversations} percakapan</small></td>
@@ -138,18 +142,18 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                         >
                             <section>
                               <h3>Aktifkan paket manual</h3>
-                              <p>Gunakan setelah pembayaran manual benar-benar diterima.</p>
+                              <p>Paket berbayar hanya diaktifkan setelah pembayaran diterima. BETA Legacy khusus pengujian internal.</p>
                               <form action={activateWorkspacePlanAction}>
                                 <input type="hidden" name="businessId" value={workspace.id} />
-                                <label>Paket<select name="plan" defaultValue={SubscriptionPlan.STARTER}>{[SubscriptionPlan.STARTER, SubscriptionPlan.GROWTH, SubscriptionPlan.BUSINESS].map((plan) => <option key={plan} value={plan}>{plan}</option>)}</select></label>
+                                <label>Paket<select name="plan" defaultValue={SubscriptionPlan.STARTER}>{[SubscriptionPlan.BETA, SubscriptionPlan.STARTER, SubscriptionPlan.GROWTH, SubscriptionPlan.BUSINESS].map((plan) => <option key={plan} value={plan}>{plan === SubscriptionPlan.BETA ? "BETA Legacy (internal)" : plan}</option>)}</select></label>
                                 <label>Siklus<select name="billingCycle" defaultValue={SubscriptionBillingCycle.MONTHLY}><option value={SubscriptionBillingCycle.MONTHLY}>Bulanan</option><option value={SubscriptionBillingCycle.ANNUAL}>Tahunan</option></select></label>
-                                <label>Masa aktif<select name="durationDays" defaultValue="30"><option value="30">30 hari</option><option value="90">90 hari</option><option value="365">365 hari</option></select></label>
+                                <label>Masa aktif<select name="durationDays" defaultValue="30"><option value="30">30 hari</option><option value="90">90 hari</option><option value="365">365 hari</option></select><small>Diabaikan untuk BETA Legacy karena aksesnya tidak kedaluwarsa.</small></label>
                                 <label>Alasan<input name="reason" minLength={8} maxLength={500} placeholder="Contoh: Transfer manual sudah diverifikasi" required /></label>
                                 <ConfirmField />
                                 <button className="primary-button" type="submit">Aktifkan paket</button>
                               </form>
                             </section>
-                            {subscription?.trialClaimNumber ? (
+                            {subscription?.status === WorkspaceSubscriptionStatus.TRIALING && subscription.trialClaimNumber ? (
                               <section>
                                 <h3>Kelola trial</h3>
                                 <form action={adjustWorkspaceTrialAction}>
@@ -218,7 +222,12 @@ function DeveloperAccessDenied() {
           <AijouLogo size={38} />
           <div><strong>Aijou Developer</strong><span>Platform operations</span></div>
         </div>
-        <Link className="secondary-button" href="/dashboard"><ArrowLeft size={16} /> Kembali ke workspace</Link>
+        <div className="developer-header-actions">
+          <Link className="secondary-button" href="/dashboard"><ArrowLeft size={16} /> Kembali ke workspace</Link>
+          <form action="/api/auth/logout" method="post">
+            <button className="secondary-button" type="submit"><LogOut size={16} /> Keluar</button>
+          </form>
+        </div>
       </header>
       <section className="developer-access-denied">
         <div className="developer-icon-box"><ShieldCheck size={21} /></div>

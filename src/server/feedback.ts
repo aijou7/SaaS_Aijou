@@ -112,7 +112,7 @@ export async function requirePlatformAdmin(userId: string) {
     where: { id: userId },
     select: { isPlatformAdmin: true, status: true },
   });
-  if (!user?.isPlatformAdmin || user.status === "SUSPENDED") {
+  if (!user?.isPlatformAdmin || user.status !== "ACTIVE") {
     throw new Error("Akses platform admin diperlukan.");
   }
 }

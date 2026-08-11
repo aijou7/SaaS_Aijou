@@ -37,10 +37,14 @@ test("trial lifecycle expires only auto reply and sends idempotent reminders", (
 test("developer mutations require platform access, confirmation, reason, and audit", () => {
   const actions = read("src/app/developer/actions.ts");
   const service = read("src/server/admin-cockpit.ts");
+  const authorization = read("src/server/feedback.ts");
   const page = read("src/app/developer/page.tsx");
   const dialog = read("src/app/developer/developer-workspace-dialog.tsx");
 
   assert.match(actions, /await requirePlatformAdmin\(session\.userId\)/);
+  assert.equal(actions.match(/const session = await requireDeveloperSession\(\)/g)?.length, 5);
+  assert.doesNotMatch(actions, /session\.role/);
+  assert.match(authorization, /!user\?\.isPlatformAdmin \|\| user\.status !== "ACTIVE"/);
   assert.match(actions, /formData\.get\("confirmed"\) !== "yes"/);
   assert.match(service, /reason\.length < 8/);
   assert.match(service, /tx\.platformAuditLog\.create/g);
@@ -52,6 +56,21 @@ test("developer mutations require platform access, confirmation, reason, and aud
   assert.match(dialog, /dialog\.showModal\(\)/);
   assert.match(dialog, /aria-labelledby=\{titleId\}/);
   assert.match(dialog, /event\.target === event\.currentTarget/);
+});
+
+test("developer console owns logout and BETA Legacy stays an internal activation option", () => {
+  const page = read("src/app/developer/page.tsx");
+  const service = read("src/server/admin-cockpit.ts");
+  const publicPlans = read("src/lib/subscription-plans.ts");
+
+  assert.match(page, /<form action="\/api\/auth\/logout" method="post">/);
+  assert.match(page, /SubscriptionPlan\.BETA/);
+  assert.match(page, /BETA Legacy \(internal\)/);
+  assert.match(service, /function parseDeveloperPlan/);
+  assert.match(service, /value === SubscriptionPlan\.BETA/);
+  assert.match(service, /const isLegacyBeta = plan === SubscriptionPlan\.BETA/);
+  assert.match(service, /currentPeriodEndsAt: periodEnd/);
+  assert.doesNotMatch(publicPlans, /id:\s*"beta"/);
 });
 
 test("public pricing explains that the first 100 verified workspaces receive trial", () => {
@@ -82,6 +101,7 @@ test("developer route preserves its login destination and distinguishes platform
   assert.match(session, /isPlatformAdmin: user\.isPlatformAdmin/);
   assert.match(page, /redirect\("\/login\?next=%2Fdeveloper"\)/);
   assert.match(page, /if \(!session\.isPlatformAdmin\) return <DeveloperAccessDenied \/>/);
+  assert.ok(page.indexOf("if (!session.isPlatformAdmin)") < page.indexOf("getDeveloperConsole(session.userId"));
   assert.doesNotMatch(page, /catch \{\s*redirect\("\/dashboard"\)/);
   assert.match(login, /isDeveloperLogin = nextPath === "\/developer"/);
   assert.match(login, /Gunakan akun platform admin, bukan akun owner workspace biasa/);
