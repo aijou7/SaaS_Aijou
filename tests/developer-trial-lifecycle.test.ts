@@ -73,6 +73,17 @@ test("developer console owns logout and BETA Legacy stays an internal activation
   assert.doesNotMatch(publicPlans, /id:\s*"beta"/);
 });
 
+test("developer reliability panel explains failed background work in plain language", () => {
+  const page = read("src/app/developer/page.tsx");
+
+  assert.match(page, /Tugas otomatis yang perlu diperiksa/);
+  assert.match(page, /Ini bukan antrean chat pelanggan/);
+  assert.match(page, /Email notifikasi pengambilalihan chat/);
+  assert.match(page, /Lihat detail teknis/);
+  assert.match(page, /developerJobError\(job\.lastError\)/);
+  assert.doesNotMatch(page, /<h2>Antrean gagal<\/h2>/);
+});
+
 test("public pricing explains that the first 100 verified workspaces receive trial", () => {
   const pricing = read("src/components/marketing-pricing.tsx");
   const signup = read("src/app/signup/page.tsx");

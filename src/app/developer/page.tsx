@@ -8,7 +8,9 @@ import {
   CreditCard,
   Database,
   History,
+  Info,
   LogOut,
+  RotateCcw,
   Search,
   ShieldCheck,
   Users,
@@ -140,9 +142,12 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                           workspaceName={workspace.businessName}
                           ownerEmail={workspace.user.email}
                         >
-                            <section>
-                              <h3>Aktifkan paket manual</h3>
-                              <p>Paket berbayar hanya diaktifkan setelah pembayaran diterima. BETA Legacy khusus pengujian internal.</p>
+                            <section className="developer-action-card plan">
+                              <div className="developer-action-card-heading">
+                                <div className="developer-action-card-icon"><CreditCard size={18} /></div>
+                                <div><h3>Atur paket workspace</h3><p>Aktifkan paket berbayar setelah pembayaran diterima, atau gunakan BETA Legacy untuk pengujian internal.</p></div>
+                                <span>Developer only</span>
+                              </div>
                               <form action={activateWorkspacePlanAction}>
                                 <input type="hidden" name="businessId" value={workspace.id} />
                                 <label>Paket<select name="plan" defaultValue={SubscriptionPlan.STARTER}>{[SubscriptionPlan.BETA, SubscriptionPlan.STARTER, SubscriptionPlan.GROWTH, SubscriptionPlan.BUSINESS].map((plan) => <option key={plan} value={plan}>{plan === SubscriptionPlan.BETA ? "BETA Legacy (internal)" : plan}</option>)}</select></label>
@@ -154,8 +159,11 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                               </form>
                             </section>
                             {subscription?.status === WorkspaceSubscriptionStatus.TRIALING && subscription.trialClaimNumber ? (
-                              <section>
-                                <h3>Kelola trial</h3>
+                              <section className="developer-action-card trial">
+                                <div className="developer-action-card-heading">
+                                  <div className="developer-action-card-icon"><Clock3 size={18} /></div>
+                                  <div><h3>Kelola masa trial</h3><p>Perpanjang waktu evaluasi atau akhiri akses trial workspace ini.</p></div>
+                                </div>
                                 <form action={adjustWorkspaceTrialAction}>
                                   <input type="hidden" name="businessId" value={workspace.id} />
                                   <label>Tindakan<select name="operation" defaultValue="EXTEND"><option value="EXTEND">Perpanjang</option><option value="END">Akhiri sekarang</option></select></label>
@@ -167,8 +175,12 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
                               </section>
                             ) : null}
                             {!workspace.user.isPlatformAdmin ? (
-                              <section>
-                                <h3>Keamanan akun</h3>
+                              <section className="developer-action-card danger">
+                                <div className="developer-action-card-heading">
+                                  <div className="developer-action-card-icon"><ShieldCheck size={18} /></div>
+                                  <div><h3>Keamanan akun</h3><p>{workspace.user.status === UserStatus.SUSPENDED ? "Pulihkan akses login owner workspace ini." : "Hentikan akses login owner tanpa menghapus data workspace."}</p></div>
+                                  <span>{workspace.user.status === UserStatus.SUSPENDED ? "Ditangguhkan" : "Akun aktif"}</span>
+                                </div>
                                 <form action={setDeveloperUserStatusAction}>
                                   <input type="hidden" name="userId" value={workspace.user.id} />
                                   <input type="hidden" name="status" value={workspace.user.status === UserStatus.SUSPENDED ? UserStatus.ACTIVE : UserStatus.SUSPENDED} />
@@ -203,11 +215,24 @@ export default async function DeveloperPage({ searchParams }: DeveloperPageProps
           </section>
         </div>
 
-        <section className="developer-section">
-          <div className="developer-section-heading"><div><p className="eyebrow">Reliability</p><h2>Antrean gagal</h2></div><Database size={21} /></div>
+        <section className="developer-section developer-reliability-section">
+          <div className="developer-section-heading">
+            <div><p className="eyebrow">Pemulihan sistem</p><h2>Tugas otomatis yang perlu diperiksa</h2></div>
+            <span className={`developer-queue-count ${page.failedJobs.length ? "warning" : "clear"}`}><Database size={16} /> {page.failedJobs.length ? `${page.failedJobs.length} bermasalah` : "Semua normal"}</span>
+          </div>
+          <div className="developer-reliability-help"><Info size={18} /><p><strong>Ini bukan antrean chat pelanggan.</strong> Bagian ini berisi pekerjaan di belakang layar—seperti pengiriman email atau notifikasi—yang sudah dicoba sistem tetapi belum berhasil.</p></div>
           {page.failedJobs.length ? <div className="developer-job-grid">{page.failedJobs.map((job) => (
-            <article key={job.id}><AlertTriangle size={18} /><div><strong>{job.type}</strong><span>{job.business.businessName} · {job.attempts}/{job.maxAttempts} percobaan</span><p>{job.lastError ?? "Error tidak diketahui"}</p></div><form action={replayDeveloperJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="secondary-button" type="submit">Ulangi</button></form></article>
-          ))}</div> : <Empty icon={CheckCircle2} text="Antrean bersih. Tidak ada job gagal." />}
+            <article key={job.id}>
+              <div className="developer-job-icon"><AlertTriangle size={18} /></div>
+              <div className="developer-job-content">
+                <div className="developer-job-title"><strong>{developerJobLabel(job.type)}</strong><code>{job.type}</code></div>
+                <span>{job.business.businessName} · sudah dicoba {job.attempts} dari {job.maxAttempts} kali</span>
+                <p>{developerJobError(job.lastError)}</p>
+                {job.lastError ? <details><summary>Lihat detail teknis</summary><pre>{job.lastError}</pre></details> : null}
+              </div>
+              <form action={replayDeveloperJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="secondary-button" type="submit"><RotateCcw size={15} /> Coba lagi</button></form>
+            </article>
+          ))}</div> : <Empty icon={CheckCircle2} text="Semua tugas otomatis berjalan normal." />}
         </section>
       </div>
     </main>
@@ -287,6 +312,32 @@ function auditActionLabel(action: string) {
     trial_lifecycle_run_manually: "Lifecycle trial dijalankan",
   };
   return labels[action] ?? action.replaceAll("_", " ");
+}
+
+function developerJobLabel(type: string) {
+  const labels: Record<string, string> = {
+    HUMAN_TAKEOVER_NOTIFICATION: "Email notifikasi pengambilalihan chat",
+    TRIAL_REMINDER_EMAIL: "Email pengingat masa trial",
+    TRIAL_EXPIRED_EMAIL: "Email masa trial berakhir",
+    WHATSAPP_OUTBOUND: "Pengiriman pesan WhatsApp",
+    TELEGRAM_OUTBOUND: "Pengiriman pesan Telegram",
+  };
+  return labels[type] ?? type.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function developerJobError(error: string | null) {
+  if (!error) return "Sistem belum menerima detail penyebab kegagalan.";
+  const normalized = error.toLowerCase();
+  if (normalized.includes("testing email address") || normalized.includes("invalid `to` field")) {
+    return "Email tujuan belum diizinkan oleh layanan email. Gunakan alamat testing atau domain yang sudah terverifikasi, lalu coba lagi.";
+  }
+  if (normalized.includes("timeout") || normalized.includes("timed out")) {
+    return "Layanan tujuan terlalu lama merespons. Tunggu sebentar lalu coba jalankan kembali.";
+  }
+  if (normalized.includes("rate limit") || normalized.includes("too many requests")) {
+    return "Batas permintaan layanan sedang tercapai. Tunggu sebentar sebelum mencoba kembali.";
+  }
+  return "Proses belum berhasil. Buka detail teknis untuk melihat penyebabnya sebelum mencoba kembali.";
 }
 
 function formatDate(value: Date) {
