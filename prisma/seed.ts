@@ -1,5 +1,10 @@
 import "dotenv/config";
-import { UserRole } from "../generated/prisma-beta/client";
+import {
+  SubscriptionBillingCycle,
+  SubscriptionPlan,
+  UserRole,
+  WorkspaceSubscriptionStatus,
+} from "../generated/prisma-beta/client";
 import { encryptSecret } from "../src/lib/secret-encryption";
 import { prisma } from "../src/lib/prisma";
 import { hashPassword, validatePasswordStrength } from "../src/lib/password";
@@ -97,6 +102,18 @@ async function main() {
           whatsappNumber,
         },
       });
+
+  await prisma.workspaceSubscription.upsert({
+    where: { businessId: business.id },
+    update: {},
+    create: {
+      businessId: business.id,
+      plan: SubscriptionPlan.BETA,
+      billingCycle: SubscriptionBillingCycle.MONTHLY,
+      status: WorkspaceSubscriptionStatus.ACTIVE,
+      activatedAt: new Date(),
+    },
+  });
 
   const shouldSeedDemoData = !existingBusiness || refreshDemoData;
   if (shouldSeedDemoData) {

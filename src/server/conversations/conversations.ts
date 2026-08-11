@@ -51,6 +51,7 @@ import {
   getWorkspaceAccess,
   activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
+import { getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -546,7 +547,10 @@ async function simulateCustomerMessageForResolvedBusiness(
   ) {
     nextStatus = ConversationStatus.OPEN;
   }
-  const settings = await getAgentRuntimeSettings(business.id);
+  const [settings, subscriptionEntitlements] = await Promise.all([
+    getAgentRuntimeSettings(business.id),
+    getWorkspaceEntitlements(business.id),
+  ]);
   const hours = evaluateBusinessHours({
     enabled: settings.businessHoursEnabled,
     schedule: settings.businessHours,
@@ -555,7 +559,10 @@ async function simulateCustomerMessageForResolvedBusiness(
   const outsideBusinessHours = settings.isActive && !hours.isOpen;
   let operationalHandoffReason: string | null = null;
 
-  if (!settings.isActive) {
+  if (!subscriptionEntitlements.accessActive) {
+    nextStatus = ConversationStatus.HUMAN_NEEDED;
+    operationalHandoffReason = "Trial atau paket workspace perlu diaktifkan. Pesan tetap tersimpan untuk ditangani tim.";
+  } else if (!settings.isActive) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;
   } else if (outsideBusinessHours) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;

@@ -6,6 +6,7 @@ import {
   Building2,
   CircleHelp,
   Code2,
+  CreditCard,
   FileText,
   LayoutDashboard,
   LifeBuoy,
@@ -41,6 +42,8 @@ import {
 import { isTeamManagementEnabled } from "@/lib/team-feature";
 import { getSession } from "@/lib/session";
 import type { WorkspaceRoleValue } from "@/lib/team-invites";
+import type { SubscriptionFeature } from "@/lib/subscription-plans";
+import { getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 import {
   canWorkspace,
   getWorkspaceHome,
@@ -56,6 +59,7 @@ type NavigationItem = {
   label: string;
   icon: LucideIcon;
   key: string;
+  subscriptionFeature?: SubscriptionFeature;
 };
 
 const primaryNavigation = [
@@ -88,13 +92,13 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     title: "Customer & penjualan",
     items: [
       { href: "/leads", label: "Leads", icon: BriefcaseBusiness, key: "leads", capability: "sales:view" },
-      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers", capability: "sales:view" },
+      { href: "/customers", label: "Pelanggan & segmen", icon: Users, key: "customers", capability: "sales:view", subscriptionFeature: "CUSTOMER_SEGMENTS" },
       { href: "/products", label: "Katalog produk", icon: Package, key: "products", capability: "sales:view" },
       { href: "/transactions", label: "Pesanan & penjualan", icon: ShoppingBag, key: "transactions", capability: "finance:view" },
       { href: "/proposals", label: "Draft proposal", icon: FileText, key: "proposals", capability: "sales:operate" },
       { href: "/payments", label: "Pembayaran", icon: WalletCards, key: "payments", capability: "finance:view" },
       { href: "/receipts", label: "Review bukti bayar", icon: ReceiptText, key: "receipts", capability: "finance:view" },
-      { href: "/reports", label: "Laporan", icon: TrendingUp, key: "reports", capability: "finance:view" },
+      { href: "/reports", label: "Laporan", icon: TrendingUp, key: "reports", capability: "finance:view", subscriptionFeature: "ADVANCED_REPORTS" },
     ],
   },
   automation: {
@@ -102,11 +106,11 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     items: [
       { href: "/integrations", label: "Channel & integrasi", icon: Building2, key: "integrations", capability: "automation:manage" },
       { href: "/hours", label: "Jam kerja AI", icon: Clock3, key: "hours", capability: "automation:manage" },
-      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints", capability: "operations:view" },
-      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts", capability: "automation:manage" },
-      { href: "/orders", label: "Otomatisasi pesanan", icon: ShoppingBag, key: "orders", capability: "operations:view" },
-      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping", capability: "operations:view" },
-      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows", capability: "automation:manage" },
+      { href: "/complaints", label: "Manajemen komplain", icon: LifeBuoy, key: "complaints", capability: "operations:view", subscriptionFeature: "COMPLAINTS" },
+      { href: "/broadcasts", label: "Broadcast WhatsApp", icon: Megaphone, key: "broadcasts", capability: "automation:manage", subscriptionFeature: "BROADCAST" },
+      { href: "/orders", label: "Otomatisasi pesanan", icon: ShoppingBag, key: "orders", capability: "operations:view", subscriptionFeature: "ORDERS" },
+      { href: "/shipping", label: "Cek ongkir", icon: Truck, key: "shipping", capability: "operations:view", subscriptionFeature: "ORDERS" },
+      { href: "/workflows", label: "Workflow builder", icon: Workflow, key: "workflows", capability: "automation:manage", subscriptionFeature: "WORKFLOWS" },
       { href: "/whatsapp", label: "Setup WhatsApp", icon: Code2, key: "whatsapp", capability: "automation:manage" },
       { href: "/readiness", label: "Pemeriksaan siap live", icon: BadgeCheck, key: "readiness", capability: "automation:manage" },
     ],
@@ -118,6 +122,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
       { href: "/business", label: "Profil bisnis", icon: Building2, key: "business", capability: "workspace:manage" },
       { href: "/setup", label: "Panduan setup", icon: BadgeCheck, key: "setup", capability: "workspace:manage" },
       { href: "/usage", label: "Penggunaan", icon: Activity, key: "usage", capability: "workspace:manage" },
+      { href: "/subscription", label: "Paket & tagihan", icon: CreditCard, key: "subscription", capability: "workspace:manage" },
       ...(isTeamManagementEnabled()
         ? [{ href: "/team", label: "Tim & akses", icon: Users, key: "team", capability: "team:manage" as const }]
         : []),
@@ -158,6 +163,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   business: "settings",
   setup: "settings",
   usage: "settings",
+  subscription: "settings",
   team: "settings",
   account: "settings",
 };
@@ -182,18 +188,29 @@ export async function AppShell({
   const requestedNavigationItem = moduleNavigation[activeModule].items.find(
     (item) => item.key === active,
   );
+  const subscriptionEntitlements = session?.business
+    ? await getWorkspaceEntitlements(session.business.id)
+    : null;
+  const hasSubscriptionFeature = (item: NavigationItem) =>
+    !item.subscriptionFeature ||
+    Boolean(subscriptionEntitlements?.features.includes(item.subscriptionFeature));
   if (
     requestedNavigationItem &&
     !canWorkspace(workspaceRole, requestedNavigationItem.capability)
   ) {
     redirect(getWorkspaceHome(workspaceRole));
   }
+  if (requestedNavigationItem && !hasSubscriptionFeature(requestedNavigationItem)) {
+    redirect("/subscription?upgrade=1");
+  }
   const visibleModuleNavigation = Object.fromEntries(
     Object.entries(moduleNavigation).map(([key, navigation]) => [
       key,
       {
         ...navigation,
-        items: navigation.items.filter((item) => canWorkspace(workspaceRole, item.capability)),
+        items: navigation.items.filter(
+          (item) => canWorkspace(workspaceRole, item.capability) && hasSubscriptionFeature(item),
+        ),
       },
     ]),
   ) as Record<ModuleKey, { title: string; items: NavigationItem[] }>;

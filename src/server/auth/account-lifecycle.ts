@@ -28,6 +28,7 @@ import {
   getPublicAppUrl,
   sendTransactionalEmail,
 } from "@/server/email";
+import { activateVerifiedWorkspaceSubscriptions } from "@/server/subscriptions/subscriptions";
 
 const resetRules = [
   { scope: "password-reset:subject:15m", max: 4, windowMs: 15 * 60_000 },
@@ -252,6 +253,7 @@ export async function verifyEmailWithOtp(
       },
       data: { usedAt: now },
     });
+    await activateVerifiedWorkspaceSubscriptions(tx, token.userId, now);
     return tx.user.findUniqueOrThrow({
       where: { id: token.userId },
       select: {

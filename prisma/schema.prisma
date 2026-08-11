@@ -168,6 +168,42 @@ enum PaymentSessionStatus {
   FAILED
 }
 
+enum SubscriptionPlan {
+  BETA
+  STARTER
+  GROWTH
+  BUSINESS
+}
+
+enum SubscriptionBillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum WorkspaceSubscriptionStatus {
+  PENDING_ACTIVATION
+  TRIALING
+  PENDING_PAYMENT
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum SubscriptionPaymentProvider {
+  MIDTRANS
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  SETTLED
+  FAILED
+  EXPIRED
+  CANCELED
+  REFUNDED
+  CHARGEBACK
+}
+
 enum BackgroundJobStatus {
   PENDING
   PROCESSING
@@ -310,6 +346,8 @@ model Business {
   quickReplies         QuickReply[]
   paymentSettings      PaymentSettings?
   paymentSessions      PaymentSession[]
+  subscription         WorkspaceSubscription?
+  subscriptionPayments SubscriptionPayment[]
   backgroundJobs       BackgroundJob[]
   notifications        WorkspaceNotification[]
   agentSettings        AgentSettings?
@@ -1003,6 +1041,61 @@ model PaymentSession {
   @@index([businessId, status, createdAt])
   @@index([transactionId, createdAt])
   @@map("payment_sessions")
+}
+
+model WorkspaceSubscription {
+  id                    String                      @id @default(cuid())
+  businessId            String                      @unique
+  plan                  SubscriptionPlan            @default(BETA)
+  billingCycle          SubscriptionBillingCycle    @default(MONTHLY)
+  status                WorkspaceSubscriptionStatus @default(PENDING_ACTIVATION)
+  trialStartsAt         DateTime?
+  trialEndsAt           DateTime?
+  currentPeriodStartsAt DateTime?
+  currentPeriodEndsAt   DateTime?
+  cancelAtPeriodEnd     Boolean                     @default(false)
+  canceledAt            DateTime?
+  graceEndsAt           DateTime?
+  activatedAt           DateTime?
+  business              Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  payments              SubscriptionPayment[]
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  @@index([status, trialEndsAt])
+  @@index([status, currentPeriodEndsAt])
+  @@map("workspace_subscriptions")
+}
+
+model SubscriptionPayment {
+  id                    String                      @id @default(cuid())
+  businessId            String
+  subscriptionId        String
+  provider              SubscriptionPaymentProvider @default(MIDTRANS)
+  orderId               String                      @unique
+  providerTransactionId String?                     @unique
+  plan                  SubscriptionPlan
+  billingCycle          SubscriptionBillingCycle
+  amount                Decimal                     @db.Decimal(14, 2)
+  currency              String                      @default("IDR")
+  status                SubscriptionPaymentStatus   @default(PENDING)
+  snapToken             String?
+  redirectUrl           String?
+  paymentType           String?
+  providerStatus        String?
+  fraudStatus           String?
+  expiresAt             DateTime?
+  settledAt             DateTime?
+  failureReason         String?
+  rawPayload            Json?
+  business              Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription          WorkspaceSubscription       @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  @@index([businessId, status, createdAt])
+  @@index([subscriptionId, status, createdAt])
+  @@map("subscription_payments")
 }
 
 model BetaInvite {

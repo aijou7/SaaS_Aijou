@@ -9,6 +9,10 @@ import {
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import {
+  assertWorkspaceFeature,
+  getWorkspaceEntitlements,
+} from "@/server/subscriptions/subscriptions";
 
 export const workflowTriggers = ["CUSTOMER_MESSAGE", "COMPLAINT_CREATED", "ORDER_CREATED"] as const;
 export const workflowActions = ["ADD_CONTACT_TAG", "CREATE_COMPLAINT", "REQUEST_HUMAN", "NOTIFY_TEAM"] as const;
@@ -39,6 +43,7 @@ export async function getWorkflowsPage(userId: string) {
 
 export async function createWorkflow(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "WORKFLOWS");
   const name = clean(formData.get("name"), 120);
   const triggerType = workflowTriggers.includes(formData.get("triggerType") as (typeof workflowTriggers)[number])
     ? String(formData.get("triggerType"))
@@ -64,6 +69,7 @@ export async function createWorkflow(userId: string, formData: FormData) {
 
 export async function toggleWorkflow(userId: string, workflowId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "WORKFLOWS");
   const workflow = await prisma.automationWorkflow.findFirst({ where: { id: workflowId, businessId: access.businessId } });
   if (!workflow) throw new Error("Workflow tidak ditemukan.");
   await prisma.automationWorkflow.update({
@@ -77,6 +83,8 @@ export async function runWorkflowsForTrigger(
   triggerType: (typeof workflowTriggers)[number],
   context: Record<string, unknown>,
 ) {
+  const entitlements = await getWorkspaceEntitlements(businessId);
+  if (!entitlements.accessActive || !entitlements.features.includes("WORKFLOWS")) return;
   const workflows = await prisma.automationWorkflow.findMany({
     where: { businessId, triggerType, status: WorkflowStatus.ACTIVE },
     take: 20,

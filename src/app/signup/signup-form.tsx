@@ -6,12 +6,15 @@ import {
   signupWithInviteAction,
   type SignupActionState,
 } from "@/app/signup/actions";
+import type { BillingCycle, PublicPlanId } from "@/lib/subscription-plans";
 
 type SignupFormProps = {
   mode: "public" | "invite";
   token?: string;
   email?: string | null;
   businessName?: string | null;
+  plan?: PublicPlanId;
+  billingCycle?: BillingCycle;
 };
 
 export function SignupForm({
@@ -19,6 +22,8 @@ export function SignupForm({
   token = "",
   email,
   businessName,
+  plan = "starter",
+  billingCycle = "monthly",
 }: SignupFormProps) {
   const signupAction = mode === "invite" ? signupWithInviteAction : signupPublicBetaAction;
   const [state, action, pending] = useActionState<SignupActionState, FormData>(
@@ -35,6 +40,12 @@ export function SignupForm({
   return (
     <form className="login-form signup-form" action={action}>
       {mode === "invite" ? <input name="token" type="hidden" value={token} /> : null}
+      {mode === "public" ? (
+        <>
+          <input name="plan" type="hidden" value={plan} />
+          <input name="billingCycle" type="hidden" value={billingCycle} />
+        </>
+      ) : null}
 
       {mode === "public" ? (
         <label className="signup-trap" aria-hidden="true">
@@ -143,7 +154,7 @@ export function SignupForm({
           ? "Menyiapkan workspace..."
           : mode === "invite"
             ? "Aktifkan workspace"
-            : "Buat workspace beta"}
+            : "Buat workspace"}
       </button>
     </form>
   );

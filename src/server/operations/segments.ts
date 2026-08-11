@@ -1,6 +1,7 @@
 import { WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceFeature } from "@/server/subscriptions/subscriptions";
 
 const roles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT];
 
@@ -27,6 +28,7 @@ export async function getCustomersPage(userId: string, segmentId?: string) {
 
 export async function createSegment(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "CUSTOMER_SEGMENTS");
   const name = clean(formData.get("name"), 80);
   if (!name) throw new Error("Nama segmen wajib diisi.");
   return prisma.customerSegment.create({
@@ -41,6 +43,7 @@ export async function createSegment(userId: string, formData: FormData) {
 
 export async function updateContactAudience(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, roles);
+  await assertWorkspaceFeature(access.businessId, "CUSTOMER_SEGMENTS");
   const contactId = clean(formData.get("contactId"), 64);
   const segmentId = clean(formData.get("segmentId"), 64);
   const action = clean(formData.get("audienceAction"), 30);

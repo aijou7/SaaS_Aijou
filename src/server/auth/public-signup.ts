@@ -61,6 +61,8 @@ export async function createPublicBetaAccount(
         ownerId: user.id,
         businessName: normalized.businessName,
         signupSource: "PUBLIC",
+        plan: normalized.plan,
+        billingCycle: normalized.billingCycle,
       });
 
       return {

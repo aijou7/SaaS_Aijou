@@ -1,10 +1,14 @@
 import { Prisma, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { newWorkspaceAgentDefaults } from "@/server/agent/defaults";
+import type { BillingCycle, PublicPlanId } from "@/lib/subscription-plans";
+import { createInitialWorkspaceSubscription } from "@/server/subscriptions/subscriptions";
 
 type EmptyWorkspaceInput = {
   ownerId: string;
   businessName: string;
   signupSource: "PUBLIC" | "BETA_INVITE";
+  plan?: PublicPlanId;
+  billingCycle?: BillingCycle;
 };
 
 /**
@@ -44,6 +48,12 @@ export async function createEmptyOwnedWorkspace(
       type: "SIGNUP",
       metadata: { source: input.signupSource },
     },
+  });
+  await createInitialWorkspaceSubscription(tx, {
+    businessId: business.id,
+    signupSource: input.signupSource,
+    plan: input.plan,
+    billingCycle: input.billingCycle,
   });
 
   return business;

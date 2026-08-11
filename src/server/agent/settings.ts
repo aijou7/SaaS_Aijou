@@ -8,6 +8,7 @@ import {
   requireWorkspaceAccess,
   activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
+import { getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 
 export type AgentRuntimeSettings = {
   agentName: string;
@@ -114,7 +115,13 @@ export async function updateAgentSettings(userId: string, input: AgentSettingsIn
     select: { isActive: true },
   });
   if (input.isActive && !existing?.isActive) {
-    const readiness = await getBusinessActivationReadiness(userId, input);
+    const [readiness, entitlements] = await Promise.all([
+      getBusinessActivationReadiness(userId, input),
+      getWorkspaceEntitlements(business.id),
+    ]);
+    if (!entitlements.accessActive) {
+      throw new AgentActivationError(["Aktifkan trial atau paket langganan"]);
+    }
     if (!readiness.canActivateAgent) {
       throw new AgentActivationError(
         readiness.missingBeforeActivation.map((check) => check.label),

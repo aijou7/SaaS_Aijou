@@ -1,4 +1,10 @@
 import { validatePasswordStrength } from "@/lib/password";
+import {
+  normalizeBillingCycle,
+  normalizePublicPlanId,
+  type BillingCycle,
+  type PublicPlanId,
+} from "@/lib/subscription-plans";
 
 export class PublicSignupError extends Error {
   constructor(
@@ -21,6 +27,8 @@ export type PublicSignupInput = {
   phoneNumber?: string;
   businessName: string;
   password: string;
+  plan?: string;
+  billingCycle?: string;
 };
 
 export type NormalizedPublicSignupInput = {
@@ -29,6 +37,8 @@ export type NormalizedPublicSignupInput = {
   phoneNumber: string | null;
   businessName: string;
   password: string;
+  plan: PublicPlanId;
+  billingCycle: BillingCycle;
 };
 
 export const publicSignupRateRules = [
@@ -66,8 +76,18 @@ export function normalizePublicSignupInput(
   const phoneNumber = normalizePhone(input.phoneNumber);
   const passwordError = validatePasswordStrength(input.password, email);
   if (passwordError) throw new PublicSignupError(passwordError);
+  const plan = normalizePublicPlanId(input.plan);
+  const billingCycle = normalizeBillingCycle(input.billingCycle);
 
-  return { name, email, phoneNumber, businessName, password: input.password };
+  return {
+    name,
+    email,
+    phoneNumber,
+    businessName,
+    password: input.password,
+    plan,
+    billingCycle,
+  };
 }
 
 function cleanRequiredText(

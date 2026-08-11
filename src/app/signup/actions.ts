@@ -49,6 +49,8 @@ export async function signupPublicBetaAction(
         phoneNumber: String(formData.get("phoneNumber") ?? ""),
         businessName: String(formData.get("businessName") ?? ""),
         password,
+        plan: String(formData.get("plan") ?? ""),
+        billingCycle: String(formData.get("billingCycle") ?? ""),
       },
       { clientIp: getClientIpFromHeaders(requestHeaders) },
     );

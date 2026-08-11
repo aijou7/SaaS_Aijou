@@ -1,6 +1,7 @@
 import { WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceFeature } from "@/server/subscriptions/subscriptions";
 
 export type ShippingQuoteInput = {
   id: string;
@@ -57,6 +58,7 @@ export async function getShippingPage(userId: string, zone?: string, weight?: nu
 
 export async function createShippingRate(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "ORDERS");
   const zoneName = clean(formData.get("zoneName"), 100);
   const serviceName = clean(formData.get("serviceName"), 100);
   if (!zoneName || !serviceName) throw new Error("Zona dan layanan pengiriman wajib diisi.");
@@ -77,6 +79,7 @@ export async function createShippingRate(userId: string, formData: FormData) {
 
 export async function toggleShippingRate(userId: string, rateId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "ORDERS");
   const rate = await prisma.shippingRate.findFirst({ where: { id: rateId, businessId: access.businessId } });
   if (!rate) throw new Error("Tarif pengiriman tidak ditemukan.");
   await prisma.shippingRate.update({ where: { id: rate.id }, data: { isActive: !rate.isActive } });

@@ -2,6 +2,7 @@ import { OrderStatus, ShipmentStatus, WorkspaceRole } from "@/generated/prisma-b
 import { prisma } from "@/lib/prisma";
 import { runWorkflowsForTrigger } from "@/server/operations/workflows";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceFeature } from "@/server/subscriptions/subscriptions";
 
 const roles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT];
 
@@ -23,6 +24,7 @@ export async function getOrdersPage(userId: string) {
 
 export async function createOrder(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, roles);
+  await assertWorkspaceFeature(access.businessId, "ORDERS");
   const productId = clean(formData.get("productId"), 64);
   const quantity = clampInt(formData.get("quantity"), 1, 999, 1);
   const product = productId
@@ -84,6 +86,7 @@ export async function createOrder(userId: string, formData: FormData) {
 
 export async function updateOrderStatus(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, roles);
+  await assertWorkspaceFeature(access.businessId, "ORDERS");
   const orderId = clean(formData.get("orderId"), 64);
   const status = Object.values(OrderStatus).includes(formData.get("status") as OrderStatus)
     ? (formData.get("status") as OrderStatus)

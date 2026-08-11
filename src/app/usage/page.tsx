@@ -1,4 +1,14 @@
-import { Activity, Bot, CircleDollarSign, Clock3, CreditCard, MessageCircle, RadioTower, RefreshCcw } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  CircleDollarSign,
+  Clock3,
+  CreditCard,
+  MessageCircle,
+  RadioTower,
+  RefreshCcw,
+} from "lucide-react";
+import Link from "next/link";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -14,13 +24,20 @@ export default async function UsagePage() {
   const sections = [
     { title: "Channel aktif", metric: usage.channels, helper: "Web widget + WhatsApp + Telegram", icon: RadioTower },
     { title: "Pesan bulan ini", metric: usage.messages, helper: "Inbound dan outbound tersimpan", icon: MessageCircle },
-    { title: "Percakapan aktif", metric: usage.conversations, helper: "Conversation dengan aktivitas bulan ini", icon: Activity },
-    { title: "AI runs", metric: usage.aiRequests, helper: "Reply, lead summary, dan proposal", icon: Bot },
+    { title: "Percakapan aktif", metric: usage.conversations, helper: "Percakapan dengan aktivitas bulan ini", icon: Activity },
+    {
+      title: "Kredit AI",
+      metric: usage.aiRequests,
+      helper: usage.subscription.monthlyAiCredits
+        ? usage.aiRequests.toLocaleString("id-ID") + " dari " + usage.subscription.monthlyAiCredits.toLocaleString("id-ID") + " kredit bulanan"
+        : "Pemakaian beta tidak dibatasi kredit kecil",
+      icon: Bot,
+    },
     { title: "Automation jobs", metric: usage.automationRuns, helper: "Background workflow yang dijadwalkan", icon: RefreshCcw },
-    { title: "Payment sessions", metric: usage.paymentSessions, helper: "Hosted checkout yang dibuat", icon: CreditCard },
-    { title: "Token AI", metric: usage.inputTokens + usage.outputTokens, helper: `${usage.instrumentedAiRequests} request terinstrumentasi`, icon: Bot },
-    { title: "Latency AI", metric: `${usage.averageLatencyMs} ms`, helper: `${usage.aiFailures} request gagal`, icon: Clock3 },
-    { title: "Estimasi biaya AI", metric: `$${usage.estimatedCostUsd.toFixed(4)}`, helper: "Berdasarkan rate environment provider", icon: CircleDollarSign },
+    { title: "Payment sessions", metric: usage.paymentSessions, helper: "Hosted checkout untuk customer", icon: CreditCard },
+    { title: "Token AI", metric: usage.inputTokens + usage.outputTokens, helper: usage.instrumentedAiRequests + " request terinstrumentasi", icon: Bot },
+    { title: "Latency AI", metric: usage.averageLatencyMs + " ms", helper: usage.aiFailures + " request gagal", icon: Clock3 },
+    { title: "Estimasi biaya AI", metric: "$" + usage.estimatedCostUsd.toFixed(4), helper: "Berdasarkan rate environment provider", icon: CircleDollarSign },
   ];
 
   return (
@@ -33,15 +50,18 @@ export default async function UsagePage() {
             <p>Angka di bawah dibaca langsung dari aktivitas workspace, bukan data contoh.</p>
           </div>
           <span className={usage.spendAlert ? "status status-warning" : "status"}>
-            {usage.spendAlert ? "Perlu cek biaya AI" : "Private beta · tanpa hard limit kecil"}
+            {usage.spendAlert
+              ? "Perlu cek biaya AI"
+              : usage.subscription.planName + " · " + (usage.subscription.accessActive ? "aktif" : "perlu diaktifkan")}
           </span>
         </div>
         <div className="usage-plan-card">
           <div className="usage-plan-header">
             <div>
-              <h2>Aijou Private Beta</h2>
-              <p>Periode baru mulai {new Date(usage.nextResetAt).toLocaleDateString("id-ID")}</p>
+              <h2>{usage.subscription.planName}</h2>
+              <p>Periode penggunaan baru mulai {new Date(usage.nextResetAt).toLocaleDateString("id-ID")}</p>
             </div>
+            <Link className="primary-button" href="/subscription">Kelola paket</Link>
           </div>
           <div className="usage-section-list">
             {sections.map((section) => {
@@ -56,7 +76,7 @@ export default async function UsagePage() {
                     <strong>{typeof section.metric === "number" ? section.metric.toLocaleString("id-ID") : section.metric}</strong>
                     <small>{section.helper}</small>
                   </div>
-                  <p className="usage-reset">Tidak ada quota kecil yang memotong kebutuhan chat tester.</p>
+                  <p className="usage-reset">Data chat tetap tersimpan dan dapat ditangani manusia saat paket perlu diperbarui.</p>
                 </div>
               );
             })}

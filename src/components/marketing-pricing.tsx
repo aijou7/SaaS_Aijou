@@ -96,13 +96,13 @@ export function MarketingPricing() {
               </ul>
 
               <Link className="marketing-plan-cta" href={signupHref}>
-                {plan.trialDays > 0 ? "Mulai trial gratis" : "Konsultasi paket"}
+                {plan.trialDays > 0 ? "Mulai trial gratis" : "Pilih Business"}
                 <ArrowRight size={16} aria-hidden="true" />
               </Link>
               <small className="marketing-plan-footnote">
                 {plan.trialDays > 0
                   ? "Uji coba 30 hari tidak membutuhkan kartu kredit."
-                  : "Paket Business tidak termasuk free trial dan diaktifkan setelah konsultasi."}
+                  : "Paket Business tidak termasuk free trial dan aktif setelah pembayaran terverifikasi."}
               </small>
             </article>
           );
@@ -110,8 +110,9 @@ export function MarketingPricing() {
       </div>
 
       <p className="marketing-pricing-note">
-        Kredit AI diperbarui setiap bulan. Biaya percakapan WhatsApp dari Meta dan pemakaian di luar kredit paket dihitung terpisah.
-        Selama private beta, aktivasi paket dikonfirmasi oleh tim dan belum ada penagihan otomatis.
+        Kredit AI diperbarui setiap bulan dan pemakaiannya dapat dipantau dari dashboard.
+        Biaya percakapan WhatsApp dari Meta dihitung terpisah. Pembayaran paket diproses melalui Midtrans;
+        paket baru aktif setelah status transaksi terverifikasi.
       </p>
     </section>
   );

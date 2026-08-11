@@ -7,6 +7,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { runWorkflowsForTrigger } from "@/server/operations/workflows";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceFeature } from "@/server/subscriptions/subscriptions";
 
 const operatorRoles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.AGENT];
 
@@ -60,6 +61,7 @@ export async function getComplaintsPage(userId: string, status?: string) {
 
 export async function createComplaint(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, operatorRoles);
+  await assertWorkspaceFeature(access.businessId, "COMPLAINTS");
   const title = clean(formData.get("title"), 180);
   const description = clean(formData.get("description"), 4_000);
   if (!title || !description) throw new Error("Judul dan detail komplain wajib diisi.");
@@ -94,6 +96,7 @@ export async function createComplaint(userId: string, formData: FormData) {
 
 export async function updateComplaint(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, operatorRoles);
+  await assertWorkspaceFeature(access.businessId, "COMPLAINTS");
   const complaintId = clean(formData.get("complaintId"), 64);
   const status = normalizeStatus(formData.get("status"));
   const priority = normalizePriority(formData.get("priority"));

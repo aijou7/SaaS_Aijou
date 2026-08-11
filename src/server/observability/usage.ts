@@ -1,5 +1,6 @@
 import { prisma, withDatabaseRawReadRetry } from "@/lib/prisma";
 import { activeWorkspaceAccessWhere } from "@/server/workspace-access";
+import { getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 
 type UsageMetricsRow = {
   messages: number;
@@ -81,6 +82,7 @@ export async function getUsageSnapshot(userId: string) {
   };
   const estimatedCostUsd = Number(metrics.estimatedCostUsd);
   const spendAlertUsd = Number(process.env.AI_SPEND_ALERT_USD ?? 0);
+  const entitlements = await getWorkspaceEntitlements(business.id, now);
 
   return {
     businessName: business.businessName,
@@ -101,5 +103,6 @@ export async function getUsageSnapshot(userId: string) {
     averageLatencyMs: Math.round(Number(metrics.averageLatencyMs)),
     estimatedCostUsd,
     spendAlert: spendAlertUsd > 0 && estimatedCostUsd >= spendAlertUsd,
+    subscription: entitlements,
   };
 }

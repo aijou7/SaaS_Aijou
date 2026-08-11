@@ -38,6 +38,8 @@ describe("public beta signup", () => {
         phoneNumber: "6281234567890",
         businessName: "Aijou Studio",
         password: "AijouAman2026",
+        plan: "starter",
+        billingCycle: "monthly",
       },
     );
   });

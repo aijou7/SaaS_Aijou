@@ -22,6 +22,7 @@ import {
   sendTransactionalEmail,
 } from "@/server/email";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceSeatAvailable } from "@/server/subscriptions/subscriptions";
 
 const teamManagerRoles = [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] as const;
 const inviteLifetimeMs = 7 * 24 * 60 * 60_000;
@@ -159,6 +160,15 @@ export async function createTeamInvite(
     );
     if (!actorRole || !canManageWorkspaceRole(actorRole, roleValue)) {
       throw new TeamAccessError("FORBIDDEN", "Kamu tidak memiliki izin membuat undangan ini.");
+    }
+
+    try {
+      await assertWorkspaceSeatAvailable(tx, access.businessId);
+    } catch (error) {
+      throw new TeamAccessError(
+        "SEAT_LIMIT",
+        error instanceof Error ? error.message : "Batas anggota paket sudah tercapai.",
+      );
     }
 
     const activeMember = await tx.workspaceMembership.findFirst({
@@ -456,6 +466,23 @@ export async function acceptTeamInvite(
     const resolvedRole = invite.business.userId === user.id
       ? WorkspaceRole.OWNER
       : invite.role;
+
+    const existingMembership = await tx.workspaceMembership.findUnique({
+      where: {
+        businessId_userId: { businessId: invite.businessId, userId: user.id },
+      },
+      select: { isActive: true },
+    });
+    if (!existingMembership?.isActive) {
+      try {
+        await assertWorkspaceSeatAvailable(tx, invite.businessId);
+      } catch (error) {
+        throw new TeamAccessError(
+          "SEAT_LIMIT",
+          error instanceof Error ? error.message : "Batas anggota paket sudah tercapai.",
+        );
+      }
+    }
 
     await tx.workspaceMembership.upsert({
       where: {

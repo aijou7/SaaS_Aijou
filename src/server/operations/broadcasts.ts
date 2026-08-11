@@ -7,6 +7,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppTemplateMessage } from "@/server/whatsapp/client";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { assertWorkspaceFeature, getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 
 export const broadcastJobType = "WHATSAPP_BROADCAST";
 const batchSize = 10;
@@ -47,6 +48,7 @@ export async function getBroadcastsPage(userId: string) {
 
 export async function createBroadcast(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "BROADCAST");
   const name = clean(formData.get("name"), 120);
   const templateName = clean(formData.get("templateName"), 512).toLowerCase();
   const languageCode = clean(formData.get("languageCode"), 12) || "id";
@@ -78,6 +80,7 @@ export async function createBroadcast(userId: string, formData: FormData) {
 
 export async function startBroadcast(userId: string, campaignId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "BROADCAST");
   const campaign = await prisma.broadcastCampaign.findFirst({ where: { id: campaignId, businessId: access.businessId } });
   if (!campaign) throw new Error("Campaign tidak ditemukan.");
   const restartableStatuses: BroadcastStatus[] = [
@@ -124,6 +127,7 @@ export async function startBroadcast(userId: string, campaignId: string) {
 
 export async function pauseBroadcast(userId: string, campaignId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  await assertWorkspaceFeature(access.businessId, "BROADCAST");
   await prisma.broadcastCampaign.updateMany({
     where: { id: campaignId, businessId: access.businessId, status: BroadcastStatus.RUNNING },
     data: { status: BroadcastStatus.PAUSED },
@@ -131,6 +135,8 @@ export async function pauseBroadcast(userId: string, campaignId: string) {
 }
 
 export async function processBroadcastJob(businessId: string, payload: Prisma.JsonValue) {
+  const entitlements = await getWorkspaceEntitlements(businessId);
+  if (!entitlements.accessActive || !entitlements.features.includes("BROADCAST")) return;
   const campaignId = jsonString(payload, "campaignId");
   if (!campaignId) throw new Error("Campaign ID job tidak valid.");
   const campaign = await prisma.broadcastCampaign.findFirst({ where: { id: campaignId, businessId } });

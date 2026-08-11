@@ -98,6 +98,7 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 - Receipt storage: `BLOB_READ_WRITE_TOKEN` untuk production.
 - WhatsApp: token Meta, phone number ID, Graph API version, timeout, dan media limit.
 - Telegram: hanya timeout request provider; bot token disimpan per workspace dari dashboard.
+- SaaS billing: `MIDTRANS_SERVER_KEY` dan `MIDTRANS_ENVIRONMENT` (`sandbox` atau `production`).
 
 `DATA_ENCRYPTION_KEY` harus decode menjadi tepat 32 byte. Simpan backup aman atas key ini. Jangan menggantinya setelah credential terenkripsi tersimpan sebelum ada proses re-encryption.
 
@@ -167,10 +168,16 @@ Endpoint production:
 GET/POST https://APP_DOMAIN/api/webhooks/whatsapp
 POST     https://APP_DOMAIN/api/webhooks/telegram/OPAQUE_WEBHOOK_KEY
 POST     https://APP_DOMAIN/api/webhooks/xendit
+POST     https://APP_DOMAIN/api/webhooks/midtrans/subscription
 GET      https://APP_DOMAIN/api/health
 ```
 
 URL Telegram dibuat dan didaftarkan otomatis oleh dashboard. `OPAQUE_WEBHOOK_KEY` bukan bot token dan tidak perlu ditempel manual. WhatsApp credential dapat dimasukkan per workspace dari halaman integrations. Xendit credential dan callback token dimasukkan per workspace dari `/payments`.
+
+Midtrans pada endpoint `/api/webhooks/midtrans/subscription` khusus tagihan paket Aijou.
+Notification URL tersebut dipasang di dashboard Midtrans. Aplikasi memvalidasi signature
+SHA-512 lalu meminta status transaksi kembali ke API Midtrans sebelum mengaktifkan paket;
+redirect browser dari Snap tidak pernah dianggap sebagai bukti pembayaran.
 
 ## Quality checks
 

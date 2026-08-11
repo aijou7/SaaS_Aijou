@@ -11,6 +11,13 @@ import {
 } from "@/server/auth/public-signup-validation";
 import { isTransactionalEmailConfigured } from "@/server/email";
 import { SignupForm } from "@/app/signup/signup-form";
+import {
+  formatIdr,
+  getPlanPrice,
+  getSubscriptionPlan,
+  normalizeBillingCycle,
+  normalizePublicPlanId,
+} from "@/lib/subscription-plans";
 
 export const metadata: Metadata = {
   title: "Daftar beta | Aijou AI",
@@ -18,13 +25,16 @@ export const metadata: Metadata = {
 };
 
 type SignupPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; plan?: string; billing?: string }>;
 };
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   if (await getSession()) redirect("/dashboard");
 
-  const { token = "" } = await searchParams;
+  const { token = "", plan: planParam, billing: billingParam } = await searchParams;
+  const selectedPlan = normalizePublicPlanId(planParam);
+  const selectedBilling = normalizeBillingCycle(billingParam);
+  const selectedPlanDefinition = getSubscriptionPlan(selectedPlan)!;
   const invite = token ? await inspectBetaInvite(token) : null;
   const publicSignupEnabled = isPublicSignupEnabled();
   const publicSignupReady = isPublicSignupReady(isTransactionalEmailConfigured());
@@ -72,12 +82,14 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
         <section className="login-panel auth-form-panel">
           <div className="auth-panel-heading">
-            <p className="eyebrow">{isInvite ? "Undangan beta" : "Akses beta gratis"}</p>
+            <p className="eyebrow">{isInvite ? "Undangan beta" : "Daftar Aijou"}</p>
             <h2>{isInvite ? "Aktifkan workspace-mu." : "Buat workspace pertamamu."}</h2>
             <p className="muted">
               {isInvite
                 ? "Selesaikan data owner untuk menerima undangan ini."
-                : "Tidak perlu kartu kredit. Setelah mengisi data, masukkan OTP dari email untuk mengaktifkan akses."}
+                : selectedPlanDefinition.trialDays
+                  ? "Tidak perlu kartu kredit. Masukkan OTP dari email untuk memulai trial."
+                  : "Masukkan OTP dari email, lalu selesaikan pembayaran untuk mengaktifkan paket."}
             </p>
           </div>
 
@@ -95,12 +107,29 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           ) : null}
 
           {canSignup ? (
-            <SignupForm
-              mode={isInvite ? "invite" : "public"}
-              token={isInvite ? token : undefined}
-              email={invite?.email}
-              businessName={invite?.businessName}
-            />
+            <>
+              {!isInvite ? (
+                <div className="settings-note signup-plan-summary" role="status">
+                  <strong>{selectedPlanDefinition.name} · {selectedBilling === "annual" ? "Tahunan" : "Bulanan"}</strong>
+                  <p>
+                    {selectedPlanDefinition.trialDays
+                      ? `Coba gratis ${selectedPlanDefinition.trialDays} hari. `
+                      : "Paket aktif setelah pembayaran terverifikasi. "}
+                    Setelahnya {formatIdr(getPlanPrice(selectedPlan, selectedBilling))}
+                    {selectedBilling === "annual" ? "/tahun" : "/bulan"}.
+                  </p>
+                  <Link href="/#pricing">Ubah pilihan paket</Link>
+                </div>
+              ) : null}
+              <SignupForm
+                mode={isInvite ? "invite" : "public"}
+                token={isInvite ? token : undefined}
+                email={invite?.email}
+                businessName={invite?.businessName}
+                plan={selectedPlan}
+                billingCycle={selectedBilling}
+              />
+            </>
           ) : (
             <div className="settings-note" role="status">
               <strong>
