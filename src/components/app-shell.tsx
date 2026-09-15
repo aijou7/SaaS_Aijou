@@ -272,6 +272,7 @@ export async function AppShell({
       </header>
 
       <CollapsibleAppWorkspace
+        preferenceKey={`aijou:settings-sidebar-collapsed:${session?.userId ?? "anonymous"}:${session?.business?.id ?? "default"}`}
         sidebar={
           <>
           <div className="settings-account">

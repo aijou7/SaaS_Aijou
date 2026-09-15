@@ -1,21 +1,30 @@
 "use client";
 
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 
-const SIDEBAR_STORAGE_KEY = "aijou:settings-sidebar-collapsed";
 const SIDEBAR_PREFERENCE_EVENT = "aijou:sidebar-preference-changed";
 
 export function CollapsibleAppWorkspace({
   children,
+  preferenceKey,
   sidebar,
 }: {
   children: ReactNode;
+  preferenceKey: string;
   sidebar: ReactNode;
 }) {
+  const subscribe = useCallback(
+    (callback: () => void) => subscribeToSidebarPreference(preferenceKey, callback),
+    [preferenceKey],
+  );
+  const getSnapshot = useCallback(
+    () => readSidebarPreference(preferenceKey),
+    [preferenceKey],
+  );
   const collapsed = useSyncExternalStore(
-    subscribeToSidebarPreference,
-    readSidebarPreference,
+    subscribe,
+    getSnapshot,
     getServerSidebarPreference,
   );
 
@@ -35,7 +44,7 @@ export function CollapsibleAppWorkspace({
           aria-pressed={collapsed}
           title={toggleLabel}
           data-tooltip={toggleLabel}
-          onClick={() => saveSidebarPreference(!collapsed)}
+          onClick={() => saveSidebarPreference(preferenceKey, !collapsed)}
         >
           <ToggleIcon size={16} aria-hidden="true" />
         </button>
@@ -46,9 +55,9 @@ export function CollapsibleAppWorkspace({
   );
 }
 
-function readSidebarPreference() {
+function readSidebarPreference(preferenceKey: string) {
   try {
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+    return window.localStorage.getItem(preferenceKey) === "1";
   } catch {
     return false;
   }
@@ -58,20 +67,28 @@ function getServerSidebarPreference() {
   return false;
 }
 
-function subscribeToSidebarPreference(callback: () => void) {
-  window.addEventListener("storage", callback);
-  window.addEventListener(SIDEBAR_PREFERENCE_EVENT, callback);
+function subscribeToSidebarPreference(preferenceKey: string, callback: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== preferenceKey) return;
+    callback();
+  };
+  const handlePreference = (event: Event) => {
+    if ((event as CustomEvent<string>).detail !== preferenceKey) return;
+    callback();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(SIDEBAR_PREFERENCE_EVENT, handlePreference);
   return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(SIDEBAR_PREFERENCE_EVENT, callback);
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(SIDEBAR_PREFERENCE_EVENT, handlePreference);
   };
 }
 
-function saveSidebarPreference(collapsed: boolean) {
+function saveSidebarPreference(preferenceKey: string, collapsed: boolean) {
   try {
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? "1" : "0");
+    window.localStorage.setItem(preferenceKey, collapsed ? "1" : "0");
   } catch {
     // The toggle remains usable even when browser storage is unavailable.
   }
-  window.dispatchEvent(new Event(SIDEBAR_PREFERENCE_EVENT));
+  window.dispatchEvent(new CustomEvent(SIDEBAR_PREFERENCE_EVENT, { detail: preferenceKey }));
 }
