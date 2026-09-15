@@ -7,6 +7,7 @@ const collapsibleWorkspace = readFileSync("src/components/collapsible-app-worksp
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
+const conversationWorkspace = readFileSync("src/components/conversation-workspace.tsx", "utf8");
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
 const opsModal = readFileSync("src/components/ops-modal.tsx", "utf8");
 const operationForms = [
@@ -100,4 +101,11 @@ test("keeps inbox search focused and hides specific status filters behind a disc
   assert.match(conversations, /Filter spesifik/);
   assert.match(conversations, /name="q"/);
   assert.match(conversations, /className="chat-filter-advanced-form"/);
+});
+
+test("keeps inbox resizing separate from the intentional collapse control", () => {
+  assert.match(conversationWorkspace, /role="separator"/);
+  assert.match(conversationWorkspace, /className="chat-resizer-collapse"/);
+  assert.match(conversationWorkspace, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(conversationWorkspace, /Sembunyikan daftar percakapan/);
 });

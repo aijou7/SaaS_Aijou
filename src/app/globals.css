@@ -9872,6 +9872,7 @@ body {
   display: grid;
   width: 20px;
   height: 32px;
+  padding: 0;
   cursor: pointer;
   transform: translate(-50%, -50%);
   place-items: center;
@@ -9879,6 +9880,7 @@ body {
   border-radius: 999px;
   background: #fff;
   color: var(--accent-strong);
+  font: inherit;
   font-size: 18px;
   line-height: 1;
 }

@@ -173,7 +173,7 @@ function ConversationColumnResizer(props: {
     props.onChange(clamp(props.value + amount, props.min, props.max));
   };
 
-  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const startX = event.clientX;
     const startValue = props.value;
@@ -194,10 +194,10 @@ function ConversationColumnResizer(props: {
   };
 
   return (
-    <button
+    <div
       className={direction === "context" ? "chat-column-resizer chat-column-resizer-context" : "chat-column-resizer"}
-      type="button"
       role="separator"
+      tabIndex={0}
       aria-orientation="vertical"
       aria-label={props.label}
       aria-valuemin={props.min}
@@ -226,11 +226,22 @@ function ConversationColumnResizer(props: {
     >
       <span aria-hidden="true" />
       {props.onCollapse ? (
-        <span className="chat-resizer-collapse" aria-hidden="true" onClick={props.onCollapse}>
+        <button
+          className="chat-resizer-collapse"
+          type="button"
+          aria-label="Sembunyikan daftar percakapan"
+          title="Sembunyikan daftar percakapan"
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onCollapse?.();
+          }}
+        >
           ‹
-        </span>
+        </button>
       ) : null}
-    </button>
+    </div>
   );
 }
 
