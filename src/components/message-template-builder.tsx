@@ -66,8 +66,8 @@ export function MessageTemplateBuilder({ action, initialTemplate, imageUploadRea
           </label>
           <label>
             Judul <span className="optional-label">opsional</span>
-            <input name="title" type="text" maxLength={60} placeholder="Contoh: Coba Aijou AI Gratis" value={title} disabled={Boolean(previewUrl)} onChange={(event) => setTitle(event.target.value)} />
-            <small>{previewUrl ? "Header Meta memakai gambar, jadi judul teks dinonaktifkan." : "Maksimal 60 karakter, tanpa variabel."}</small>
+            <input name="title" type="text" maxLength={60} placeholder="Contoh: Coba Aijou AI Gratis" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <small>{previewUrl ? "Untuk template bergambar, judul akan menjadi baris pertama isi pesan saat diajukan ke Meta." : "Maksimal 60 karakter, tanpa variabel."}</small>
           </label>
           <label className="span-2">
             Isi pesan
@@ -85,7 +85,6 @@ export function MessageTemplateBuilder({ action, initialTemplate, imageUploadRea
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   setPreviewUrl(file ? URL.createObjectURL(file) : null);
-                  if (file) setTitle("");
                 }}
               />
               {previewUrl ? (

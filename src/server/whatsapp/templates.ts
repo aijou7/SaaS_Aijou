@@ -207,11 +207,11 @@ export async function submitMetaWhatsAppTemplate(
     throw new Error("Hubungkan WhatsApp Cloud API sebelum mengajukan template ke Meta.");
   }
 
-  if (input.headerImageUrl && input.title) {
-    throw new Error("Template dengan gambar tidak boleh memakai judul header teks. Kosongkan Judul lalu ajukan lagi.");
+  const metaBody = input.headerImageUrl && input.title ? `${input.title}\n${input.body}` : input.body;
+  if (metaBody.length > 1_024) {
+    throw new Error("Judul dan isi template bergambar jika digabung maksimal 1.024 karakter.");
   }
-
-  const bodyVariables = readBodyVariableNumbers(input.body);
+  const bodyVariables = readBodyVariableNumbers(metaBody);
   const components: Array<Record<string, unknown>> = [];
 
   if (input.headerImageUrl) {
@@ -238,7 +238,7 @@ export async function submitMetaWhatsAppTemplate(
 
   components.push({
     type: "BODY",
-    text: input.body,
+    text: metaBody,
     ...(bodyVariables.length > 0
       ? { example: { body_text: [bodyVariables.map((number) => `Contoh ${number}`)] } }
       : {}),
