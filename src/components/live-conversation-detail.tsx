@@ -372,13 +372,12 @@ function ClientConversationPanel(props: {
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
                 <input name="conversationId" type="hidden" value={detail.id} />
                 <ApprovedWhatsAppTemplatePicker {...props.approvedWhatsAppTemplates} />
-                <label className="span-2">Parameter body <small>(satu per baris)</small><textarea name="bodyParameters" rows={3} /></label>
                 <button
                   className="primary-button span-2"
                   type="submit"
                   disabled={props.approvedWhatsAppTemplates.templates.length === 0}
                 >
-                  Kirim approved template
+                  Kirim template
                 </button>
               </form>
             </details>

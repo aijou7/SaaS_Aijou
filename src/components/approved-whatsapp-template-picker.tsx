@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export type ApprovedWhatsAppTemplatePickerOption = {
   name: string;
   languageCode: string;
   title: string | null;
+  body: string;
 };
 
 type ApprovedWhatsAppTemplatePickerProps = {
@@ -21,16 +22,18 @@ export function ApprovedWhatsAppTemplatePicker({
   templates,
   error,
 }: ApprovedWhatsAppTemplatePickerProps) {
+  const selectId = useId();
   const [selectedKey, setSelectedKey] = useState("");
   const selectedTemplate = templates.find(
     (template) => getTemplateKey(template) === selectedKey,
   );
 
   return (
-    <>
-      <label className="span-2">
-        Template WhatsApp approved
+    <div className="approved-template-picker span-2">
+      <label htmlFor={selectId}>
+        <span>Pilih template WhatsApp approved</span>
         <select
+          id={selectId}
           name="templateKey"
           value={selectedKey}
           onChange={(event) => setSelectedKey(event.target.value)}
@@ -49,13 +52,29 @@ export function ApprovedWhatsAppTemplatePicker({
             </option>
           ))}
         </select>
-        {selectedTemplate ? (
-          <small>
-            Bahasa: {selectedTemplate.languageCode}
-            {selectedTemplate.title ? ` · ${selectedTemplate.title}` : ""}
-          </small>
-        ) : null}
       </label>
+      {selectedTemplate ? (
+        <div className="approved-template-preview" aria-label="Preview template WhatsApp">
+          <div className="approved-template-preview-head">
+            <span>Preview pesan</span>
+            <small>{selectedTemplate.languageCode}</small>
+          </div>
+          <div className="approved-template-preview-bubble">
+            {selectedTemplate.title ? <strong>{selectedTemplate.title}</strong> : null}
+            <p>{selectedTemplate.body}</p>
+            <small>Template approved Meta</small>
+          </div>
+          {selectedTemplate.body.includes("{{") ? (
+            <p className="approved-template-preview-note">
+              Template ini memiliki variabel seperti <code>{"{{1}}"}</code>. Meta tetap membutuhkan nilainya saat dikirim.
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="approved-template-empty" role="status">
+          Pilih template untuk melihat preview pesan.
+        </div>
+      )}
       {templates.length === 0 ? (
         <div className="settings-note span-2" role={error ? "alert" : "status"}>
           <strong>{error ? "Template Meta belum bisa dimuat" : "Belum ada template approved"}</strong>
@@ -65,6 +84,6 @@ export function ApprovedWhatsAppTemplatePicker({
           </p>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -323,10 +323,6 @@ function ChatInboxView({
             <small>Gunakan format internasional, misalnya 62812xxxxxxx.</small>
           </label>
           <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
-          <label>
-            Parameter body <small>(satu nilai per baris)</small>
-            <textarea name="bodyParameters" rows={4} placeholder={"Nama customer\nNama layanan"} />
-          </label>
         </OpsModal>
       ) : null}
     </>
@@ -650,16 +646,12 @@ function ConversationDetailPanel({
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
                 <input name="conversationId" type="hidden" value={selectedConversation.id} />
                 <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
-                <label className="span-2">
-                  Parameter body <small>(satu nilai per baris)</small>
-                  <textarea name="bodyParameters" placeholder={"Nama customer\nNama layanan"} rows={3} />
-                </label>
                 <button
                   className="primary-button span-2"
                   type="submit"
                   disabled={approvedWhatsAppTemplates.templates.length === 0}
                 >
-                  Kirim approved template
+                  Kirim template
                 </button>
               </form>
             </details>

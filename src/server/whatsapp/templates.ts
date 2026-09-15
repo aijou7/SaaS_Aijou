@@ -39,6 +39,7 @@ export type ApprovedWhatsAppTemplateOption = {
   name: string;
   languageCode: string;
   title: string | null;
+  body: string;
 };
 
 export type ApprovedWhatsAppTemplateOptionsResult = {
@@ -150,7 +151,7 @@ export async function listApprovedMetaWhatsAppTemplateOptions(
     error: result.error,
     templates: result.templates
       .filter((template) => template.status === WhatsAppTemplateStatus.APPROVED)
-      .map(({ name, languageCode, title }) => ({ name, languageCode, title })),
+      .map(({ name, languageCode, title, body }) => ({ name, languageCode, title, body })),
   };
 }
 
