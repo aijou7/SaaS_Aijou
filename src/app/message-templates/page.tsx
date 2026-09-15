@@ -52,7 +52,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
           <TemplateMetric icon={XCircle} label="Ditolak" value={page.summary.rejected} />
         </section>
 
-        <MessageTemplateBuilder action={createMessageTemplateAction} />
+        <MessageTemplateBuilder action={createMessageTemplateAction} imageUploadReady={page.imageUploadReady} />
 
         <section className="section">
           <div className="card">

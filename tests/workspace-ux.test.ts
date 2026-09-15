@@ -6,6 +6,7 @@ const appShell = readFileSync("src/components/app-shell.tsx", "utf8");
 const collapsibleWorkspace = readFileSync("src/components/collapsible-app-workspace.tsx", "utf8");
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
+const broadcasts = readFileSync("src/app/broadcasts/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
 const conversationWorkspace = readFileSync("src/components/conversation-workspace.tsx", "utf8");
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
@@ -13,6 +14,7 @@ const opsModal = readFileSync("src/components/ops-modal.tsx", "utf8");
 const newChatLauncher = readFileSync("src/components/new-whatsapp-chat-launcher.tsx", "utf8");
 const backgroundJobs = readFileSync("src/server/jobs/background-jobs.ts", "utf8");
 const conversationsServer = readFileSync("src/server/conversations/conversations.ts", "utf8");
+const broadcastServer = readFileSync("src/server/operations/broadcasts.ts", "utf8");
 const operationForms = [
   "broadcasts",
   "complaints",
@@ -22,6 +24,8 @@ const operationForms = [
   "workflows",
 ].map((page) => readFileSync(`src/app/${page}/page.tsx`, "utf8"));
 const styles = readFileSync("src/app/globals.css", "utf8");
+const messageTemplateBuilder = readFileSync("src/components/message-template-builder.tsx", "utf8");
+const messageTemplateServer = readFileSync("src/server/message-templates/message-templates.ts", "utf8");
 
 test("workspace keeps five primary tasks on top and contextual submenus on the left", () => {
   for (const label of [
@@ -121,4 +125,13 @@ test("gives slow chat actions immediate feedback and queues WhatsApp delivery", 
   assert.match(conversationsServer, /scheduleWhatsAppOutboundWakeup/);
   assert.match(backgroundJobs, /const whatsAppOutboundJob = "WHATSAPP_OUTBOUND"/);
   assert.match(backgroundJobs, /deliverStoredWhatsAppTemplateMessage/);
+});
+
+test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved templates", () => {
+  assert.match(broadcasts, /name="phoneNumbers"/);
+  assert.match(broadcasts, /ApprovedWhatsAppTemplatePicker/);
+  assert.match(broadcastServer, /requireApprovedMetaWhatsAppTemplate/);
+  assert.match(broadcastServer, /isMarketingContactEligible/);
+  assert.match(messageTemplateBuilder, /name="headerImage"/);
+  assert.match(messageTemplateServer, /BLOB_READ_WRITE_TOKEN/);
 });

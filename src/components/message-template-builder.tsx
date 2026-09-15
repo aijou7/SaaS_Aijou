@@ -7,9 +7,10 @@ type ServerAction = (formData: FormData) => void | Promise<void>;
 
 type MessageTemplateBuilderProps = {
   action: ServerAction;
+  imageUploadReady?: boolean;
 };
 
-export function MessageTemplateBuilder({ action }: MessageTemplateBuilderProps) {
+export function MessageTemplateBuilder({ action, imageUploadReady = true }: MessageTemplateBuilderProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -66,6 +67,7 @@ export function MessageTemplateBuilder({ action }: MessageTemplateBuilderProps) 
                 name="headerImage"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                disabled={!imageUploadReady}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   setPreviewUrl(file ? URL.createObjectURL(file) : null);
@@ -94,7 +96,11 @@ export function MessageTemplateBuilder({ action }: MessageTemplateBuilderProps) 
                 Hapus gambar
               </button>
             ) : null}
-            <small className="field-hint">Gambar akan tampil di bagian atas pesan WhatsApp.</small>
+            <small className={imageUploadReady ? "field-hint" : "field-hint field-hint-warning"}>
+              {imageUploadReady
+                ? "Gambar akan tampil di bagian atas pesan WhatsApp."
+                : "Upload gambar belum aktif. Tambahkan BLOB_READ_WRITE_TOKEN di Vercel Environment Variables."}
+            </small>
           </div>
           <div className="form-actions span-2">
             <button className="primary-button" type="submit">

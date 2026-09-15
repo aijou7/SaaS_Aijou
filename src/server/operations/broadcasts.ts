@@ -6,6 +6,10 @@ import {
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppTemplateMessage } from "@/server/whatsapp/client";
+import {
+  listApprovedMetaWhatsAppTemplateOptions,
+  requireApprovedMetaWhatsAppTemplate,
+} from "@/server/whatsapp/templates";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
 import { assertWorkspaceFeature, getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
 
@@ -26,12 +30,15 @@ export function isMarketingContactEligible(contact: {
 
 export async function getBroadcastsPage(userId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
-  const [campaigns, segments, optedInCount, whatsApp] = await Promise.all([
+  const [campaigns, segments, optedInCount, whatsApp, approvedTemplates] = await Promise.all([
     prisma.broadcastCampaign.findMany({
       where: { businessId: access.businessId },
       orderBy: { createdAt: "desc" },
       take: 100,
-      include: { segment: { select: { id: true, name: true } } },
+      include: {
+        segment: { select: { id: true, name: true } },
+        _count: { select: { recipients: true } },
+      },
     }),
     prisma.customerSegment.findMany({
       where: { businessId: access.businessId },
@@ -42,39 +49,67 @@ export async function getBroadcastsPage(userId: string) {
       where: { businessId: access.businessId, marketingOptInAt: { not: null }, marketingOptOutAt: null },
     }),
     prisma.whatsAppSettings.findUnique({ where: { businessId: access.businessId }, select: { isActive: true, phoneNumberId: true } }),
+    listApprovedMetaWhatsAppTemplateOptions(access.businessId),
   ]);
-  return { businessName: access.businessName, campaigns, segments, optedInCount, whatsAppReady: Boolean(whatsApp?.isActive && whatsApp.phoneNumberId) };
+  return {
+    businessName: access.businessName,
+    campaigns,
+    segments,
+    optedInCount,
+    whatsAppReady: Boolean(whatsApp?.isActive && whatsApp.phoneNumberId),
+    templates: approvedTemplates.templates,
+    templateError: approvedTemplates.error,
+  };
 }
 
 export async function createBroadcast(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
   await assertWorkspaceFeature(access.businessId, "BROADCAST");
   const name = clean(formData.get("name"), 120);
-  const templateName = clean(formData.get("templateName"), 512).toLowerCase();
-  const languageCode = clean(formData.get("languageCode"), 12) || "id";
-  if (!name || !/^[a-z0-9_]{1,512}$/.test(templateName)) {
-    throw new Error("Nama campaign dan nama template Meta yang valid wajib diisi.");
-  }
-  if (!/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(languageCode)) throw new Error("Kode bahasa template tidak valid.");
-  const segmentId = clean(formData.get("segmentId"), 64) || null;
-  if (segmentId) {
-    const segment = await prisma.customerSegment.findFirst({ where: { id: segmentId, businessId: access.businessId }, select: { id: true } });
-    if (!segment) throw new Error("Segmen campaign tidak ditemukan.");
+  const { templateName, languageCode } = parseApprovedTemplateKey(formData);
+  await requireApprovedMetaWhatsAppTemplate(access.businessId, templateName, languageCode);
+  if (!name) throw new Error("Nama campaign wajib diisi.");
+  const phoneNumbers = parseManualPhoneNumbers(formData.get("phoneNumbers"));
+  if (phoneNumbers.length === 0) throw new Error("Isi minimal satu nomor WhatsApp.");
+  const contacts = await prisma.contact.findMany({
+    where: { businessId: access.businessId },
+    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true },
+  });
+  const eligibleContacts = new Map(
+    contacts
+      .filter(isMarketingContactEligible)
+      .map((contact) => [normalizeBroadcastPhone(contact.phoneNumber), contact] as const)
+      .filter(([phoneNumber]) => Boolean(phoneNumber)),
+  );
+  const missingNumbers = phoneNumbers.filter((phoneNumber) => !eligibleContacts.has(phoneNumber));
+  if (missingNumbers.length > 0) {
+    const sample = missingNumbers.slice(0, 3).join(", ");
+    const suffix = missingNumbers.length > 3 ? ` dan ${missingNumbers.length - 3} nomor lainnya` : "";
+    throw new Error(`Nomor ${sample}${suffix} belum tercatat sebagai kontak dengan opt-in marketing.`);
   }
   const bodyParameters = clean(formData.get("bodyParameters"), 10_000)
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 10);
-  return prisma.broadcastCampaign.create({
-    data: {
-      businessId: access.businessId,
-      segmentId,
-      name,
-      templateName,
-      languageCode,
-      bodyParameters: bodyParameters as unknown as Prisma.InputJsonValue,
-    },
+  return prisma.$transaction(async (tx) => {
+    const campaign = await tx.broadcastCampaign.create({
+      data: {
+        businessId: access.businessId,
+        name,
+        templateName,
+        languageCode,
+        bodyParameters: bodyParameters as unknown as Prisma.InputJsonValue,
+      },
+    });
+    await tx.broadcastRecipient.createMany({
+      data: phoneNumbers.map((phoneNumber) => ({
+        campaignId: campaign.id,
+        contactId: eligibleContacts.get(phoneNumber)!.id,
+        phoneNumber,
+      })),
+    });
+    return campaign;
   });
 }
 
@@ -93,6 +128,54 @@ export async function startBroadcast(userId: string, campaignId: string) {
   }
   const whatsApp = await prisma.whatsAppSettings.findUnique({ where: { businessId: access.businessId }, select: { isActive: true, phoneNumberId: true } });
   if (!whatsApp?.isActive || !whatsApp.phoneNumberId) throw new Error("Hubungkan WhatsApp Cloud API sebelum memulai broadcast.");
+  const manualRecipients = await prisma.broadcastRecipient.findMany({
+    where: { campaignId },
+    select: {
+      id: true,
+      phoneNumber: true,
+      contact: { select: { marketingOptInAt: true, marketingOptOutAt: true } },
+    },
+  });
+
+  if (manualRecipients.length > 0) {
+    const eligible = manualRecipients.filter((recipient) =>
+      isMarketingContactEligible({ phoneNumber: recipient.phoneNumber, ...recipient.contact }),
+    );
+    if (eligible.length === 0) throw new Error("Tidak ada nomor manual yang masih memiliki opt-in WhatsApp.");
+    const eligibleIds = eligible.map((recipient) => recipient.id);
+    const eligibleIdSet = new Set(eligibleIds);
+    const ineligibleIds = manualRecipients
+      .filter((recipient) => !eligibleIdSet.has(recipient.id))
+      .map((recipient) => recipient.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (ineligibleIds.length > 0) {
+        await tx.broadcastRecipient.updateMany({
+          where: { campaignId, id: { in: ineligibleIds } },
+          data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_consent_missing" },
+        });
+      }
+      await tx.broadcastRecipient.updateMany({
+        where: { campaignId, id: { in: eligibleIds }, status: { in: [BroadcastRecipientStatus.PENDING, BroadcastRecipientStatus.FAILED] } },
+        data: { status: BroadcastRecipientStatus.PENDING, providerMessageId: null, errorCode: null, sentAt: null },
+      });
+      await tx.broadcastCampaign.update({
+        where: { id: campaignId },
+        data: { status: BroadcastStatus.RUNNING, startedAt: new Date(), completedAt: null, totalRecipients: eligible.length, failedCount: 0 },
+      });
+      await tx.backgroundJob.create({
+        data: {
+          businessId: access.businessId,
+          type: broadcastJobType,
+          dedupeKey: `broadcast:${campaignId}:${crypto.randomUUID()}`,
+          payload: { campaignId },
+          runAfter: new Date(),
+        },
+      });
+    });
+    return;
+  }
+
   const contacts = await prisma.contact.findMany({
     where: {
       businessId: access.businessId,
@@ -195,6 +278,41 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
 function clean(value: FormDataEntryValue | null, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+
+function parseApprovedTemplateKey(formData: FormData) {
+  const templateKey = clean(formData.get("templateKey"), 600);
+  const separatorIndex = templateKey.indexOf("::");
+  const templateName = separatorIndex >= 0 ? templateKey.slice(0, separatorIndex) : "";
+  const languageCode = separatorIndex >= 0 ? templateKey.slice(separatorIndex + 2) : "";
+  if (!templateName || !languageCode) {
+    throw new Error("Pilih template WhatsApp yang sudah disetujui Meta.");
+  }
+  return { templateName, languageCode };
+}
+
+function parseManualPhoneNumbers(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") return [];
+  const numbers = value
+    .split(/[\r\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (numbers.length > 500) throw new Error("Broadcast dibatasi maksimal 500 nomor per campaign.");
+
+  const normalized = numbers.map((item) => normalizeBroadcastPhone(item));
+  const invalidIndex = normalized.findIndex((item) => item === null);
+  if (invalidIndex >= 0) {
+    const invalidInput = numbers[invalidIndex] ?? "";
+    throw new Error(`Nomor WhatsApp tidak valid: ${invalidInput}. Gunakan format 62812xxxxxxx.`);
+  }
+  return [...new Set(normalized.filter((item): item is string => Boolean(item)))];
+}
+
+function normalizeBroadcastPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
+  return /^\d{7,15}$/.test(normalized) ? normalized : null;
+}
+
 function jsonString(value: Prisma.JsonValue, key: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const field = value[key];

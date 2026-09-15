@@ -87,6 +87,7 @@ export async function getMessageTemplatesPage(userId: string, filters: MessageTe
 
   return {
     businessName: access.businessName,
+    imageUploadReady: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     templates: [...matchingMetaTemplates, ...matchingLocalTemplates],
     metaSyncError: metaSync.error,
     metaSyncTruncated: metaSync.truncated,
