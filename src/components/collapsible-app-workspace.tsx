@@ -34,10 +34,10 @@ export function CollapsibleAppWorkspace({
           aria-label={toggleLabel}
           aria-pressed={collapsed}
           title={toggleLabel}
+          data-tooltip={toggleLabel}
           onClick={() => saveSidebarPreference(!collapsed)}
         >
           <ToggleIcon size={16} aria-hidden="true" />
-          <span>{toggleLabel}</span>
         </button>
         {sidebar}
       </aside>

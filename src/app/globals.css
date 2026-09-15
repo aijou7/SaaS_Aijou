@@ -10136,29 +10136,59 @@ body.is-resizing-conversation * {
 }
 
 .settings-sidebar-toggle {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  min-height: 32px;
-  margin: 8px 12px 0;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
+  justify-content: center;
+  align-self: flex-end;
+  width: 34px;
+  height: 34px;
+  margin: 10px 12px 0;
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #f7f9fc;
+  color: #536783;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
-  font-weight: 750;
-  padding: 0 8px;
+  padding: 0;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .settings-sidebar-toggle:hover,
 .settings-sidebar-toggle:focus-visible {
-  border-color: var(--line);
-  background: #f8fafc;
+  border-color: #b8caff;
+  background: var(--accent-soft);
   color: var(--accent-strong);
   outline: none;
+  box-shadow: 0 5px 14px rgba(34, 81, 230, .12);
+  transform: translateY(-1px);
+}
+
+.settings-sidebar-toggle::after {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 40;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  color: #0f172a;
+  content: attr(data-tooltip);
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0;
+  padding: 5px 8px;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity 150ms ease, transform 150ms ease;
+  white-space: nowrap;
+}
+
+.settings-sidebar-toggle:hover::after,
+.settings-sidebar-toggle:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .settings-account > div:last-child,
@@ -10185,12 +10215,10 @@ body.is-resizing-conversation * {
 }
 
 .settings-sidebar-collapsed .settings-sidebar-toggle {
-  justify-content: center;
-  margin-inline: 8px;
-  padding-inline: 0;
+  align-self: center;
+  margin-inline: auto;
 }
 
-.settings-sidebar-collapsed .settings-sidebar-toggle span,
 .settings-sidebar-collapsed .settings-account > div:last-child,
 .settings-sidebar-collapsed .workspace-switcher,
 .settings-sidebar-collapsed .sidebar-context-heading,

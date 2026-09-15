@@ -46,7 +46,8 @@ test("workspace typography and controls remain comfortably readable", () => {
 test("keeps the application sidebar usable as a persistent icon rail", () => {
   assert.match(appShell, /CollapsibleAppWorkspace/);
   assert.match(appShell, /title=\{item\.label\}/);
-  assert.match(collapsibleWorkspace, /settings-sidebar-toggle/);
+  assert.match(collapsibleWorkspace, /className="settings-sidebar-toggle"/);
+  assert.match(collapsibleWorkspace, /data-tooltip=\{toggleLabel\}/);
   assert.match(collapsibleWorkspace, /localStorage/);
   assert.match(styles, /\.app-workspace-sidebar-collapsed/);
   assert.match(styles, /\.settings-sidebar-collapsed \.settings-nav-item span/);
