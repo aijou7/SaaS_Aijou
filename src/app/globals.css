@@ -10137,17 +10137,16 @@ body.is-resizing-conversation * {
 
 .settings-sidebar-toggle {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   align-self: flex-end;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   margin: 10px 12px 0;
-  border: 1px solid #dbe5f3;
+  border: 1px solid #d5deeb;
   border-radius: 10px;
-  background: #f7f9fc;
-  color: #536783;
+  background: #ffffff;
+  color: var(--accent);
   cursor: pointer;
   font: inherit;
   padding: 0;

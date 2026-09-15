@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 
 const SIDEBAR_PREFERENCE_EVENT = "aijou:sidebar-preference-changed";
@@ -28,7 +28,7 @@ export function CollapsibleAppWorkspace({
     getServerSidebarPreference,
   );
 
-  const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const ToggleIcon = collapsed ? ChevronRight : ChevronLeft;
   const toggleLabel = collapsed ? "Tampilkan sidebar" : "Kecilkan sidebar";
 
   return (
@@ -46,7 +46,7 @@ export function CollapsibleAppWorkspace({
           data-tooltip={toggleLabel}
           onClick={() => saveSidebarPreference(preferenceKey, !collapsed)}
         >
-          <ToggleIcon size={16} aria-hidden="true" />
+          <ToggleIcon size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
         {sidebar}
       </aside>

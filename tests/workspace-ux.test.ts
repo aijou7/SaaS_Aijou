@@ -48,6 +48,8 @@ test("keeps the application sidebar usable as a persistent icon rail", () => {
   assert.match(appShell, /preferenceKey=\{`aijou:settings-sidebar-collapsed:/);
   assert.match(appShell, /title=\{item\.label\}/);
   assert.match(collapsibleWorkspace, /className="settings-sidebar-toggle"/);
+  assert.match(collapsibleWorkspace, /ChevronLeft/);
+  assert.match(collapsibleWorkspace, /ChevronRight/);
   assert.match(collapsibleWorkspace, /data-tooltip=\{toggleLabel\}/);
   assert.match(collapsibleWorkspace, /localStorage/);
   assert.match(collapsibleWorkspace, /function getServerSidebarPreference\(\) \{\s+return false;/s);
