@@ -29,7 +29,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
           <div>
             <p className="eyebrow">WhatsApp Cloud API</p>
             <h1>Template WhatsApp</h1>
-            <p className="muted">Susun pesan terstruktur dengan gambar header sebelum diajukan ke Meta.</p>
+            <p className="muted">Template approved dari Meta otomatis muncul di sini. Draft baru bisa disiapkan dengan gambar header sebelum diajukan ke Meta.</p>
           </div>
           <form className="content-actions" action="/message-templates" method="get">
             <label className="toolbar-search">
@@ -42,6 +42,8 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
         </div>
 
         {created ? <div className="success-banner" role="status">Template berhasil disimpan sebagai draft.</div> : null}
+        {page.metaSyncError ? <div className="settings-note" role="alert">{page.metaSyncError}</div> : null}
+        {page.metaSyncTruncated ? <div className="settings-note" role="status">Meta mengembalikan lebih dari 300 template; daftar menampilkan 300 pertama.</div> : null}
 
         <section className="grid message-template-metrics" aria-label="Ringkasan template WhatsApp">
           <TemplateMetric icon={FileText} label="Total" value={page.summary.total} />
@@ -74,7 +76,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
                       <div className="message-template-row-heading">
                         <div>
                           <strong>{template.name}</strong>
-                          <span>{formatPurpose(template.purpose)} · {template.languageCode} · diperbarui {template.updatedAt}</span>
+                          <span>{formatPurpose(template.purpose)} · {template.languageCode} · {template.source === "META" ? "disinkronkan dari Meta" : `diperbarui ${template.updatedAt}`}</span>
                         </div>
                         <span className={statusClass(template.status)}>{formatStatus(template.status)}</span>
                       </div>

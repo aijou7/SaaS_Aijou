@@ -261,6 +261,7 @@ export async function getWhatsAppCredentialsForBusiness(businessId: string) {
     where: { businessId },
     select: {
       businessId: true,
+      wabaId: true,
       phoneNumberId: true,
       accessToken: true,
       verifyToken: true,
@@ -474,6 +475,7 @@ function decryptStoredSettings<T extends {
 
 function emptyCredentials() {
   return {
+    wabaId: null,
     phoneNumberId: null,
     accessToken: null,
     verifyToken: null,

@@ -1,6 +1,7 @@
 import { Prisma, WhatsAppTemplatePurpose, WorkspaceRole } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
+import { listMetaWhatsAppTemplates, type MetaWhatsAppTemplate } from "@/server/whatsapp/templates";
 
 const maxImageBytes = 5 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -25,7 +26,7 @@ export async function getMessageTemplatesPage(userId: string, filters: MessageTe
       : {}),
   };
 
-  const [templates, total, approved, inReview, rejected] = await Promise.all([
+  const [localTemplates, localKeys, metaSync] = await Promise.all([
     prisma.whatsAppTemplate.findMany({
       where,
       orderBy: { updatedAt: "desc" },
@@ -44,20 +45,57 @@ export async function getMessageTemplatesPage(userId: string, filters: MessageTe
         updatedAt: true,
       },
     }),
-    prisma.whatsAppTemplate.count({ where: { businessId: access.businessId } }),
-    prisma.whatsAppTemplate.count({ where: { businessId: access.businessId, status: "APPROVED" } }),
-    prisma.whatsAppTemplate.count({ where: { businessId: access.businessId, status: "IN_REVIEW" } }),
-    prisma.whatsAppTemplate.count({ where: { businessId: access.businessId, status: "REJECTED" } }),
+    prisma.whatsAppTemplate.findMany({
+      where: { businessId: access.businessId },
+      select: { name: true, languageCode: true, status: true },
+    }),
+    listMetaWhatsAppTemplates(access.businessId),
   ]);
+
+  const metaKeySet = new Set(metaSync.templates.map((template) => templateKey(template)));
+  const matchingMetaTemplates = metaSync.templates.filter((template) => matchesQuery(template, q));
+  const matchingMetaKeySet = new Set(matchingMetaTemplates.map((template) => templateKey(template)));
+  const matchingLocalTemplates = localTemplates
+    .filter((template) => !matchingMetaKeySet.has(templateKey(template)))
+    .map((template) => ({
+      ...template,
+      source: "LOCAL" as const,
+      createdAt: formatDate(template.createdAt),
+      updatedAt: formatDate(template.updatedAt),
+    }));
+  const localSummary = localKeys.reduce(
+    (summary, template) => {
+      if (metaKeySet.has(templateKey(template))) return summary;
+      summary.total += 1;
+      if (template.status === "APPROVED") summary.approved += 1;
+      if (template.status === "IN_REVIEW") summary.inReview += 1;
+      if (template.status === "REJECTED") summary.rejected += 1;
+      return summary;
+    },
+    { total: 0, approved: 0, inReview: 0, rejected: 0 },
+  );
+  const remoteSummary = metaSync.templates.reduce(
+    (summary, template) => {
+      summary.total += 1;
+      if (template.status === "APPROVED") summary.approved += 1;
+      if (template.status === "IN_REVIEW") summary.inReview += 1;
+      if (template.status === "REJECTED") summary.rejected += 1;
+      return summary;
+    },
+    { total: 0, approved: 0, inReview: 0, rejected: 0 },
+  );
 
   return {
     businessName: access.businessName,
-    templates: templates.map((template) => ({
-      ...template,
-      createdAt: formatDate(template.createdAt),
-      updatedAt: formatDate(template.updatedAt),
-    })),
-    summary: { total, approved, inReview, rejected },
+    templates: [...matchingMetaTemplates, ...matchingLocalTemplates],
+    metaSyncError: metaSync.error,
+    metaSyncTruncated: metaSync.truncated,
+    summary: {
+      total: localSummary.total + remoteSummary.total,
+      approved: localSummary.approved + remoteSummary.approved,
+      inReview: localSummary.inReview + remoteSummary.inReview,
+      rejected: localSummary.rejected + remoteSummary.rejected,
+    },
   };
 }
 
@@ -154,4 +192,16 @@ function formatDate(value: Date) {
     month: "short",
     year: "numeric",
   }).format(value);
+}
+
+function templateKey(template: { name: string; languageCode: string }) {
+  return `${template.name.toLowerCase()}::${template.languageCode.toLowerCase()}`;
+}
+
+function matchesQuery(template: MetaWhatsAppTemplate, q?: string) {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return [template.name, template.title, template.body].some((value) =>
+    value?.toLowerCase().includes(needle),
+  );
 }
