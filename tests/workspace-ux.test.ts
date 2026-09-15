@@ -138,7 +138,9 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(messageTemplateBuilder, /name="headerImage"/);
   assert.match(messageTemplateServer, /BLOB_READ_WRITE_TOKEN/);
   assert.match(messageTemplateActions, /submitMessageTemplate/);
+  assert.match(messageTemplateActions, /updateMessageTemplate/);
   assert.match(messageTemplatesPage, /Ajukan ke Meta/);
+  assert.match(messageTemplatesPage, /Edit draft/);
   assert.match(whatsappTemplates, /message_templates/);
   assert.match(whatsappTemplates, /header_handle/);
 });

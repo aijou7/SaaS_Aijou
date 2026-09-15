@@ -141,6 +141,62 @@ export async function createMessageTemplate(userId: string, formData: FormData) 
   }
 }
 
+export async function updateMessageTemplate(userId: string, templateId: string, formData: FormData) {
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  const existing = await prisma.whatsAppTemplate.findFirst({
+    where: { id: templateId, businessId: access.businessId },
+    select: {
+      id: true,
+      status: true,
+      headerImageUrl: true,
+      headerImagePath: true,
+    },
+  });
+
+  if (!existing) throw new Error("Template draft tidak ditemukan.");
+  if (existing.status !== WhatsAppTemplateStatus.DRAFT) {
+    throw new Error("Hanya template dengan status Draft yang bisa diedit.");
+  }
+
+  const input = parseMessageTemplateFormData(formData);
+  const image = await uploadTemplateImage(access.businessId, input.image);
+  const removeHeaderImage = formData.get("removeHeaderImage") === "on";
+  const nextImage = image
+    ? { url: image.url, pathname: image.pathname }
+    : removeHeaderImage
+      ? { url: null, pathname: null }
+      : { url: existing.headerImageUrl, pathname: existing.headerImagePath };
+
+  try {
+    const updated = await prisma.whatsAppTemplate.update({
+      where: { id: existing.id },
+      data: {
+        name: input.name,
+        purpose: input.purpose,
+        languageCode: input.languageCode,
+        title: input.title,
+        body: input.body,
+        headerImageUrl: nextImage.url,
+        headerImagePath: nextImage.pathname,
+      },
+    });
+
+    if (existing.headerImagePath && existing.headerImagePath !== nextImage.pathname) {
+      await deleteTemplateImage(existing.headerImagePath);
+    }
+
+    return updated;
+  } catch (error) {
+    if (image?.pathname) await deleteTemplateImage(image.pathname);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error("Nama template sudah dipakai di workspace ini.");
+    }
+
+    throw error;
+  }
+}
+
 export async function submitMessageTemplate(userId: string, templateId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
   const template = await prisma.whatsAppTemplate.findFirst({
@@ -235,6 +291,12 @@ async function uploadTemplateImage(businessId: string, image: File | null) {
   });
 
   return { url: blob.url, pathname: blob.pathname };
+}
+
+async function deleteTemplateImage(pathname: string) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return;
+  const { del } = await import("@vercel/blob");
+  await del(pathname).catch(() => undefined);
 }
 
 function cleanOptional(value: FormDataEntryValue | null, maxLength: number) {

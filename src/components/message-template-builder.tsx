@@ -1,19 +1,32 @@
 "use client";
 
 import { ImagePlus, Plus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type ServerAction = (formData: FormData) => void | Promise<void>;
 
+export type EditableMessageTemplate = {
+  id: string;
+  name: string;
+  purpose: string;
+  languageCode: string;
+  title: string | null;
+  body: string;
+  headerImageUrl: string | null;
+};
+
 type MessageTemplateBuilderProps = {
   action: ServerAction;
+  initialTemplate?: EditableMessageTemplate;
   imageUploadReady?: boolean;
 };
 
-export function MessageTemplateBuilder({ action, imageUploadReady = true }: MessageTemplateBuilderProps) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+export function MessageTemplateBuilder({ action, initialTemplate, imageUploadReady = true }: MessageTemplateBuilderProps) {
+  const isEditing = Boolean(initialTemplate);
+  const [title, setTitle] = useState(initialTemplate?.title ?? "");
+  const [body, setBody] = useState(initialTemplate?.body ?? "");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initialTemplate?.headerImageUrl ?? null);
 
   useEffect(() => {
     return () => {
@@ -26,20 +39,21 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
       <div className="card message-template-form-card">
         <div className="section-header">
           <div>
-            <p className="eyebrow">Template baru</p>
-            <h2>Buat template</h2>
+            <p className="eyebrow">{isEditing ? "Edit draft" : "Template baru"}</p>
+            <h2>{isEditing ? "Edit template" : "Buat template"}</h2>
             <p className="muted">Gunakan nama kecil dengan underscore, lalu isi komponen yang akan dikirim ke pelanggan.</p>
           </div>
         </div>
         <form className="form-grid" action={action} encType="multipart/form-data">
+          {initialTemplate ? <input type="hidden" name="templateId" value={initialTemplate.id} /> : null}
           <label>
             Nama template
-            <input name="name" type="text" pattern="[a-z0-9_]{1,512}" maxLength={512} placeholder="konfirmasi_jadwal_survei" required />
+            <input name="name" type="text" defaultValue={initialTemplate?.name} pattern="[a-z0-9_]{1,512}" maxLength={512} placeholder="konfirmasi_jadwal_survei" required />
             <small>Huruf kecil, angka, dan underscore.</small>
           </label>
           <label>
             Tujuan pesan
-            <select name="purpose" defaultValue="UTILITY" required>
+            <select name="purpose" defaultValue={initialTemplate?.purpose ?? "UTILITY"} required>
               <option value="UTILITY">Utility — update layanan</option>
               <option value="MARKETING">Marketing — promosi</option>
               <option value="AUTHENTICATION">Authentication — kode akses</option>
@@ -47,7 +61,7 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
           </label>
           <label>
             Bahasa
-            <input name="languageCode" type="text" defaultValue="id" pattern="[a-z]{2,3}(_[A-Z]{2})?" maxLength={12} required />
+            <input name="languageCode" type="text" defaultValue={initialTemplate?.languageCode ?? "id"} pattern="[a-z]{2,3}(_[A-Z]{2})?" maxLength={12} required />
             <small>Contoh: id atau en_US.</small>
           </label>
           <label>
@@ -97,6 +111,7 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
                 Hapus gambar
               </button>
             ) : null}
+            {initialTemplate?.headerImageUrl ? <input type="hidden" name="removeHeaderImage" value={!previewUrl ? "on" : ""} /> : null}
             <small className={imageUploadReady ? "field-hint" : "field-hint field-hint-warning"}>
               {imageUploadReady
                 ? "Gambar akan tampil di bagian atas pesan WhatsApp."
@@ -106,8 +121,9 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
           <div className="form-actions span-2">
             <button className="primary-button" type="submit">
               <Plus size={16} aria-hidden="true" />
-              Simpan sebagai draft
+              {isEditing ? "Simpan perubahan" : "Simpan sebagai draft"}
             </button>
+            {isEditing ? <Link className="ghost-button" href="/message-templates">Batal edit</Link> : null}
           </div>
         </form>
       </div>

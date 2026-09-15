@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   createMessageTemplateAction,
   submitMessageTemplateAction,
+  updateMessageTemplateAction,
 } from "@/app/message-templates/actions";
 import { AppShell } from "@/components/app-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -25,7 +26,12 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
   const q = singleParam(params.q)?.trim().slice(0, 120) ?? "";
   const created = singleParam(params.created) === "1";
   const submitted = singleParam(params.submitted) === "1";
+  const updated = singleParam(params.updated) === "1";
+  const editId = singleParam(params.edit)?.trim() ?? "";
   const page = await getMessageTemplatesPage(session.userId, { q });
+  const editTemplate = editId
+    ? page.templates.find((template) => template.source === "LOCAL" && template.status === "DRAFT" && template.id === editId)
+    : undefined;
 
   return (
     <AppShell active="message-templates" businessName={page.businessName} workspaceRole={session.role ?? "VIEWER"}>
@@ -48,6 +54,8 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
 
         {created ? <div className="success-banner" role="status">Template berhasil disimpan sebagai draft.</div> : null}
         {submitted ? <div className="success-banner" role="status">Template berhasil diajukan ke Meta dan sedang menunggu review.</div> : null}
+        {updated ? <div className="success-banner" role="status">Perubahan draft berhasil disimpan.</div> : null}
+        {editId && !editTemplate ? <div className="settings-note" role="alert">Draft tidak ditemukan atau sudah tidak bisa diedit.</div> : null}
         {page.metaSyncError ? <div className="settings-note" role="alert">{page.metaSyncError}</div> : null}
         {page.metaSyncTruncated ? <div className="settings-note" role="status">Meta mengembalikan lebih dari 300 template; daftar menampilkan 300 pertama.</div> : null}
 
@@ -58,7 +66,11 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
           <TemplateMetric icon={XCircle} label="Ditolak" value={page.summary.rejected} />
         </section>
 
-        <MessageTemplateBuilder action={createMessageTemplateAction} imageUploadReady={page.imageUploadReady} />
+        <MessageTemplateBuilder
+          action={editTemplate ? updateMessageTemplateAction : createMessageTemplateAction}
+          initialTemplate={editTemplate}
+          imageUploadReady={page.imageUploadReady}
+        />
 
         <section className="section">
           <div className="card">
@@ -90,10 +102,13 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
                       <p>{template.body}</p>
                       {template.rejectionReason ? <small className="template-rejection">Alasan ditolak: {template.rejectionReason}</small> : null}
                       {template.source === "LOCAL" && template.status === "DRAFT" ? (
-                        <form className="form-actions message-template-submit-actions" action={submitMessageTemplateAction}>
-                          <input type="hidden" name="templateId" value={template.id} />
-                          <FormSubmitButton className="primary-button" label="Ajukan ke Meta" pendingLabel="Mengajukan…" />
-                        </form>
+                        <div className="message-template-row-actions">
+                          <Link className="ghost-button" href={`/message-templates?edit=${encodeURIComponent(template.id)}`}>Edit draft</Link>
+                          <form action={submitMessageTemplateAction}>
+                            <input type="hidden" name="templateId" value={template.id} />
+                            <FormSubmitButton className="primary-button" label="Ajukan ke Meta" pendingLabel="Mengajukan…" />
+                          </form>
+                        </div>
                       ) : null}
                     </div>
                   </article>
