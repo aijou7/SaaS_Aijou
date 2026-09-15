@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   assignConversationAction,
-  sendOwnerReplyAction,
   sendWhatsAppTemplateAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
@@ -379,24 +378,6 @@ function ClientConversationPanel(props: {
                 >
                   Kirim template
                 </button>
-              </form>
-            </details>
-          ) : null}
-
-          {!props.readOnly && !outsideWhatsAppWindow && props.quickReplies.length > 0 ? (
-            <details className="quick-reply-strip">
-              <summary>Gunakan balasan cepat</summary>
-              <form action={sendOwnerReplyAction}>
-                <input name="conversationId" type="hidden" value={detail.id} />
-                <select name="message" defaultValue="" required aria-label="Pilih balasan cepat">
-                  <option value="" disabled>Pilih template balasan</option>
-                  {props.quickReplies.map((reply) => (
-                    <option key={reply.id} value={reply.content}>
-                      {reply.shortcut ?? reply.name} — {reply.content.slice(0, 80)}
-                    </option>
-                  ))}
-                </select>
-                <button className="small-outline-button" type="submit">Kirim</button>
               </form>
             </details>
           ) : null}

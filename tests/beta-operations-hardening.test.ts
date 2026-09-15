@@ -88,6 +88,17 @@ describe("beta operations hardening", () => {
     assert.match(styles, /\.chat-window \{[^}]*min-height: 100px/);
   });
 
+  test("uses the blue quick-reply buttons without a duplicate template picker", async () => {
+    const detail = await readFile(
+      new URL("../src/components/live-conversation-detail.tsx", import.meta.url),
+      "utf8",
+    );
+    const activePanel = detail.slice(detail.indexOf("function ClientConversationPanel"));
+
+    assert.doesNotMatch(activePanel, /Pilih template balasan/);
+    assert.match(activePanel, /<ChatReplyComposer/);
+  });
+
   test("durably wakes the authenticated job endpoint through QStash", async () => {
     process.env.QSTASH_TOKEN = "qstash-test-token";
     process.env.CRON_SECRET = "cron-test-secret";

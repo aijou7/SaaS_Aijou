@@ -21,7 +21,6 @@ import { redirect } from "next/navigation";
 import { updateAgentSettingsAction } from "@/app/agent/actions";
 import {
   assignConversationAction,
-  sendOwnerReplyAction,
   sendWhatsAppTemplateAction,
   startNewWhatsAppChatAction,
   updateConversationNotesAction,
@@ -653,25 +652,6 @@ function ConversationDetailPanel({
                 >
                   Kirim template
                 </button>
-              </form>
-            </details>
-          ) : null}
-
-          {!readOnly && !outsideWhatsAppWindow && quickReplies.length > 0 ? (
-            <details className="quick-reply-strip">
-              <summary>Gunakan balasan cepat</summary>
-              <form action={sendOwnerReplyAction}>
-                <input name="conversationId" type="hidden" value={selectedConversation.id} />
-                <select name="message" defaultValue="" required aria-label="Pilih balasan cepat">
-                  <option value="" disabled>Pilih template balasan</option>
-                  {quickReplies.map((reply) => (
-                    <option key={reply.id} value={reply.content}>
-                      {reply.shortcut ?? reply.name} — {reply.content.slice(0, 80)}
-                    </option>
-                  ))}
-                </select>
-                <button className="small-outline-button" type="submit">Kirim</button>
-                <Link className="small-outline-button" href="/quick-replies">Kelola</Link>
               </form>
             </details>
           ) : null}
