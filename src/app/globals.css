@@ -9642,6 +9642,16 @@ body {
   border-right: 0;
 }
 
+.chat-new-conversation-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 12px 14px 0;
+  min-height: 42px;
+  text-decoration: none;
+}
+
 .chat-layout-collapsed-rail {
   display: flex;
   height: 100%;

@@ -10,6 +10,7 @@ type OpsModalProps = {
   eyebrow: string;
   id: string;
   size?: "compact" | "wide";
+  submitDisabled?: boolean;
   submitLabel: string;
   title: string;
 };
@@ -21,6 +22,7 @@ export function OpsModal({
   eyebrow,
   id,
   size,
+  submitDisabled = false,
   submitLabel,
   title,
 }: OpsModalProps) {
@@ -48,7 +50,7 @@ export function OpsModal({
         <div className="ops-modal-body">{children}</div>
 
         <footer className="ops-modal-footer">
-          <button className="primary-button" type="submit">
+          <button className="primary-button" type="submit" disabled={submitDisabled}>
             {submitLabel}
           </button>
         </footer>

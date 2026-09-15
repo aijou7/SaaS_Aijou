@@ -1685,6 +1685,50 @@ export async function sendOwnerWhatsAppTemplate(
   return delivery;
 }
 
+export async function startOwnerWhatsAppTemplateConversation(
+  userId: string,
+  input: {
+    phoneNumber: string;
+    displayName?: string;
+    templateName: string;
+    languageCode: string;
+    bodyParameters?: string[];
+  },
+) {
+  const business = await requireBusinessForUser(userId);
+  const phoneNumber = normalizeOutboundWhatsAppPhone(input.phoneNumber);
+  const displayName = input.displayName?.trim().slice(0, 160) || undefined;
+
+  // Validate before creating an empty conversation when Meta has revoked the
+  // selected template or the connection is temporarily unavailable.
+  await requireApprovedMetaWhatsAppTemplate(
+    business.id,
+    input.templateName.trim().toLowerCase(),
+    input.languageCode.trim(),
+  );
+
+  const contact = await upsertContact({
+    businessId: business.id,
+    phoneNumber,
+    displayName,
+    contactType: ContactType.CUSTOMER,
+  });
+  const conversation = await upsertConversation({
+    businessId: business.id,
+    contactId: contact.id,
+    conversationType: ConversationType.CUSTOMER_SERVICE,
+    status: ConversationStatus.OPEN,
+    channel: "WHATSAPP",
+  });
+  const delivery = await sendOwnerWhatsAppTemplate(userId, conversation.id, {
+    templateName: input.templateName,
+    languageCode: input.languageCode,
+    bodyParameters: input.bodyParameters,
+  });
+
+  return { ...delivery, conversationId: conversation.id };
+}
+
 async function requireBusinessForUser(userId: string) {
   const access = await requireWorkspaceAccess(userId, [
     WorkspaceRole.OWNER,
@@ -1724,6 +1768,17 @@ function normalizeConversationChannel(channel: string): ConversationChannel {
 function telegramChatIdFromContact(value: string) {
   if (!value.toLowerCase().startsWith("telegram:")) return "";
   return normalizeTelegramChatId(value.slice("telegram:".length));
+}
+
+function normalizeOutboundWhatsAppPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
+
+  if (!/^\d{7,15}$/.test(normalized)) {
+    throw new Error("Nomor WhatsApp tidak valid. Gunakan format internasional, contoh 62812xxxxxxx.");
+  }
+
+  return normalized;
 }
 
 function toJsonValue(value: unknown) {

@@ -12,6 +12,7 @@ import {
   RadioTower,
   Send,
   ShieldCheck,
+  Plus,
   Zap,
 } from "lucide-react";
 import type { Route } from "next";
@@ -22,6 +23,7 @@ import {
   assignConversationAction,
   sendOwnerReplyAction,
   sendWhatsAppTemplateAction,
+  startNewWhatsAppChatAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
@@ -29,6 +31,7 @@ import { AppShell } from "@/components/app-shell";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { ApprovedWhatsAppTemplatePicker } from "@/components/approved-whatsapp-template-picker";
+import { OpsModal } from "@/components/ops-modal";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import {
   ConversationContextResizer,
@@ -90,6 +93,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const status = getSearchParam(resolvedSearchParams, "status");
   const q = getSearchParam(resolvedSearchParams, "q");
   const unread = getSearchParam(resolvedSearchParams, "unread") === "1";
+  const newChat = getSearchParam(resolvedSearchParams, "new") === "1";
   const pageNumber = Math.max(1, Number(getSearchParam(resolvedSearchParams, "page") ?? 1) || 1);
   const historyLimit = normalizeHistoryLimit(getSearchParam(resolvedSearchParams, "history"));
   const requestedView = normalizeChatView(getSearchParam(resolvedSearchParams, "view"));
@@ -134,6 +138,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           quickReplies={quickReplies}
           selectedConversation={selectedConversation}
           approvedWhatsAppTemplates={approvedWhatsAppTemplates}
+          newChat={newChat}
           status={status}
           unread={unread}
           readOnly={readOnly}
@@ -170,6 +175,7 @@ function ChatInboxView({
   quickReplies,
   selectedConversation,
   approvedWhatsAppTemplates,
+  newChat,
   status,
   unread,
   readOnly,
@@ -180,15 +186,23 @@ function ChatInboxView({
   quickReplies: QuickReplies;
   selectedConversation: ConversationDetail;
   approvedWhatsAppTemplates: ApprovedWhatsAppTemplates;
+  newChat: boolean;
   status?: string;
   unread?: boolean;
   readOnly: boolean;
 }) {
   return (
-    <ConversationWorkspace
+    <>
+      <ConversationWorkspace
       leftPanel={
         <aside className="chat-inbox">
         <InboxLiveRefresher initialState={liveState} />
+        {!readOnly ? (
+          <Link className="primary-button chat-new-conversation-button" href="/conversations?new=1">
+            <Plus size={16} aria-hidden="true" />
+            Chat nomor baru
+          </Link>
+        ) : null}
         <form className="chat-filter-form" action="/conversations" method="get">
           <input
             name="q"
@@ -277,7 +291,45 @@ function ChatInboxView({
           readOnly={readOnly}
         />
       </main>
-    </ConversationWorkspace>
+      </ConversationWorkspace>
+      {newChat && !readOnly ? (
+        <OpsModal
+          action={startNewWhatsAppChatAction}
+          closeHref="/conversations"
+          eyebrow="Percakapan baru"
+          id="new-whatsapp-chat-title"
+          size="compact"
+          submitDisabled={approvedWhatsAppTemplates.templates.length === 0}
+          submitLabel="Kirim template & buka chat"
+          title="Chat nomor baru"
+        >
+          <p className="muted">
+            Mulai percakapan WhatsApp dengan template yang sudah disetujui Meta.
+          </p>
+          <label>
+            Nama customer <span className="optional-label">opsional</span>
+            <input name="displayName" type="text" maxLength={160} placeholder="Contoh: Bapak Andi" />
+          </label>
+          <label>
+            Nomor WhatsApp
+            <input
+              name="phoneNumber"
+              type="tel"
+              inputMode="tel"
+              maxLength={24}
+              placeholder="62812xxxxxxx"
+              required
+            />
+            <small>Gunakan format internasional, misalnya 62812xxxxxxx.</small>
+          </label>
+          <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
+          <label>
+            Parameter body <small>(satu nilai per baris)</small>
+            <textarea name="bodyParameters" rows={4} placeholder={"Nama customer\nNama layanan"} />
+          </label>
+        </OpsModal>
+      ) : null}
+    </>
   );
 }
 

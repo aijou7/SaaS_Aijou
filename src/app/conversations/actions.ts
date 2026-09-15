@@ -8,6 +8,7 @@ import {
   resolveConversation,
   sendOwnerConversationReply,
   sendOwnerWhatsAppTemplate,
+  startOwnerWhatsAppTemplateConversation,
   setConversationTakeover,
   updateConversationOwnerNotes,
 } from "@/server/conversations/conversations";
@@ -103,13 +104,7 @@ export async function sendOwnerReplyUiAction(
 export async function sendWhatsAppTemplateAction(formData: FormData) {
   const session = await getRequiredSession();
   const conversationId = String(formData.get("conversationId") ?? "");
-  const templateKey = String(formData.get("templateKey") ?? "").trim();
-  const separatorIndex = templateKey.indexOf("::");
-  const templateName = separatorIndex >= 0 ? templateKey.slice(0, separatorIndex) : "";
-  const languageCode = separatorIndex >= 0 ? templateKey.slice(separatorIndex + 2) : "";
-  if (!templateName || !languageCode) {
-    throw new Error("Pilih template WhatsApp yang sudah disetujui Meta.");
-  }
+  const { templateName, languageCode } = parseApprovedTemplateKey(formData);
   const parameters = String(formData.get("bodyParameters") ?? "")
     .split("\n")
     .map((value) => value.trim())
@@ -121,6 +116,24 @@ export async function sendWhatsAppTemplateAction(formData: FormData) {
     bodyParameters: parameters,
   });
   revalidateConversationPages(conversationId);
+}
+
+export async function startNewWhatsAppChatAction(formData: FormData) {
+  const session = await getRequiredSession();
+  const { templateName, languageCode } = parseApprovedTemplateKey(formData);
+  const result = await startOwnerWhatsAppTemplateConversation(session.userId, {
+    phoneNumber: String(formData.get("phoneNumber") ?? ""),
+    displayName: String(formData.get("displayName") ?? ""),
+    templateName,
+    languageCode,
+    bodyParameters: String(formData.get("bodyParameters") ?? "")
+      .split("\n")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  });
+
+  revalidateConversationPages(result.conversationId);
+  redirect(`/conversations?conversationId=${encodeURIComponent(result.conversationId)}`);
 }
 
 export async function updateConversationNotesAction(formData: FormData) {
@@ -154,4 +167,17 @@ function revalidateConversationPages(conversationId: string) {
   revalidatePath("/");
   revalidatePath("/conversations");
   revalidatePath(`/conversations?conversationId=${conversationId}`);
+}
+
+function parseApprovedTemplateKey(formData: FormData) {
+  const templateKey = String(formData.get("templateKey") ?? "").trim();
+  const separatorIndex = templateKey.indexOf("::");
+  const templateName = separatorIndex >= 0 ? templateKey.slice(0, separatorIndex) : "";
+  const languageCode = separatorIndex >= 0 ? templateKey.slice(separatorIndex + 2) : "";
+
+  if (!templateName || !languageCode) {
+    throw new Error("Pilih template WhatsApp yang sudah disetujui Meta.");
+  }
+
+  return { templateName, languageCode };
 }
