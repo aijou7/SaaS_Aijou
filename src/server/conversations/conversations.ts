@@ -1622,11 +1622,17 @@ export async function sendOwnerWhatsAppTemplate(
   const bodyParameters = (input.bodyParameters ?? [])
     .map((value) => value.trim())
     .filter(Boolean);
-  await requireApprovedMetaWhatsAppTemplate(
+  const approvedTemplate = await requireApprovedMetaWhatsAppTemplate(
     business.id,
     templateName,
     languageCode,
   );
+  const messageBody = [
+    approvedTemplate.title,
+    renderWhatsAppTemplateBody(approvedTemplate.body, bodyParameters),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const providerMessageId = `template-${crypto.randomUUID()}`;
   const stored = await prisma.whatsAppMessage.create({
     data: {
@@ -1634,9 +1640,7 @@ export async function sendOwnerWhatsAppTemplate(
       providerMessageId,
       senderType: SenderType.USER,
       messageType: MessageType.TEXT,
-      messageBody: `Template: ${templateName}${
-        bodyParameters.length > 0 ? ` · ${bodyParameters.join(" · ")}` : ""
-      }`,
+      messageBody,
       intent: "owner_whatsapp_template",
       processingStatus: ProcessingStatus.RECEIVED,
       deliveryStatus: "SENDING",
@@ -1647,6 +1651,8 @@ export async function sendOwnerWhatsAppTemplate(
         templateName,
         languageCode,
         bodyParameters,
+        templateTitle: approvedTemplate.title,
+        templateBody: approvedTemplate.body,
       }),
     },
   });
@@ -1779,6 +1785,13 @@ function normalizeOutboundWhatsAppPhone(value: string) {
   }
 
   return normalized;
+}
+
+function renderWhatsAppTemplateBody(body: string, bodyParameters: string[]) {
+  return body.replace(/\{\{(\d+)\}\}/g, (placeholder, index) => {
+    const value = bodyParameters[Number(index) - 1];
+    return value ?? placeholder;
+  });
 }
 
 function toJsonValue(value: unknown) {
