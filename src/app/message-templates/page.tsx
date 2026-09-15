@@ -28,6 +28,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
   const submitted = singleParam(params.submitted) === "1";
   const updated = singleParam(params.updated) === "1";
   const submitError = singleParam(params.submitError)?.trim().slice(0, 400) ?? "";
+  const updateError = singleParam(params.updateError)?.trim().slice(0, 400) ?? "";
   const editId = singleParam(params.edit)?.trim() ?? "";
   const page = await getMessageTemplatesPage(session.userId, { q });
   const editTemplate = editId
@@ -57,6 +58,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
         {submitted ? <div className="success-banner" role="status">Template berhasil diajukan ke Meta dan sedang menunggu review.</div> : null}
         {updated ? <div className="success-banner" role="status">Perubahan draft berhasil disimpan.</div> : null}
         {submitError ? <div className="settings-note" role="alert">{submitError}</div> : null}
+        {updateError ? <div className="settings-note" role="alert">{updateError}</div> : null}
         {editId && !editTemplate ? <div className="settings-note" role="alert">Draft tidak ditemukan atau sudah tidak bisa diedit.</div> : null}
         {page.metaSyncError ? <div className="settings-note" role="alert">{page.metaSyncError}</div> : null}
         {page.metaSyncTruncated ? <div className="settings-note" role="status">Meta mengembalikan lebih dari 300 template; daftar menampilkan 300 pertama.</div> : null}

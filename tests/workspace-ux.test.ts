@@ -140,12 +140,15 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(messageTemplateActions, /submitMessageTemplate/);
   assert.match(messageTemplateActions, /submitError/);
   assert.match(messageTemplateActions, /updateMessageTemplate/);
+  assert.match(messageTemplateActions, /updateError/);
   assert.match(messageTemplatesPage, /Ajukan ke Meta/);
   assert.match(messageTemplatesPage, /submitError/);
+  assert.match(messageTemplatesPage, /updateError/);
   assert.match(messageTemplatesPage, /Edit draft/);
   assert.match(messageTemplateBuilder, /Simpan perubahan/);
   assert.doesNotMatch(messageTemplateBuilder, /name="title"[^>]*disabled/);
   assert.match(messageTemplateBuilder, /useState\(initialTemplate\?\.body/);
   assert.match(whatsappTemplates, /message_templates/);
   assert.match(whatsappTemplates, /header_handle/);
+  assert.match(whatsappTemplates, /whatsapp_templates_credentials_failed/);
 });

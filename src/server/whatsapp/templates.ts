@@ -75,7 +75,20 @@ type MetaTemplateRecord = {
 export async function listMetaWhatsAppTemplates(
   businessId: string,
 ): Promise<MetaWhatsAppTemplateResult> {
-  const credentials = await getWhatsAppCredentialsForBusiness(businessId);
+  let credentials;
+  try {
+    credentials = await getWhatsAppCredentialsForBusiness(businessId);
+  } catch (error) {
+    console.error("whatsapp_templates_credentials_failed", {
+      businessId,
+      reason: error instanceof Error ? error.name : "unknown_error",
+    });
+    return {
+      templates: [],
+      error: "Koneksi WhatsApp belum bisa dibaca. Periksa kembali credential WhatsApp di Pengaturan.",
+      truncated: false,
+    };
+  }
 
   if (!credentials.wabaId || !credentials.accessToken) {
     return { templates: [], error: null, truncated: false };

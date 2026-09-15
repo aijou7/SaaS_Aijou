@@ -47,7 +47,12 @@ export async function updateMessageTemplateAction(formData: FormData) {
   const templateId = String(formData.get("templateId") ?? "").trim();
   if (!templateId) throw new Error("Template draft tidak ditemukan.");
 
-  await updateMessageTemplate(session.userId, templateId, formData);
+  try {
+    await updateMessageTemplate(session.userId, templateId, formData);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Perubahan draft gagal disimpan. Coba lagi.";
+    redirect(`/message-templates?updateError=${encodeURIComponent(message.slice(0, 400))}&edit=${encodeURIComponent(templateId)}`);
+  }
   revalidatePath("/message-templates");
   revalidatePath("/broadcasts");
   redirect("/message-templates?updated=1");
