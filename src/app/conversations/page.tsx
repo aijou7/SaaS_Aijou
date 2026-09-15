@@ -13,6 +13,7 @@ import {
   Send,
   ShieldCheck,
   Plus,
+  SlidersHorizontal,
   Zap,
 } from "lucide-react";
 import type { Route } from "next";
@@ -195,7 +196,6 @@ function ChatInboxView({
       <ConversationWorkspace
       leftPanel={
         <aside className="chat-inbox">
-        <InboxLiveRefresher initialState={liveState} />
         {!readOnly ? (
           <Link className="primary-button chat-new-conversation-button" href="/conversations?new=1">
             <Plus size={16} aria-hidden="true" />
@@ -211,19 +211,32 @@ function ChatInboxView({
             maxLength={160}
             aria-label="Cari percakapan"
           />
-          <div className="chat-filter-row">
-            <select name="status" defaultValue={status ?? ""} aria-label="Status percakapan">
-              <option value="">Semua status</option>
-              {Object.values(ConversationStatus).map((option) => (
-                <option key={option} value={option}>
-                  {formatConversationStatus(option)}
-                </option>
-              ))}
-            </select>
-            <button className="ghost-button" type="submit" aria-label="Terapkan filter">Cari</button>
-          </div>
+          {status ? <input name="status" type="hidden" value={status} /> : null}
           {unread ? <input name="unread" type="hidden" value="1" /> : null}
         </form>
+
+        <details className="chat-inbox-filter-details">
+          <summary className="chat-inbox-filter-summary">
+            <SlidersHorizontal size={15} aria-hidden="true" />
+            <span>Filter spesifik</span>
+          </summary>
+          <div className="chat-inbox-filter-content">
+            <InboxLiveRefresher initialState={liveState} />
+            <form className="chat-filter-advanced-form" action="/conversations" method="get">
+              {q ? <input name="q" type="hidden" value={q} /> : null}
+              {unread ? <input name="unread" type="hidden" value="1" /> : null}
+              <select name="status" defaultValue={status ?? ""} aria-label="Status percakapan">
+                <option value="">Semua status</option>
+                {Object.values(ConversationStatus).map((option) => (
+                  <option key={option} value={option}>
+                    {formatConversationStatus(option)}
+                  </option>
+                ))}
+              </select>
+              <button className="ghost-button" type="submit">Terapkan</button>
+            </form>
+          </div>
+        </details>
 
         <div className="chat-tabs">
           <Link className={!unread && (!status || status !== "CLOSED") ? "active" : ""} href="/conversations">

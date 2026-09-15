@@ -77,3 +77,10 @@ test("operational forms share a fixed header, scrollable body, and fixed action 
     assert.doesNotMatch(form, /<div className="ops-modal-backdrop"/);
   }
 });
+
+test("keeps inbox search focused and hides specific status filters behind a disclosure", () => {
+  assert.match(conversations, /className="chat-inbox-filter-details"/);
+  assert.match(conversations, /Filter spesifik/);
+  assert.match(conversations, /name="q"/);
+  assert.match(conversations, /className="chat-filter-advanced-form"/);
+});
