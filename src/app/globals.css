@@ -10136,13 +10136,15 @@ body.is-resizing-conversation * {
 }
 
 .settings-sidebar-toggle {
-  position: relative;
+  position: absolute;
   display: grid;
   place-items: center;
-  align-self: flex-end;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
   width: 36px;
   height: 36px;
-  margin: 10px 12px 0;
+  margin: 0;
   border: 1px solid #d5deeb;
   border-radius: 10px;
   background: #ffffff;
@@ -10196,12 +10198,21 @@ body.is-resizing-conversation * {
 }
 
 .settings-account strong,
-.settings-account span,
 .footer-user strong,
 .footer-user small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-account strong {
+  overflow: visible;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.settings-account {
+  padding-right: 60px;
 }
 
 .footer-user {
@@ -10214,8 +10225,7 @@ body.is-resizing-conversation * {
 }
 
 .settings-sidebar-collapsed .settings-sidebar-toggle {
-  align-self: center;
-  margin-inline: auto;
+  right: 20px;
 }
 
 .settings-sidebar-collapsed .settings-account > div:last-child,
@@ -10231,6 +10241,7 @@ body.is-resizing-conversation * {
 
 .settings-sidebar-collapsed .settings-account {
   justify-content: center;
+  padding-top: 58px;
   padding-inline: 8px;
 }
 

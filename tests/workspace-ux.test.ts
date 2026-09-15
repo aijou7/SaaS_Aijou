@@ -51,6 +51,7 @@ test("keeps the application sidebar usable as a persistent icon rail", () => {
   assert.match(collapsibleWorkspace, /ChevronLeft/);
   assert.match(collapsibleWorkspace, /ChevronRight/);
   assert.match(collapsibleWorkspace, /data-tooltip=\{toggleLabel\}/);
+  assert.doesNotMatch(collapsibleWorkspace, /title=\{toggleLabel\}/);
   assert.match(collapsibleWorkspace, /localStorage/);
   assert.match(collapsibleWorkspace, /function getServerSidebarPreference\(\) \{\s+return false;/s);
   assert.match(styles, /\.app-workspace-sidebar-collapsed/);

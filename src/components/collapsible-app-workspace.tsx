@@ -42,7 +42,6 @@ export function CollapsibleAppWorkspace({
           type="button"
           aria-label={toggleLabel}
           aria-pressed={collapsed}
-          title={toggleLabel}
           data-tooltip={toggleLabel}
           onClick={() => saveSidebarPreference(preferenceKey, !collapsed)}
         >
