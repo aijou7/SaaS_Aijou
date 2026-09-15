@@ -28,6 +28,7 @@ import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
 import { AppShell } from "@/components/app-shell";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
+import { ApprovedWhatsAppTemplatePicker } from "@/components/approved-whatsapp-template-picker";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import {
   ConversationContextResizer,
@@ -55,6 +56,7 @@ import {
   getActiveQuickRepliesForUser,
 } from "@/server/quick-replies/quick-replies";
 import { getWhatsAppSettingsPage } from "@/server/whatsapp/settings";
+import { listApprovedMetaWhatsAppTemplateOptions } from "@/server/whatsapp/templates";
 
 type ChatView =
   | "chat"
@@ -74,6 +76,7 @@ type ConversationDetail = Awaited<ReturnType<typeof getConversationDetail>>;
 type AgentSettingsPageData = Awaited<ReturnType<typeof getAgentSettingsPage>>;
 type QuickReplies = Awaited<ReturnType<typeof getActiveQuickRepliesForBusiness>>;
 type WhatsAppSettingsPageData = Awaited<ReturnType<typeof getWhatsAppSettingsPage>>;
+type ApprovedWhatsAppTemplates = Awaited<ReturnType<typeof listApprovedMetaWhatsAppTemplateOptions>>;
 
 export default async function ConversationsPage({ searchParams }: ConversationsPageProps) {
   const session = await getSession();
@@ -117,6 +120,10 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           : getActiveQuickRepliesForUser(session.userId)
         : Promise.resolve([]),
     ]);
+    const approvedWhatsAppTemplates: ApprovedWhatsAppTemplates =
+      business && !readOnly
+        ? await listApprovedMetaWhatsAppTemplateOptions(business.id)
+        : { templates: [], error: null };
 
     return (
       <AppShell active="conversations" businessName={inbox.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
@@ -126,6 +133,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           q={q}
           quickReplies={quickReplies}
           selectedConversation={selectedConversation}
+          approvedWhatsAppTemplates={approvedWhatsAppTemplates}
           status={status}
           unread={unread}
           readOnly={readOnly}
@@ -161,6 +169,7 @@ function ChatInboxView({
   q,
   quickReplies,
   selectedConversation,
+  approvedWhatsAppTemplates,
   status,
   unread,
   readOnly,
@@ -170,6 +179,7 @@ function ChatInboxView({
   q?: string;
   quickReplies: QuickReplies;
   selectedConversation: ConversationDetail;
+  approvedWhatsAppTemplates: ApprovedWhatsAppTemplates;
   status?: string;
   unread?: boolean;
   readOnly: boolean;
@@ -255,6 +265,7 @@ function ChatInboxView({
               <WelcomeChecklist />
             ) : (
               <ConversationDetailPanel
+                approvedWhatsAppTemplates={approvedWhatsAppTemplates}
                 quickReplies={quickReplies}
                 readOnly={readOnly}
                 selectedConversation={selectedConversation}
@@ -262,6 +273,7 @@ function ChatInboxView({
             )
           }
           quickReplies={quickReplies}
+          approvedWhatsAppTemplates={approvedWhatsAppTemplates}
           readOnly={readOnly}
         />
       </main>
@@ -536,10 +548,12 @@ function LegacyConversationDetailPanel({
 
 */
 function ConversationDetailPanel({
+  approvedWhatsAppTemplates,
   quickReplies,
   readOnly,
   selectedConversation,
 }: {
+  approvedWhatsAppTemplates: ApprovedWhatsAppTemplates;
   quickReplies: QuickReplies;
   readOnly: boolean;
   selectedConversation: NonNullable<ConversationDetail>;
@@ -583,19 +597,18 @@ function ConversationDetailPanel({
               <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
                 <input name="conversationId" type="hidden" value={selectedConversation.id} />
-                <label>
-                  Nama template Meta
-                  <input name="templateName" type="text" pattern="[a-z0-9_]{1,512}" placeholder="follow_up_customer" required />
-                </label>
-                <label>
-                  Bahasa
-                  <input name="languageCode" type="text" defaultValue="id" required />
-                </label>
+                <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
                 <label className="span-2">
                   Parameter body <small>(satu nilai per baris)</small>
                   <textarea name="bodyParameters" placeholder={"Nama customer\nNama layanan"} rows={3} />
                 </label>
-                <button className="primary-button span-2" type="submit">Kirim approved template</button>
+                <button
+                  className="primary-button span-2"
+                  type="submit"
+                  disabled={approvedWhatsAppTemplates.templates.length === 0}
+                >
+                  Kirim approved template
+                </button>
               </form>
             </details>
           ) : null}

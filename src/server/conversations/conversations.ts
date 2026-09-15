@@ -52,6 +52,7 @@ import {
   activeWorkspaceAccessWhere,
 } from "@/server/workspace-access";
 import { getWorkspaceEntitlements } from "@/server/subscriptions/subscriptions";
+import { requireApprovedMetaWhatsAppTemplate } from "@/server/whatsapp/templates";
 
 type SimulateMessageInput = {
   phoneNumber: string;
@@ -1621,6 +1622,11 @@ export async function sendOwnerWhatsAppTemplate(
   const bodyParameters = (input.bodyParameters ?? [])
     .map((value) => value.trim())
     .filter(Boolean);
+  await requireApprovedMetaWhatsAppTemplate(
+    business.id,
+    templateName,
+    languageCode,
+  );
   const providerMessageId = `template-${crypto.randomUUID()}`;
   const stored = await prisma.whatsAppMessage.create({
     data: {

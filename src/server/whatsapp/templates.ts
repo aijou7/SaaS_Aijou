@@ -35,6 +35,17 @@ export type MetaWhatsAppTemplateResult = {
   truncated: boolean;
 };
 
+export type ApprovedWhatsAppTemplateOption = {
+  name: string;
+  languageCode: string;
+  title: string | null;
+};
+
+export type ApprovedWhatsAppTemplateOptionsResult = {
+  templates: ApprovedWhatsAppTemplateOption[];
+  error: string | null;
+};
+
 type MetaTemplateRecord = {
   id?: unknown;
   name?: unknown;
@@ -128,6 +139,46 @@ export async function listMetaWhatsAppTemplates(
   }
 
   return { templates, error: null, truncated: Boolean(after) };
+}
+
+export async function listApprovedMetaWhatsAppTemplateOptions(
+  businessId: string,
+): Promise<ApprovedWhatsAppTemplateOptionsResult> {
+  const result = await listMetaWhatsAppTemplates(businessId);
+
+  return {
+    error: result.error,
+    templates: result.templates
+      .filter((template) => template.status === WhatsAppTemplateStatus.APPROVED)
+      .map(({ name, languageCode, title }) => ({ name, languageCode, title })),
+  };
+}
+
+export async function requireApprovedMetaWhatsAppTemplate(
+  businessId: string,
+  templateName: string,
+  languageCode: string,
+) {
+  const result = await listMetaWhatsAppTemplates(businessId);
+
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  const template = result.templates.find(
+    (candidate) =>
+      candidate.status === WhatsAppTemplateStatus.APPROVED &&
+      candidate.name === templateName &&
+      candidate.languageCode === languageCode,
+  );
+
+  if (!template) {
+    throw new Error(
+      "Template tidak ditemukan atau belum disetujui Meta. Refresh halaman lalu pilih template dari daftar.",
+    );
+  }
+
+  return template;
 }
 
 function readMetaTemplates(body: unknown) {

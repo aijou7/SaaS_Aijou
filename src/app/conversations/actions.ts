@@ -103,14 +103,21 @@ export async function sendOwnerReplyUiAction(
 export async function sendWhatsAppTemplateAction(formData: FormData) {
   const session = await getRequiredSession();
   const conversationId = String(formData.get("conversationId") ?? "");
+  const templateKey = String(formData.get("templateKey") ?? "").trim();
+  const separatorIndex = templateKey.indexOf("::");
+  const templateName = separatorIndex >= 0 ? templateKey.slice(0, separatorIndex) : "";
+  const languageCode = separatorIndex >= 0 ? templateKey.slice(separatorIndex + 2) : "";
+  if (!templateName || !languageCode) {
+    throw new Error("Pilih template WhatsApp yang sudah disetujui Meta.");
+  }
   const parameters = String(formData.get("bodyParameters") ?? "")
     .split("\n")
     .map((value) => value.trim())
     .filter(Boolean);
 
   await sendOwnerWhatsAppTemplate(session.userId, conversationId, {
-    templateName: String(formData.get("templateName") ?? ""),
-    languageCode: String(formData.get("languageCode") ?? "id"),
+    templateName,
+    languageCode,
     bodyParameters: parameters,
   });
   revalidateConversationPages(conversationId);

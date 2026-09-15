@@ -8,6 +8,10 @@ import {
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
 import { ChatMessageThread } from "@/components/chat-message-thread";
+import {
+  ApprovedWhatsAppTemplatePicker,
+  type ApprovedWhatsAppTemplatePickerOption,
+} from "@/components/approved-whatsapp-template-picker";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import {
@@ -61,10 +65,16 @@ type QuickReply = {
   shortcut: string | null;
 };
 
+type ApprovedWhatsAppTemplates = {
+  templates: ApprovedWhatsAppTemplatePickerOption[];
+  error: string | null;
+};
+
 export function LiveConversationDetail(props: {
   initialDetail: ConversationDetail | null;
   initialPanel: ReactNode;
   quickReplies: QuickReply[];
+  approvedWhatsAppTemplates: ApprovedWhatsAppTemplates;
   readOnly?: boolean;
 }) {
   const [detail, setDetail] = useState<ConversationDetail | null>(
@@ -147,6 +157,7 @@ export function LiveConversationDetail(props: {
     <ClientConversationPanel
       detail={detail}
       loading={loading}
+      approvedWhatsAppTemplates={props.approvedWhatsAppTemplates}
       quickReplies={props.quickReplies}
       readOnly={Boolean(props.readOnly)}
     />
@@ -316,6 +327,7 @@ function LegacyClientConversationPanel(props: {
 
 */
 function ClientConversationPanel(props: {
+  approvedWhatsAppTemplates: ApprovedWhatsAppTemplates;
   detail: ConversationDetail;
   quickReplies: QuickReply[];
   loading: boolean;
@@ -359,10 +371,15 @@ function ClientConversationPanel(props: {
               <summary>Kirim template WhatsApp di luar jendela 24 jam</summary>
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
                 <input name="conversationId" type="hidden" value={detail.id} />
-                <label>Nama template Meta<input name="templateName" pattern="[a-z0-9_]{1,512}" placeholder="follow_up_customer" required /></label>
-                <label>Bahasa<input name="languageCode" defaultValue="id" required /></label>
+                <ApprovedWhatsAppTemplatePicker {...props.approvedWhatsAppTemplates} />
                 <label className="span-2">Parameter body <small>(satu per baris)</small><textarea name="bodyParameters" rows={3} /></label>
-                <button className="primary-button span-2" type="submit">Kirim approved template</button>
+                <button
+                  className="primary-button span-2"
+                  type="submit"
+                  disabled={props.approvedWhatsAppTemplates.templates.length === 0}
+                >
+                  Kirim approved template
+                </button>
               </form>
             </details>
           ) : null}
