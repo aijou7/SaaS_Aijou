@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const appShell = readFileSync("src/components/app-shell.tsx", "utf8");
+const collapsibleWorkspace = readFileSync("src/components/collapsible-app-workspace.tsx", "utf8");
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
@@ -39,6 +40,15 @@ test("workspace typography and controls remain comfortably readable", () => {
   assert.match(styles, /font-family: var\(--font-app\)/);
   assert.match(styles, /\.primary-sidebar-item,[\s\S]*?min-height: 44px/);
   assert.match(styles, /\.app-main input[\s\S]*?min-height: 44px/);
+});
+
+test("keeps the application sidebar usable as a persistent icon rail", () => {
+  assert.match(appShell, /CollapsibleAppWorkspace/);
+  assert.match(appShell, /title=\{item\.label\}/);
+  assert.match(collapsibleWorkspace, /settings-sidebar-toggle/);
+  assert.match(collapsibleWorkspace, /localStorage/);
+  assert.match(styles, /\.app-workspace-sidebar-collapsed/);
+  assert.match(styles, /\.settings-sidebar-collapsed \.settings-nav-item span/);
 });
 
 test("conversation view prioritizes the message thread and hides secondary actions", () => {

@@ -10129,3 +10129,103 @@ body.is-resizing-conversation * {
   .message-template-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .message-template-row-heading { display: grid; }
 }
+
+/* The application sidebar can become an icon rail when the work surface needs more room. */
+.app-workspace {
+  transition: grid-template-columns 180ms ease;
+}
+
+.settings-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 32px;
+  margin: 8px 12px 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  padding: 0 8px;
+}
+
+.settings-sidebar-toggle:hover,
+.settings-sidebar-toggle:focus-visible {
+  border-color: var(--line);
+  background: #f8fafc;
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.app-workspace-sidebar-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.settings-sidebar-collapsed .settings-sidebar-toggle {
+  justify-content: center;
+  margin-inline: 8px;
+  padding-inline: 0;
+}
+
+.settings-sidebar-collapsed .settings-sidebar-toggle span,
+.settings-sidebar-collapsed .settings-account > div:last-child,
+.settings-sidebar-collapsed .workspace-switcher,
+.settings-sidebar-collapsed .sidebar-context-heading,
+.settings-sidebar-collapsed .workspace-role-badge,
+.settings-sidebar-collapsed .settings-nav-item span,
+.settings-sidebar-collapsed .footer-user > div,
+.settings-sidebar-collapsed .footer-user .online-badge,
+.settings-sidebar-collapsed .sidebar-logout span {
+  display: none;
+}
+
+.settings-sidebar-collapsed .settings-account {
+  justify-content: center;
+  padding-inline: 8px;
+}
+
+.settings-sidebar-collapsed .settings-nav {
+  padding-inline: 8px;
+}
+
+.settings-sidebar-collapsed .settings-nav-item {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.settings-sidebar-collapsed .settings-footer {
+  padding-inline: 8px;
+}
+
+.settings-sidebar-collapsed .footer-user {
+  justify-content: center;
+}
+
+.settings-sidebar-collapsed .sidebar-logout {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+@media (max-width: 900px) {
+  .app-workspace-sidebar-collapsed {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .app-workspace-sidebar-collapsed {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .settings-sidebar-collapsed {
+    position: static;
+    height: auto;
+  }
+}

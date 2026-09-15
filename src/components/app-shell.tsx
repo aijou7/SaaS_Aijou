@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AijouLogo } from "@/components/aijou-logo";
+import { CollapsibleAppWorkspace } from "@/components/collapsible-app-workspace";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { NotificationBell } from "@/components/notification-bell";
 import { OnboardingGuide } from "@/components/onboarding-guide";
@@ -272,8 +273,9 @@ export async function AppShell({
         </div>
       </header>
 
-      <div className="app-workspace">
-        <aside className="settings-sidebar">
+      <CollapsibleAppWorkspace
+        sidebar={
+          <>
           <div className="settings-account">
             <div className="account-avatar">
               <AijouLogo size={34} />
@@ -318,6 +320,7 @@ export async function AppShell({
                   className={active === item.key ? "settings-nav-item active" : "settings-nav-item"}
                   href={item.href}
                   key={item.key}
+                  title={item.label}
                 >
                   <Icon size={17} aria-hidden="true" />
                   <span>{item.label}</span>
@@ -329,13 +332,15 @@ export async function AppShell({
           <div className="settings-footer">
             <WorkspaceUserSummary />
             <form action="/api/auth/logout" method="post">
-              <button className="sidebar-logout" type="submit">
+              <button className="sidebar-logout" type="submit" aria-label="Keluar" title="Keluar">
                 <LogOut size={16} aria-hidden="true" />
-                Keluar
+                <span>Keluar</span>
               </button>
             </form>
           </div>
-        </aside>
+          </>
+        }
+      >
 
         <section className="app-main">
           <div className="app-main-inner">
@@ -360,7 +365,7 @@ export async function AppShell({
             {children}
           </div>
         </section>
-      </div>
+      </CollapsibleAppWorkspace>
     </main>
   );
 }
