@@ -28,7 +28,12 @@ export async function submitMessageTemplateAction(formData: FormData) {
   const templateId = String(formData.get("templateId") ?? "").trim();
   if (!templateId) throw new Error("Template draft tidak ditemukan.");
 
-  await submitMessageTemplate(session.userId, templateId);
+  try {
+    await submitMessageTemplate(session.userId, templateId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Pengajuan template ke Meta gagal. Coba lagi.";
+    redirect(`/message-templates?submitError=${encodeURIComponent(message.slice(0, 400))}`);
+  }
   revalidatePath("/message-templates");
   revalidatePath("/broadcasts");
   redirect("/message-templates?submitted=1");

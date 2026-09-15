@@ -138,8 +138,10 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(messageTemplateBuilder, /name="headerImage"/);
   assert.match(messageTemplateServer, /BLOB_READ_WRITE_TOKEN/);
   assert.match(messageTemplateActions, /submitMessageTemplate/);
+  assert.match(messageTemplateActions, /submitError/);
   assert.match(messageTemplateActions, /updateMessageTemplate/);
   assert.match(messageTemplatesPage, /Ajukan ke Meta/);
+  assert.match(messageTemplatesPage, /submitError/);
   assert.match(messageTemplatesPage, /Edit draft/);
   assert.match(messageTemplateBuilder, /Simpan perubahan/);
   assert.doesNotMatch(messageTemplateBuilder, /name="title"[^>]*disabled/);
