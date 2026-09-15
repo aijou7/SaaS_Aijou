@@ -51,7 +51,7 @@ export function MessageTemplateBuilder({ action }: MessageTemplateBuilderProps) 
           </label>
           <label>
             Judul <span className="optional-label">opsional</span>
-            <input name="title" type="text" maxLength={60} placeholder="Konfirmasi jadwal" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input name="title" type="text" maxLength={60} placeholder="Contoh: Coba Aijou AI Gratis" value={title} onChange={(event) => setTitle(event.target.value)} />
             <small>Maksimal 60 karakter, tanpa variabel.</small>
           </label>
           <label className="span-2">
