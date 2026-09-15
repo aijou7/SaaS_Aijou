@@ -1319,6 +1319,14 @@ a {
   box-shadow: 0 8px 18px rgba(29, 78, 216, 0.16);
 }
 
+.button-spinner {
+  animation: button-spin .75s linear infinite;
+}
+
+@keyframes button-spin {
+  to { transform: rotate(360deg); }
+}
+
 .primary-button:hover,
 .login-form button:hover {
   background: var(--accent-strong);
@@ -8341,7 +8349,7 @@ summary:focus-visible {
 .ops-modal { display: grid; grid-template-rows: auto minmax(0,1fr) auto; width: min(620px,100%); max-height: calc(100dvh - 32px); overflow: hidden; contain: layout paint; border: 1px solid rgba(255,255,255,.8); border-radius: 20px; background: #fff; box-shadow: 0 28px 80px rgba(15,23,42,.24); animation: modal-in 160ms cubic-bezier(.2,.8,.2,1); }
 .ops-modal.wide { width: min(820px,100%); }.ops-modal.compact { width: min(480px,100%); }
 .ops-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: #fff; padding: 20px 22px 15px; }
-.ops-modal-head h2 { margin: 3px 0 0; font-size: 23px; }.ops-modal-head a { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; color: var(--muted); font-size: 26px; }.ops-modal-head a:hover { background: var(--panel-soft); }
+.ops-modal-head h2 { margin: 3px 0 0; font-size: 23px; }.ops-modal-head a, .ops-modal-close-button { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; color: var(--muted); font-size: 26px; }.ops-modal-head a:hover, .ops-modal-close-button:hover { background: var(--panel-soft); }.ops-modal-close-button { border: 0; background: transparent; cursor: pointer; font: inherit; }
 .ops-modal-body { display: grid; min-height: 0; gap: 16px; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px; scrollbar-gutter: stable; touch-action: pan-y; }
 .ops-modal-footer { border-top: 1px solid var(--line); background: #fff; padding: 14px 22px 16px; }
 .ops-modal-footer .primary-button { width: 100%; min-height: 46px; }

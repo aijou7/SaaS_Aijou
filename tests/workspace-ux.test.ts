@@ -10,6 +10,9 @@ const liveConversation = readFileSync("src/components/live-conversation-detail.t
 const conversationWorkspace = readFileSync("src/components/conversation-workspace.tsx", "utf8");
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
 const opsModal = readFileSync("src/components/ops-modal.tsx", "utf8");
+const newChatLauncher = readFileSync("src/components/new-whatsapp-chat-launcher.tsx", "utf8");
+const backgroundJobs = readFileSync("src/server/jobs/background-jobs.ts", "utf8");
+const conversationsServer = readFileSync("src/server/conversations/conversations.ts", "utf8");
 const operationForms = [
   "broadcasts",
   "complaints",
@@ -108,4 +111,14 @@ test("keeps inbox resizing separate from the intentional collapse control", () =
   assert.match(conversationWorkspace, /className="chat-resizer-collapse"/);
   assert.match(conversationWorkspace, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(conversationWorkspace, /Sembunyikan daftar percakapan/);
+});
+
+test("gives slow chat actions immediate feedback and queues WhatsApp delivery", () => {
+  assert.match(newChatLauncher, /onClick=\{\(\) => setOpen\(true\)\}/);
+  assert.match(newChatLauncher, /pendingLabel="Membuka chat…"/);
+  assert.match(opsModal, /FormSubmitButton/);
+  assert.match(conversationsServer, /enqueueWhatsAppOutbound/);
+  assert.match(conversationsServer, /scheduleWhatsAppOutboundWakeup/);
+  assert.match(backgroundJobs, /const whatsAppOutboundJob = "WHATSAPP_OUTBOUND"/);
+  assert.match(backgroundJobs, /deliverStoredWhatsAppTemplateMessage/);
 });

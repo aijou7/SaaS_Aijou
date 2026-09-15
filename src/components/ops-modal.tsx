@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
+import { FormSubmitButton } from "@/components/form-submit-button";
 
 type OpsModalProps = {
   action: ComponentProps<"form">["action"];
@@ -11,6 +12,7 @@ type OpsModalProps = {
   id: string;
   size?: "compact" | "wide";
   submitDisabled?: boolean;
+  pendingLabel?: string;
   submitLabel: string;
   title: string;
 };
@@ -23,6 +25,7 @@ export function OpsModal({
   id,
   size,
   submitDisabled = false,
+  pendingLabel,
   submitLabel,
   title,
 }: OpsModalProps) {
@@ -50,9 +53,12 @@ export function OpsModal({
         <div className="ops-modal-body">{children}</div>
 
         <footer className="ops-modal-footer">
-          <button className="primary-button" type="submit" disabled={submitDisabled}>
-            {submitLabel}
-          </button>
+          <FormSubmitButton
+            className="primary-button"
+            disabled={submitDisabled}
+            label={submitLabel}
+            pendingLabel={pendingLabel}
+          />
         </footer>
       </form>
     </div>

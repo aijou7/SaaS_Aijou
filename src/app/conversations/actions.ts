@@ -88,8 +88,12 @@ export async function sendOwnerReplyUiAction(
     return {
       ok: true,
       message: saveAsKnowledge
-        ? "Balasan terkirim dan draft knowledge dibuat."
-        : "Balasan terkirim.",
+        ? sent.channel === "WHATSAPP"
+          ? "Balasan masuk antrean WhatsApp dan draft knowledge dibuat."
+          : "Balasan terkirim dan draft knowledge dibuat."
+        : sent.channel === "WHATSAPP"
+          ? "Balasan masuk antrean WhatsApp."
+          : "Balasan terkirim.",
       nonce: Date.now(),
     };
   } catch (error) {

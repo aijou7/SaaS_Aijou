@@ -12,7 +12,6 @@ import {
   RadioTower,
   Send,
   ShieldCheck,
-  Plus,
   SlidersHorizontal,
   Zap,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import { updateAgentSettingsAction } from "@/app/agent/actions";
 import {
   assignConversationAction,
   sendWhatsAppTemplateAction,
-  startNewWhatsAppChatAction,
   updateConversationNotesAction,
 } from "@/app/conversations/actions";
 import { updateWhatsAppSettingsAction } from "@/app/whatsapp/actions";
@@ -31,7 +29,6 @@ import { AppShell } from "@/components/app-shell";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { ApprovedWhatsAppTemplatePicker } from "@/components/approved-whatsapp-template-picker";
-import { OpsModal } from "@/components/ops-modal";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
 import {
   ConversationContextResizer,
@@ -42,6 +39,8 @@ import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { FastConversationLink } from "@/components/fast-conversation-link";
 import { LiveConversationDetail } from "@/components/live-conversation-detail";
+import { FormSubmitButton } from "@/components/form-submit-button";
+import { NewWhatsAppChatLauncher } from "@/components/new-whatsapp-chat-launcher";
 import { ConversationStatus } from "@/generated/prisma-beta/client";
 import { getSession } from "@/lib/session";
 import { getAgentSettingsPage } from "@/server/agent/settings";
@@ -111,7 +110,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
     : getConversationsInbox(session.userId, inboxFilters);
 
   if (currentView === "chat") {
-    const [inbox, selectedConversation, quickReplies] = await Promise.all([
+    const [inbox, selectedConversation, quickReplies, approvedWhatsAppTemplates] = await Promise.all([
       inboxPromise,
       conversationId
         ? business
@@ -123,11 +122,10 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
           ? getActiveQuickRepliesForBusiness(business.id)
           : getActiveQuickRepliesForUser(session.userId)
         : Promise.resolve([]),
-    ]);
-    const approvedWhatsAppTemplates: ApprovedWhatsAppTemplates =
       business && !readOnly
-        ? await listApprovedMetaWhatsAppTemplateOptions(business.id)
-        : { templates: [], error: null };
+        ? listApprovedMetaWhatsAppTemplateOptions(business.id)
+        : Promise.resolve({ templates: [], error: null }),
+    ]);
 
     return (
       <AppShell active="conversations" businessName={inbox.business?.businessName} workspaceRole={session.role ?? "VIEWER"}>
@@ -197,10 +195,10 @@ function ChatInboxView({
       leftPanel={
         <aside className="chat-inbox">
         {!readOnly ? (
-          <Link className="primary-button chat-new-conversation-button" href="/conversations?new=1">
-            <Plus size={16} aria-hidden="true" />
-            Chat nomor baru
-          </Link>
+          <NewWhatsAppChatLauncher
+            approvedWhatsAppTemplates={approvedWhatsAppTemplates}
+            initialOpen={newChat}
+          />
         ) : null}
         <form className="chat-filter-form" action="/conversations" method="get">
           <input
@@ -304,39 +302,6 @@ function ChatInboxView({
         />
       </main>
       </ConversationWorkspace>
-      {newChat && !readOnly ? (
-        <OpsModal
-          action={startNewWhatsAppChatAction}
-          closeHref="/conversations"
-          eyebrow="Percakapan baru"
-          id="new-whatsapp-chat-title"
-          size="compact"
-          submitDisabled={approvedWhatsAppTemplates.templates.length === 0}
-          submitLabel="Kirim template & buka chat"
-          title="Chat nomor baru"
-        >
-          <p className="muted">
-            Mulai percakapan WhatsApp dengan template yang sudah disetujui Meta.
-          </p>
-          <label>
-            Nama customer <span className="optional-label">opsional</span>
-            <input name="displayName" type="text" maxLength={160} placeholder="Contoh: Bapak Andi" />
-          </label>
-          <label>
-            Nomor WhatsApp
-            <input
-              name="phoneNumber"
-              type="tel"
-              inputMode="tel"
-              maxLength={24}
-              placeholder="62812xxxxxxx"
-              required
-            />
-            <small>Gunakan format internasional, misalnya 62812xxxxxxx.</small>
-          </label>
-          <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
-        </OpsModal>
-      ) : null}
     </>
   );
 }
@@ -658,13 +623,12 @@ function ConversationDetailPanel({
               <form className="form-grid" action={sendWhatsAppTemplateAction}>
                 <input name="conversationId" type="hidden" value={selectedConversation.id} />
                 <ApprovedWhatsAppTemplatePicker {...approvedWhatsAppTemplates} />
-                <button
+                <FormSubmitButton
                   className="primary-button span-2"
-                  type="submit"
                   disabled={approvedWhatsAppTemplates.templates.length === 0}
-                >
-                  Kirim template
-                </button>
+                  label="Kirim template"
+                  pendingLabel="Mengirim template…"
+                />
               </form>
             </details>
           ) : null}

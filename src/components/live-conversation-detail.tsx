@@ -143,6 +143,42 @@ export function LiveConversationDetail(props: {
     };
   }, []);
 
+  const pendingDeliveryKey = detail
+    ? detail.messages
+        .filter((message) => ["PENDING", "SENDING", "UNKNOWN"].includes(message.deliveryStatus))
+        .map((message) => `${message.id}:${message.deliveryStatus}`)
+        .join(",")
+    : "";
+
+  useEffect(() => {
+    if (!detail || !pendingDeliveryKey) return;
+
+    let active = true;
+    const deadline = Date.now() + 30_000;
+    let timer: number | undefined;
+
+    const pollPendingDelivery = async () => {
+      if (!active || Date.now() >= deadline) return;
+      try {
+        const value = await loadConversationDetail(detail.id, detail.messageLimit, true);
+        if (!active) return;
+        const next = value as ConversationDetail;
+        setDetail(next);
+        if (next.messages.some((message) => ["PENDING", "SENDING", "UNKNOWN"].includes(message.deliveryStatus))) {
+          timer = window.setTimeout(pollPendingDelivery, 1_200);
+        }
+      } catch {
+        if (active) timer = window.setTimeout(pollPendingDelivery, 2_000);
+      }
+    };
+
+    timer = window.setTimeout(pollPendingDelivery, 900);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [detail, pendingDeliveryKey]);
+
   if (!hasClientSelection) {
     return (
       <div className={loading ? "conversation-panel-loading" : undefined}>

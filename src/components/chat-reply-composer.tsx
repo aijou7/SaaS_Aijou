@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockAlert, Send, Sparkles } from "lucide-react";
+import { ClockAlert, LoaderCircle, Send, Sparkles } from "lucide-react";
 import { useActionState, useEffect, useRef } from "react";
 import { sendOwnerReplyUiAction, type ConversationReplyState } from "@/app/conversations/actions";
 import { showToast } from "@/components/toast-center";
@@ -80,8 +80,8 @@ export function ChatReplyComposer(props: {
             }
           }}
         />
-        <button className="primary-button" type="submit" disabled={blocked || pending}>
-          <Send size={17} aria-hidden="true" />
+        <button className="primary-button" type="submit" disabled={blocked || pending} aria-busy={pending}>
+          {pending ? <LoaderCircle className="button-spinner" size={17} aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}
           {pending ? "Mengirim…" : "Kirim"}
         </button>
       </form>

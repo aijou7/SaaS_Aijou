@@ -19,6 +19,7 @@ import {
 
 const leadRefreshJob = "LEAD_REFRESH";
 const whatsAppWebhookJob = "WHATSAPP_WEBHOOK";
+const whatsAppOutboundJob = "WHATSAPP_OUTBOUND";
 const telegramWebhookJob = "TELEGRAM_WEBHOOK";
 const staleLockMs = 5 * 60_000;
 
@@ -189,6 +190,39 @@ export async function enqueueTelegramWebhook(params: {
   });
 
   return (await prisma.backgroundJob.findUnique({ where: { id: existing.id } })) ?? existing;
+}
+
+export async function enqueueWhatsAppOutbound(params: {
+  businessId: string;
+  messageId: string;
+  to: string;
+  kind?: "text" | "template";
+}) {
+  const payload = {
+    messageId: params.messageId,
+    to: params.to,
+    kind: params.kind ?? "text",
+  } satisfies Prisma.InputJsonObject;
+  const dedupeKey = `whatsapp-outbound:${params.messageId}`;
+
+  try {
+    return await prisma.backgroundJob.create({
+      data: {
+        businessId: params.businessId,
+        type: whatsAppOutboundJob,
+        dedupeKey,
+        payload,
+        status: BackgroundJobStatus.PENDING,
+        runAfter: new Date(),
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+  }
+
+  const existing = await prisma.backgroundJob.findUnique({ where: { dedupeKey } });
+  if (!existing) throw new Error("Pesan WhatsApp gagal masuk antrean.");
+  return existing;
 }
 
 export async function processPendingJobs(
@@ -368,6 +402,32 @@ async function executeJob(type: string, payload: Prisma.JsonValue, businessId: s
     if (!jsonObject(payload)) throw new Error("Queued WhatsApp payload is invalid.");
     const { processQueuedWhatsAppWebhook } = await import("@/server/whatsapp/processor");
     await processQueuedWhatsAppWebhook(payload, businessId);
+    return;
+  }
+
+  if (type === whatsAppOutboundJob) {
+    const object = jsonObject(payload);
+    const messageId = typeof object?.messageId === "string" ? object.messageId : "";
+    const to = typeof object?.to === "string" ? object.to : "";
+    const kind = object?.kind === "template" ? "template" : "text";
+    if (!messageId || !to) throw new Error("Queued WhatsApp outbound payload is invalid.");
+
+    const {
+      deliverStoredWhatsAppTemplateMessage,
+      deliverStoredWhatsAppTextMessage,
+    } = await import(
+      "@/server/conversations/conversations"
+    );
+    const delivery = await (kind === "template"
+      ? deliverStoredWhatsAppTemplateMessage
+      : deliverStoredWhatsAppTextMessage)({
+      businessId,
+      messageId,
+      to,
+    });
+    if (!delivery.accepted && delivery.deliveryStatus === "UNKNOWN") {
+      throw new Error(`WhatsApp delivery belum pasti (${delivery.reason ?? "unknown"}).`);
+    }
     return;
   }
 

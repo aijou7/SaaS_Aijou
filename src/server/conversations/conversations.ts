@@ -29,6 +29,7 @@ import { getActiveKnowledgeContext } from "@/server/knowledge/knowledge-base";
 import { getActiveProductCatalog } from "@/server/products/catalog";
 import {
   enqueueLeadRefresh,
+  enqueueWhatsAppOutbound,
 } from "@/server/jobs/background-jobs";
 import { wakeAndDrainJobs } from "@/server/jobs/durable-wakeup";
 import {
@@ -1080,24 +1081,20 @@ export async function sendConversationOwnerMessage(params: {
     };
   }
 
-  const delivery = await deliverStoredWhatsAppTextMessage({
+  await enqueueWhatsAppOutbound({
     businessId: params.businessId,
     messageId: outgoingMessage.id,
     to: recipient,
   });
-  if (!delivery.accepted) {
-    throw new Error(
-      `Pesan tersimpan, tetapi belum diterima WhatsApp (${delivery.reason ?? delivery.deliveryStatus}).`,
-    );
-  }
-
+  scheduleWhatsAppOutboundWakeup();
   return {
     channel: "WHATSAPP" as const,
     accepted: true,
-    delivered: delivery.delivered,
+    delivered: false,
     messageId: outgoingMessage.id,
-    providerMessageId: delivery.providerMessageId,
-    deliveryStatus: delivery.deliveryStatus,
+    providerMessageId: internalProviderMessageId,
+    deliveryStatus: "PENDING",
+    reason: null,
   };
 }
 
@@ -1225,7 +1222,7 @@ export async function deliverStoredWhatsAppTextMessage(params: {
   const claim = await prisma.whatsAppMessage.updateMany({
     where: {
       id: message.id,
-      deliveryStatus: "PENDING",
+      deliveryStatus: { in: ["PENDING", "UNKNOWN"] },
       conversation: {
         businessId: params.businessId,
         ...(message.senderType === SenderType.AI
@@ -1333,6 +1330,156 @@ export async function deliverStoredWhatsAppTextMessage(params: {
       deliveryStatus,
       deliveryError: reason,
       rawPayload: deliveryPayload,
+    },
+  });
+
+  return {
+    accepted: delivery.sent,
+    delivered: false,
+    deliveryStatus,
+    providerMessageId: delivery.sent
+      ? delivery.providerMessageId
+      : message.providerMessageId,
+    reason,
+  };
+}
+
+export async function deliverStoredWhatsAppTemplateMessage(params: {
+  businessId: string;
+  messageId: string;
+  to: string;
+}) {
+  const message = await prisma.whatsAppMessage.findFirst({
+    where: {
+      id: params.messageId,
+      conversation: { businessId: params.businessId, channel: "WHATSAPP" },
+    },
+    select: {
+      id: true,
+      providerMessageId: true,
+      messageBody: true,
+      rawPayload: true,
+      deliveryStatus: true,
+    },
+  });
+
+  if (!message?.messageBody) {
+    throw new Error("Template WhatsApp outbound tidak ditemukan.");
+  }
+
+  if (["ACCEPTED", "DELIVERED", "READ"].includes(message.deliveryStatus)) {
+    return {
+      accepted: true as const,
+      delivered: message.deliveryStatus === "DELIVERED" || message.deliveryStatus === "READ",
+      deliveryStatus: message.deliveryStatus,
+      providerMessageId: message.providerMessageId,
+      reason: null,
+    };
+  }
+
+  const claim = await prisma.whatsAppMessage.updateMany({
+    where: {
+      id: message.id,
+      deliveryStatus: { in: ["PENDING", "UNKNOWN"] },
+      conversation: { businessId: params.businessId, channel: "WHATSAPP" },
+    },
+    data: {
+      deliveryStatus: "SENDING",
+      deliveryError: null,
+      processingStatus: ProcessingStatus.RECEIVED,
+    },
+  });
+
+  if (claim.count === 0) {
+    const current = await prisma.whatsAppMessage.findUnique({
+      where: { id: message.id },
+      select: { deliveryStatus: true, providerMessageId: true, deliveryError: true },
+    });
+    const accepted = ["ACCEPTED", "DELIVERED", "READ"].includes(current?.deliveryStatus ?? "");
+    return {
+      accepted,
+      delivered: current?.deliveryStatus === "DELIVERED" || current?.deliveryStatus === "READ",
+      deliveryStatus: current?.deliveryStatus ?? "UNKNOWN",
+      providerMessageId: current?.providerMessageId ?? message.providerMessageId,
+      reason: accepted ? null : current?.deliveryError ?? "whatsapp_delivery_already_claimed",
+    };
+  }
+
+  const rawPayload = jsonObject(message.rawPayload);
+  const templateName = typeof rawPayload?.templateName === "string" ? rawPayload.templateName : "";
+  const languageCode = typeof rawPayload?.languageCode === "string" ? rawPayload.languageCode : "id";
+  const bodyParameters = Array.isArray(rawPayload?.bodyParameters)
+    ? rawPayload.bodyParameters.filter((value): value is string => typeof value === "string")
+    : [];
+
+  if (!templateName) {
+    await prisma.whatsAppMessage.update({
+      where: { id: message.id },
+      data: {
+        deliveryStatus: "FAILED",
+        deliveryError: "whatsapp_template_payload_missing",
+        processingStatus: ProcessingStatus.FAILED,
+      },
+    });
+    return {
+      accepted: false as const,
+      delivered: false,
+      deliveryStatus: "FAILED",
+      providerMessageId: message.providerMessageId,
+      reason: "whatsapp_template_payload_missing",
+    };
+  }
+
+  let delivery: Awaited<ReturnType<typeof sendWhatsAppTemplateMessage>>;
+  try {
+    delivery = await sendWhatsAppTemplateMessage({
+      businessId: params.businessId,
+      to: params.to,
+      templateName,
+      languageCode,
+      bodyParameters,
+    });
+  } catch {
+    delivery = {
+      sent: false as const,
+      reason: "whatsapp_delivery_exception",
+      providerMessageId: null,
+    };
+  }
+
+  const reason = delivery.sent ? null : delivery.reason;
+  const responseStatus = "status" in delivery ? delivery.status ?? null : null;
+  const uncertain =
+    !delivery.sent &&
+    (reason === "whatsapp_request_timeout" ||
+      reason === "whatsapp_network_error" ||
+      reason === "whatsapp_delivery_exception" ||
+      reason === "whatsapp_provider_message_id_missing" ||
+      (typeof responseStatus === "number" && responseStatus >= 500));
+  const deliveryStatus = delivery.sent ? "ACCEPTED" : uncertain ? "UNKNOWN" : "FAILED";
+  const deliveryPayload = toJsonValue({
+    ...rawPayload,
+    delivery: {
+      accepted: delivery.sent,
+      delivered: false,
+      providerMessageId: delivery.providerMessageId,
+      reason,
+      status: responseStatus,
+      response: "body" in delivery ? delivery.body ?? null : null,
+    },
+  });
+
+  await prisma.whatsAppMessage.update({
+    where: { id: message.id },
+    data: {
+      providerMessageId: delivery.sent
+        ? delivery.providerMessageId
+        : message.providerMessageId,
+      processingStatus: delivery.sent ? ProcessingStatus.PROCESSED : ProcessingStatus.FAILED,
+      deliveryStatus,
+      deliveryError: reason,
+      rawPayload: deliveryPayload,
+      deliveredAt: delivery.sent ? new Date() : null,
     },
   });
 
@@ -1643,7 +1790,7 @@ export async function sendOwnerWhatsAppTemplate(
       messageBody,
       intent: "owner_whatsapp_template",
       processingStatus: ProcessingStatus.RECEIVED,
-      deliveryStatus: "SENDING",
+      deliveryStatus: "PENDING",
       sentByUserId: userId,
       rawPayload: toJsonValue({
         channel: "WHATSAPP",
@@ -1657,25 +1804,6 @@ export async function sendOwnerWhatsAppTemplate(
     },
   });
 
-  const delivery = await sendWhatsAppTemplateMessage({
-    businessId: business.id,
-    to: conversation.contact.phoneNumber,
-    templateName,
-    languageCode,
-    bodyParameters,
-  });
-  await prisma.whatsAppMessage.update({
-    where: { id: stored.id },
-    data: {
-      providerMessageId: delivery.providerMessageId ?? providerMessageId,
-      deliveryStatus: delivery.sent ? "ACCEPTED" : "FAILED",
-      deliveryError: delivery.sent ? null : delivery.reason,
-      processingStatus: delivery.sent
-        ? ProcessingStatus.PROCESSED
-        : ProcessingStatus.FAILED,
-      deliveredAt: delivery.sent ? new Date() : null,
-    },
-  });
   await prisma.whatsAppConversation.update({
     where: { id: conversationId },
     data: {
@@ -1684,11 +1812,21 @@ export async function sendOwnerWhatsAppTemplate(
       ownerLastReadAt: new Date(),
     },
   });
-
-  if (!delivery.sent) {
-    throw new Error(`Template ditolak WhatsApp (${delivery.reason}).`);
-  }
-  return delivery;
+  await enqueueWhatsAppOutbound({
+    businessId: business.id,
+    messageId: stored.id,
+    to: conversation.contact.phoneNumber,
+    kind: "template",
+  });
+  scheduleWhatsAppOutboundWakeup();
+  return {
+    sent: true as const,
+    accepted: true as const,
+    delivered: false,
+    deliveryStatus: "PENDING",
+    providerMessageId,
+    reason: null,
+  };
 }
 
 export async function startOwnerWhatsAppTemplateConversation(
@@ -1733,6 +1871,21 @@ export async function startOwnerWhatsAppTemplateConversation(
   });
 
   return { ...delivery, conversationId: conversation.id };
+}
+
+function scheduleWhatsAppOutboundWakeup() {
+  after(async () => {
+    try {
+      await wakeAndDrainJobs(2);
+    } catch (error) {
+      console.error("whatsapp_outbound_wakeup_failed", {
+        code:
+          error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code).slice(0, 40)
+            : "unknown",
+      });
+    }
+  });
 }
 
 async function requireBusinessForUser(userId: string) {
