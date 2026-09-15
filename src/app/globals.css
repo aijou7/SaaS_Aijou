@@ -10161,6 +10161,24 @@ body.is-resizing-conversation * {
   outline: none;
 }
 
+.settings-account > div:last-child,
+.footer-user > div {
+  min-width: 0;
+}
+
+.settings-account strong,
+.settings-account span,
+.footer-user strong,
+.footer-user small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-user {
+  min-width: 0;
+}
+
 .app-workspace-sidebar-collapsed {
   grid-template-columns: 76px minmax(0, 1fr);
   gap: 12px;

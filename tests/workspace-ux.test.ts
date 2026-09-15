@@ -33,6 +33,7 @@ test("workspace keeps five primary tasks on top and contextual submenus on the l
   assert.doesNotMatch(appShell, /<nav className="primary-sidebar-nav"/);
   assert.match(appShell, /sidebar-context-heading/);
   assert.match(appShell, /<nav className="settings-nav"/);
+  assert.doesNotMatch(appShell, /label: "Butuh bantuan tim"/);
 });
 
 test("workspace typography and controls remain comfortably readable", () => {

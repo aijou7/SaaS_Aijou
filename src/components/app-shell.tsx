@@ -16,7 +16,6 @@ import {
   Megaphone,
   Package,
   ReceiptText,
-  Send,
   Settings,
   ShoppingBag,
   Tags,
@@ -77,7 +76,6 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
     title: "Kotak masuk",
     items: [
       { href: "/conversations", label: "Semua percakapan", icon: MessageCircle, key: "conversations", capability: "inbox:view" },
-      { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover", capability: "inbox:operate" },
       { href: "/quick-replies", label: "Balasan cepat", icon: Zap, key: "quick-replies", capability: "inbox:operate" },
       { href: "/message-templates", label: "Template WhatsApp", icon: MessageSquareText, key: "message-templates", capability: "inbox:operate" },
     ],
