@@ -383,7 +383,7 @@ function ClientConversationPanel(props: {
             </details>
           ) : null}
 
-          {!props.readOnly && props.quickReplies.length > 0 ? (
+          {!props.readOnly && !outsideWhatsAppWindow && props.quickReplies.length > 0 ? (
             <details className="quick-reply-strip">
               <summary>Gunakan balasan cepat</summary>
               <form action={sendOwnerReplyAction}>

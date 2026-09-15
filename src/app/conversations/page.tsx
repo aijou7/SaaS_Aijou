@@ -657,7 +657,7 @@ function ConversationDetailPanel({
             </details>
           ) : null}
 
-          {!readOnly && quickReplies.length > 0 ? (
+          {!readOnly && !outsideWhatsAppWindow && quickReplies.length > 0 ? (
             <details className="quick-reply-strip">
               <summary>Gunakan balasan cepat</summary>
               <form action={sendOwnerReplyAction}>
