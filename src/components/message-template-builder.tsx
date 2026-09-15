@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagePlus, Plus } from "lucide-react";
+import { ImagePlus, Plus, Save } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -41,7 +41,7 @@ export function MessageTemplateBuilder({ action, initialTemplate, imageUploadRea
           <div>
             <p className="eyebrow">{isEditing ? "Edit draft" : "Template baru"}</p>
             <h2>{isEditing ? "Edit template" : "Buat template"}</h2>
-            <p className="muted">Gunakan nama kecil dengan underscore, lalu isi komponen yang akan dikirim ke pelanggan.</p>
+            <p className="muted">{isEditing ? "Ubah isi draft, lalu klik Simpan perubahan. Draft tetap tersimpan sebagai Draft sampai kamu mengajukannya ke Meta." : "Gunakan nama kecil dengan underscore, lalu isi komponen yang akan dikirim ke pelanggan."}</p>
           </div>
         </div>
         <form className="form-grid" action={action} encType="multipart/form-data">
@@ -120,7 +120,7 @@ export function MessageTemplateBuilder({ action, initialTemplate, imageUploadRea
           </div>
           <div className="form-actions span-2">
             <button className="primary-button" type="submit">
-              <Plus size={16} aria-hidden="true" />
+              {isEditing ? <Save size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
               {isEditing ? "Simpan perubahan" : "Simpan sebagai draft"}
             </button>
             {isEditing ? <Link className="ghost-button" href="/message-templates">Batal edit</Link> : null}

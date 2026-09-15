@@ -67,6 +67,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
         </section>
 
         <MessageTemplateBuilder
+          key={editTemplate?.id ?? "new-template"}
           action={editTemplate ? updateMessageTemplateAction : createMessageTemplateAction}
           initialTemplate={editTemplate}
           imageUploadReady={page.imageUploadReady}

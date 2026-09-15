@@ -141,6 +141,8 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(messageTemplateActions, /updateMessageTemplate/);
   assert.match(messageTemplatesPage, /Ajukan ke Meta/);
   assert.match(messageTemplatesPage, /Edit draft/);
+  assert.match(messageTemplateBuilder, /Simpan perubahan/);
+  assert.match(messageTemplateBuilder, /useState\(initialTemplate\?\.body/);
   assert.match(whatsappTemplates, /message_templates/);
   assert.match(whatsappTemplates, /header_handle/);
 });
