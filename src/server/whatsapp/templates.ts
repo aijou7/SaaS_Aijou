@@ -13,6 +13,7 @@ import {
 
 const pageSize = "100";
 const maxPages = 3;
+const maxTemplateSampleBytes = 5 * 1024 * 1024;
 
 export type MetaWhatsAppTemplate = {
   id: string;
@@ -45,6 +46,20 @@ export type ApprovedWhatsAppTemplateOption = {
 export type ApprovedWhatsAppTemplateOptionsResult = {
   templates: ApprovedWhatsAppTemplateOption[];
   error: string | null;
+};
+
+export type SubmitMetaWhatsAppTemplateInput = {
+  name: string;
+  purpose: WhatsAppTemplatePurpose;
+  languageCode: string;
+  title: string | null;
+  body: string;
+  headerImageUrl: string | null;
+};
+
+export type SubmitMetaWhatsAppTemplateResult = {
+  id: string | null;
+  status: string | null;
 };
 
 type MetaTemplateRecord = {
@@ -180,6 +195,176 @@ export async function requireApprovedMetaWhatsAppTemplate(
   }
 
   return template;
+}
+
+export async function submitMetaWhatsAppTemplate(
+  businessId: string,
+  input: SubmitMetaWhatsAppTemplateInput,
+): Promise<SubmitMetaWhatsAppTemplateResult> {
+  const credentials = await getWhatsAppCredentialsForBusiness(businessId);
+
+  if (!credentials.wabaId || !credentials.accessToken) {
+    throw new Error("Hubungkan WhatsApp Cloud API sebelum mengajukan template ke Meta.");
+  }
+
+  if (input.headerImageUrl && input.title) {
+    throw new Error("Template dengan gambar tidak boleh memakai judul header teks. Kosongkan Judul lalu ajukan lagi.");
+  }
+
+  const bodyVariables = readBodyVariableNumbers(input.body);
+  const components: Array<Record<string, unknown>> = [];
+
+  if (input.headerImageUrl) {
+    const appId = readText(process.env.WHATSAPP_APP_ID, 128);
+    if (!appId) {
+      throw new Error("WHATSAPP_APP_ID belum dikonfigurasi. Tambahkan App ID Meta di Environment Variables Vercel.");
+    }
+
+    const headerHandle = await uploadMetaTemplateSample(
+      input.headerImageUrl,
+      input.name,
+      appId,
+      credentials.accessToken,
+      credentials.appSecret,
+    );
+    components.push({
+      type: "HEADER",
+      format: "IMAGE",
+      example: { header_handle: [headerHandle] },
+    });
+  } else if (input.title) {
+    components.push({ type: "HEADER", format: "TEXT", text: input.title });
+  }
+
+  components.push({
+    type: "BODY",
+    text: input.body,
+    ...(bodyVariables.length > 0
+      ? { example: { body_text: [bodyVariables.map((number) => `Contoh ${number}`)] } }
+      : {}),
+  });
+
+  const query = new URLSearchParams();
+  const appSecretProof = credentials.appSecret
+    ? createHmac("sha256", credentials.appSecret).update(credentials.accessToken).digest("hex")
+    : null;
+  if (appSecretProof) query.set("appsecret_proof", appSecretProof);
+
+  const response = await fetchWhatsAppGraph(
+    whatsAppGraphApiUrl(`${encodeURIComponent(credentials.wabaId)}/message_templates?${query.toString()}`),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credentials.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        name: input.name,
+        language: input.languageCode,
+        category: input.purpose,
+        components,
+      }),
+    },
+  );
+  const responseBody = await readWhatsAppGraphResponse(response);
+
+  if (!response.ok) {
+    throw new Error(metaSubmissionError(response.status, responseBody));
+  }
+
+  return {
+    id: isRecord(responseBody) ? readText(responseBody.id, 160) : null,
+    status: isRecord(responseBody) ? readText(responseBody.status, 64) : null,
+  };
+}
+
+async function uploadMetaTemplateSample(
+  imageUrl: string,
+  templateName: string,
+  appId: string,
+  accessToken: string,
+  appSecret: string | null,
+) {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(imageUrl);
+  } catch {
+    throw new Error("URL gambar template tidak valid.");
+  }
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Gambar template harus tersimpan pada URL HTTPS.");
+  }
+
+  const imageResponse = await fetchWhatsAppGraph(imageUrl, { cache: "no-store" });
+  if (!imageResponse.ok) throw new Error("Gambar template tidak bisa dibaca untuk dikirim ke Meta.");
+
+  const contentType = imageResponse.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "image/jpeg" && contentType !== "image/png") {
+    throw new Error("Meta hanya menerima contoh gambar JPG atau PNG untuk header template.");
+  }
+
+  const buffer = Buffer.from(await imageResponse.arrayBuffer());
+  if (buffer.length === 0 || buffer.length > maxTemplateSampleBytes) {
+    throw new Error("Ukuran contoh gambar template harus antara 1 byte dan 5 MB.");
+  }
+
+  const sessionQuery = new URLSearchParams({
+    file_length: String(buffer.length),
+    file_type: contentType,
+    file_name: `${templateName}.${contentType === "image/png" ? "png" : "jpg"}`,
+  });
+  if (appSecret) {
+    sessionQuery.set("appsecret_proof", createHmac("sha256", appSecret).update(accessToken).digest("hex"));
+  }
+
+  const sessionResponse = await fetchWhatsAppGraph(
+    whatsAppGraphApiUrl(`${encodeURIComponent(appId)}/uploads?${sessionQuery.toString()}`),
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    },
+  );
+  const sessionBody = await readWhatsAppGraphResponse(sessionResponse);
+  const uploadId = isRecord(sessionBody) ? readText(sessionBody.id, 2_000) : null;
+  if (!sessionResponse.ok || !uploadId) {
+    throw new Error(metaSubmissionError(sessionResponse.status, sessionBody, "Sesi upload gambar Meta gagal dibuat"));
+  }
+
+  const uploadResponse = await fetchWhatsAppGraph(whatsAppGraphApiUrl(uploadId), {
+    method: "POST",
+    headers: {
+      Authorization: `OAuth ${accessToken}`,
+      "Content-Type": contentType,
+      file_offset: "0",
+    },
+    body: buffer,
+  });
+  const uploadBody = await readWhatsAppGraphResponse(uploadResponse);
+  const headerHandle = isRecord(uploadBody) ? readText(uploadBody.h, 4_096) : null;
+  if (!uploadResponse.ok || !headerHandle) {
+    throw new Error(metaSubmissionError(uploadResponse.status, uploadBody, "Upload contoh gambar ke Meta gagal"));
+  }
+
+  return headerHandle;
+}
+
+function readBodyVariableNumbers(body: string) {
+  const numbers = [...body.matchAll(/\{\{\s*(\d+)\s*\}\}/g)]
+    .map((match) => Number(match[1]))
+    .filter((number, index, values) => Number.isSafeInteger(number) && number > 0 && values.indexOf(number) === index)
+    .sort((left, right) => left - right);
+  if (numbers.some((number, index) => number !== index + 1)) {
+    throw new Error("Variabel body harus berurutan mulai dari {{1}}.");
+  }
+  return numbers;
+}
+
+function metaSubmissionError(status: number, body: unknown, prefix = "Pengajuan template ke Meta gagal") {
+  const providerMessage = isRecord(body) && isRecord(body.error) ? readText(body.error.message, 300) : null;
+  if (status === 401) return `${prefix}: token Meta tidak valid atau sudah kedaluwarsa.`;
+  if (status === 403) return `${prefix}: token belum memiliki izin WhatsApp Business Management.`;
+  return providerMessage ? `${prefix}: ${providerMessage}` : `${prefix}. Coba lagi setelah refresh.`;
 }
 
 function readMetaTemplates(body: unknown) {

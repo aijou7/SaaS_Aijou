@@ -1,10 +1,19 @@
-import { Prisma, WhatsAppTemplatePurpose, WorkspaceRole } from "@/generated/prisma-beta/client";
+import {
+  Prisma,
+  WhatsAppTemplatePurpose,
+  WhatsAppTemplateStatus,
+  WorkspaceRole,
+} from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
-import { listMetaWhatsAppTemplates, type MetaWhatsAppTemplate } from "@/server/whatsapp/templates";
+import {
+  listMetaWhatsAppTemplates,
+  submitMetaWhatsAppTemplate,
+  type MetaWhatsAppTemplate,
+} from "@/server/whatsapp/templates";
 
 const maxImageBytes = 5 * 1024 * 1024;
-const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedImageTypes = new Set(["image/jpeg", "image/png"]);
 
 type MessageTemplateFilters = {
   q?: string;
@@ -132,6 +141,53 @@ export async function createMessageTemplate(userId: string, formData: FormData) 
   }
 }
 
+export async function submitMessageTemplate(userId: string, templateId: string) {
+  const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  const template = await prisma.whatsAppTemplate.findFirst({
+    where: { id: templateId, businessId: access.businessId },
+    select: {
+      id: true,
+      name: true,
+      purpose: true,
+      languageCode: true,
+      title: true,
+      body: true,
+      headerImageUrl: true,
+      status: true,
+    },
+  });
+
+  if (!template) throw new Error("Template draft tidak ditemukan.");
+  if (template.status !== WhatsAppTemplateStatus.DRAFT) {
+    throw new Error("Hanya template dengan status Draft yang bisa diajukan ke Meta.");
+  }
+
+  const metaSync = await listMetaWhatsAppTemplates(access.businessId);
+  if (metaSync.error) throw new Error(metaSync.error);
+
+  const existing = metaSync.templates.find(
+    (candidate) => candidate.name === template.name && candidate.languageCode === template.languageCode,
+  );
+  if (existing) {
+    await prisma.whatsAppTemplate.update({
+      where: { id: template.id },
+      data: { status: existing.status, rejectionReason: existing.rejectionReason },
+    });
+    if (existing.status === WhatsAppTemplateStatus.APPROVED || existing.status === WhatsAppTemplateStatus.IN_REVIEW) {
+      return existing;
+    }
+    throw new Error("Template dengan nama ini sudah ada di Meta dan ditolak. Gunakan nama template baru atau hapus versi Meta terlebih dahulu.");
+  }
+
+  await submitMetaWhatsAppTemplate(access.businessId, template);
+  await prisma.whatsAppTemplate.update({
+    where: { id: template.id },
+    data: { status: WhatsAppTemplateStatus.IN_REVIEW, rejectionReason: null },
+  });
+
+  return template;
+}
+
 function parseMessageTemplateFormData(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim().toLowerCase();
   const purpose = String(formData.get("purpose") ?? "UTILITY") as WhatsAppTemplatePurpose;
@@ -157,7 +213,7 @@ function parseMessageTemplateFormData(formData: FormData) {
   if (body.length > 1024) throw new Error("Isi pesan maksimal 1.024 karakter.");
 
   if (image && (!allowedImageTypes.has(image.type) || image.size > maxImageBytes)) {
-    throw new Error("Gambar harus JPG, PNG, atau WEBP dan maksimal 5 MB.");
+    throw new Error("Gambar harus JPG atau PNG dan maksimal 5 MB.");
   }
 
   return { name, purpose, languageCode, title, body, image };

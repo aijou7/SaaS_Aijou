@@ -7,6 +7,7 @@ const collapsibleWorkspace = readFileSync("src/components/collapsible-app-worksp
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const broadcasts = readFileSync("src/app/broadcasts/page.tsx", "utf8");
+const messageTemplatesPage = readFileSync("src/app/message-templates/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
 const conversationWorkspace = readFileSync("src/components/conversation-workspace.tsx", "utf8");
 const modeControls = readFileSync("src/components/conversation-mode-controls.tsx", "utf8");
@@ -26,6 +27,8 @@ const operationForms = [
 const styles = readFileSync("src/app/globals.css", "utf8");
 const messageTemplateBuilder = readFileSync("src/components/message-template-builder.tsx", "utf8");
 const messageTemplateServer = readFileSync("src/server/message-templates/message-templates.ts", "utf8");
+const messageTemplateActions = readFileSync("src/app/message-templates/actions.ts", "utf8");
+const whatsappTemplates = readFileSync("src/server/whatsapp/templates.ts", "utf8");
 
 test("workspace keeps five primary tasks on top and contextual submenus on the left", () => {
   for (const label of [
@@ -134,4 +137,8 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(broadcastServer, /isMarketingContactEligible/);
   assert.match(messageTemplateBuilder, /name="headerImage"/);
   assert.match(messageTemplateServer, /BLOB_READ_WRITE_TOKEN/);
+  assert.match(messageTemplateActions, /submitMessageTemplate/);
+  assert.match(messageTemplatesPage, /Ajukan ke Meta/);
+  assert.match(whatsappTemplates, /message_templates/);
+  assert.match(whatsappTemplates, /header_handle/);
 });

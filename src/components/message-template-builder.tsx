@@ -52,8 +52,8 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
           </label>
           <label>
             Judul <span className="optional-label">opsional</span>
-            <input name="title" type="text" maxLength={60} placeholder="Contoh: Coba Aijou AI Gratis" value={title} onChange={(event) => setTitle(event.target.value)} />
-            <small>Maksimal 60 karakter, tanpa variabel.</small>
+            <input name="title" type="text" maxLength={60} placeholder="Contoh: Coba Aijou AI Gratis" value={title} disabled={Boolean(previewUrl)} onChange={(event) => setTitle(event.target.value)} />
+            <small>{previewUrl ? "Header Meta memakai gambar, jadi judul teks dinonaktifkan." : "Maksimal 60 karakter, tanpa variabel."}</small>
           </label>
           <label className="span-2">
             Isi pesan
@@ -66,11 +66,12 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
               <input
                 name="headerImage"
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png"
                 disabled={!imageUploadReady}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   setPreviewUrl(file ? URL.createObjectURL(file) : null);
+                  if (file) setTitle("");
                 }}
               />
               {previewUrl ? (
@@ -79,7 +80,7 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
                 <>
                   <ImagePlus size={22} aria-hidden="true" />
                   <strong>Tambah gambar</strong>
-                  <span>JPG, PNG, atau WEBP · maksimal 5 MB</span>
+                  <span>JPG atau PNG · maksimal 5 MB</span>
                 </>
               )}
             </label>
@@ -131,7 +132,7 @@ export function MessageTemplateBuilder({ action, imageUploadReady = true }: Mess
         </div>
         <div className="template-preview-note">
           <strong>Catatan Meta</strong>
-          <p>Draft ini belum otomatis diajukan ke WhatsApp Manager. Setelah disimpan, ajukan komponennya melalui Meta untuk mendapatkan status Approved.</p>
+          <p>Simpan sebagai draft dulu, lalu klik “Ajukan ke Meta” di template yang tersimpan untuk memulai review WhatsApp Manager.</p>
         </div>
       </div>
     </section>

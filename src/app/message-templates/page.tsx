@@ -2,8 +2,12 @@ import { CheckCircle2, Clock3, FileText, ImagePlus, Search, XCircle } from "luci
 import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createMessageTemplateAction } from "@/app/message-templates/actions";
+import {
+  createMessageTemplateAction,
+  submitMessageTemplateAction,
+} from "@/app/message-templates/actions";
 import { AppShell } from "@/components/app-shell";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import { MessageTemplateBuilder } from "@/components/message-template-builder";
 import { getSession } from "@/lib/session";
 import { getMessageTemplatesPage } from "@/server/message-templates/message-templates";
@@ -20,6 +24,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
   const params = searchParams ? await searchParams : {};
   const q = singleParam(params.q)?.trim().slice(0, 120) ?? "";
   const created = singleParam(params.created) === "1";
+  const submitted = singleParam(params.submitted) === "1";
   const page = await getMessageTemplatesPage(session.userId, { q });
 
   return (
@@ -42,6 +47,7 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
         </div>
 
         {created ? <div className="success-banner" role="status">Template berhasil disimpan sebagai draft.</div> : null}
+        {submitted ? <div className="success-banner" role="status">Template berhasil diajukan ke Meta dan sedang menunggu review.</div> : null}
         {page.metaSyncError ? <div className="settings-note" role="alert">{page.metaSyncError}</div> : null}
         {page.metaSyncTruncated ? <div className="settings-note" role="status">Meta mengembalikan lebih dari 300 template; daftar menampilkan 300 pertama.</div> : null}
 
@@ -83,6 +89,12 @@ export default async function MessageTemplatesPage({ searchParams }: MessageTemp
                       {template.title ? <h3>{template.title}</h3> : null}
                       <p>{template.body}</p>
                       {template.rejectionReason ? <small className="template-rejection">Alasan ditolak: {template.rejectionReason}</small> : null}
+                      {template.source === "LOCAL" && template.status === "DRAFT" ? (
+                        <form className="form-actions message-template-submit-actions" action={submitMessageTemplateAction}>
+                          <input type="hidden" name="templateId" value={template.id} />
+                          <FormSubmitButton className="primary-button" label="Ajukan ke Meta" pendingLabel="Mengajukan…" />
+                        </form>
+                      ) : null}
                     </div>
                   </article>
                 ))}

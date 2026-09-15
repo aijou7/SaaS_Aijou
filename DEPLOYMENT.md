@@ -176,6 +176,7 @@ Tanpa token ini, production masih dapat memproses buffer receipt dalam request y
 Credential utama disarankan disimpan per workspace dari halaman `/integrations` setelah `DATA_ENCRYPTION_KEY` production aktif. Environment berikut dapat dipakai untuk bootstrap workspace awal:
 
 ```env
+WHATSAPP_APP_ID=""
 WHATSAPP_VERIFY_TOKEN=""
 WHATSAPP_APP_SECRET=""
 WHATSAPP_ACCESS_TOKEN=""
@@ -204,6 +205,8 @@ https://APP_DOMAIN/api/webhooks/whatsapp
 ```
 
 App Secret tidak pernah dikirim sebagai plaintext ke Graph API. Server hanya mengirim HMAC `appsecret_proof` untuk memastikan token dan App Secret berasal dari Meta app yang sama, lalu memakai secret tersebut untuk memverifikasi signature `x-hub-signature-256` pada setiap webhook masuk.
+
+Pengajuan template WhatsApp dengan gambar juga membutuhkan `WHATSAPP_APP_ID` agar server dapat mengunggah contoh gambar ke Resumable Upload API Meta sebelum membuat template. Simpan App ID sebagai environment variable Vercel, bukan di database atau source control.
 
 ### Telegram Bot API
 

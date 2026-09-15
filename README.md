@@ -96,7 +96,7 @@ Salin `.env.example` sebagai sumber daftar lengkap. Kelompok pentingnya:
 - Bootstrap: `SEED_OWNER_*`, `SEED_BUSINESS_NAME`, `SEED_ROTATE_OWNER_PASSWORD`, dan `SEED_REFRESH_DEMO_DATA`.
 - AI: `GROQ_API_KEY`, `GROQ_MODEL`, dan `GROQ_VISION_MODEL`.
 - Receipt storage: `BLOB_READ_WRITE_TOKEN` untuk production.
-- WhatsApp: token Meta, phone number ID, Graph API version, timeout, dan media limit.
+- WhatsApp: App ID, token Meta, phone number ID, Graph API version, timeout, dan media limit.
 - Telegram: hanya timeout request provider; bot token disimpan per workspace dari dashboard.
 - SaaS billing: `MIDTRANS_SERVER_KEY` dan `MIDTRANS_ENVIRONMENT` (`sandbox` atau `production`).
 

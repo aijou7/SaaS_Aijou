@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { createMessageTemplate } from "@/server/message-templates/message-templates";
+import {
+  createMessageTemplate,
+  submitMessageTemplate,
+} from "@/server/message-templates/message-templates";
 
 export async function createMessageTemplateAction(formData: FormData) {
   const session = await getSession();
@@ -14,4 +17,18 @@ export async function createMessageTemplateAction(formData: FormData) {
   revalidatePath("/message-templates");
   revalidatePath("/broadcasts");
   redirect("/message-templates?created=1");
+}
+
+export async function submitMessageTemplateAction(formData: FormData) {
+  const session = await getSession();
+
+  if (!session) redirect("/login");
+
+  const templateId = String(formData.get("templateId") ?? "").trim();
+  if (!templateId) throw new Error("Template draft tidak ditemukan.");
+
+  await submitMessageTemplate(session.userId, templateId);
+  revalidatePath("/message-templates");
+  revalidatePath("/broadcasts");
+  redirect("/message-templates?submitted=1");
 }

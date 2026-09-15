@@ -10130,6 +10130,7 @@ body.is-resizing-conversation * {
 .message-template-row h3 { margin: 11px 0 4px; color: #303b50; font-size: 13px; }
 .message-template-row p { margin: 7px 0 0; color: #526078; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
 .template-rejection { display: block; margin-top: 8px; color: #b42318; font-size: 11px; }
+.message-template-submit-actions { margin-top: 11px; justify-content: flex-start; }
 
 @media (max-width: 900px) {
   .message-template-builder-grid { grid-template-columns: 1fr; }
