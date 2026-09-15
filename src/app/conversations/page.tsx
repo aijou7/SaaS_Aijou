@@ -29,6 +29,11 @@ import { AppShell } from "@/components/app-shell";
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
+import {
+  ConversationContextResizer,
+  ConversationLayoutToggle,
+  ConversationWorkspace,
+} from "@/components/conversation-workspace";
 import { InboxLiveRefresher } from "@/components/inbox-live-refresher";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { FastConversationLink } from "@/components/fast-conversation-link";
@@ -170,8 +175,9 @@ function ChatInboxView({
   readOnly: boolean;
 }) {
   return (
-    <section className="chat-page">
-      <aside className="chat-inbox">
+    <ConversationWorkspace
+      leftPanel={
+        <aside className="chat-inbox">
         <InboxLiveRefresher initialState={liveState} />
         <form className="chat-filter-form" action="/conversations" method="get">
           <input
@@ -230,7 +236,8 @@ function ChatInboxView({
             ) : <span />}
           </div>
         ) : null}
-      </aside>
+        </aside>
+      }>
 
       <main className="chat-stage">
         <LiveConversationDetail
@@ -258,7 +265,7 @@ function ChatInboxView({
           readOnly={readOnly}
         />
       </main>
-    </section>
+    </ConversationWorkspace>
   );
 }
 
@@ -553,9 +560,13 @@ function ConversationDetailPanel({
             <p>{formatContactAddress(selectedConversation.channel, selectedConversation.contactPhone)}</p>
           </div>
         </div>
-        <span className={selectedConversation.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
-          {formatConversationStatus(selectedConversation.status)}
-        </span>
+        <div className="chat-header-actions">
+          <span className={selectedConversation.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
+            {formatConversationStatus(selectedConversation.status)}
+          </span>
+          <ConversationModeControls conversationId={selectedConversation.id} status={selectedConversation.status} />
+          <ConversationLayoutToggle compact />
+        </div>
       </div>
 
       <div className="chat-detail-body">
@@ -626,6 +637,7 @@ function ConversationDetailPanel({
           )}
         </div>
 
+        <ConversationContextResizer />
         <aside className="chat-context-panel" aria-label="Detail percakapan">
           {!readOnly ? <section className="chat-context-section chat-context-controls">
             <div className="chat-context-heading">
@@ -633,7 +645,6 @@ function ConversationDetailPanel({
                 <strong>Kendali chat</strong>
                 <span>Atur siapa yang menjawab pelanggan.</span>
               </div>
-              <ConversationModeControls conversationId={selectedConversation.id} status={selectedConversation.status} />
             </div>
           </section> : null}
 

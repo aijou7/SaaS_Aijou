@@ -12,6 +12,7 @@ import {
   LifeBuoy,
   LogOut,
   MessageCircle,
+  MessageSquareText,
   Megaphone,
   Package,
   ReceiptText,
@@ -77,6 +78,7 @@ const moduleNavigation: Record<ModuleKey, { title: string; items: NavigationItem
       { href: "/conversations", label: "Semua percakapan", icon: MessageCircle, key: "conversations", capability: "inbox:view" },
       { href: "/conversations?status=HUMAN_NEEDED", label: "Butuh bantuan tim", icon: Send, key: "human-takeover", capability: "inbox:operate" },
       { href: "/quick-replies", label: "Balasan cepat", icon: Zap, key: "quick-replies", capability: "inbox:operate" },
+      { href: "/message-templates", label: "Template WhatsApp", icon: MessageSquareText, key: "message-templates", capability: "inbox:operate" },
     ],
   },
   ai: {
@@ -135,6 +137,7 @@ const moduleByActive: Record<string, ModuleKey> = {
   conversations: "inbox",
   "human-takeover": "inbox",
   "quick-replies": "inbox",
+  "message-templates": "inbox",
   notifications: "inbox",
   agent: "ai",
   knowledge: "ai",

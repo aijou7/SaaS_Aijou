@@ -10,6 +10,10 @@ import {
 import { ChatMessageThread } from "@/components/chat-message-thread";
 import { ChatReplyComposer } from "@/components/chat-reply-composer";
 import { ConversationModeControls } from "@/components/conversation-mode-controls";
+import {
+  ConversationContextResizer,
+  ConversationLayoutToggle,
+} from "@/components/conversation-workspace";
 import { loadConversationDetail } from "@/components/fast-conversation-link";
 import { isWhatsAppCustomerCareWindowOpen } from "@/lib/whatsapp-window";
 
@@ -332,9 +336,13 @@ function ClientConversationPanel(props: {
             <p>{formatAddress(detail.channel, detail.contactPhone)}</p>
           </div>
         </div>
-        <span className={detail.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
-          {formatLabel(detail.status)}
-        </span>
+        <div className="chat-header-actions">
+          <span className={detail.status === "HUMAN_NEEDED" ? "status status-warning" : "status"}>
+            {formatLabel(detail.status)}
+          </span>
+          {!props.readOnly ? <ConversationModeControls conversationId={detail.id} status={detail.status} /> : null}
+          <ConversationLayoutToggle compact />
+        </div>
       </div>
 
       <div className="chat-detail-body">
@@ -391,11 +399,11 @@ function ClientConversationPanel(props: {
           )}
         </div>
 
+        <ConversationContextResizer />
         <aside className="chat-context-panel" aria-label="Detail percakapan">
           {!props.readOnly ? <section className="chat-context-section chat-context-controls">
             <div className="chat-context-heading">
               <div><strong>Kendali chat</strong><span>Atur siapa yang menjawab pelanggan.</span></div>
-              <ConversationModeControls conversationId={detail.id} status={detail.status} />
             </div>
           </section> : null}
 

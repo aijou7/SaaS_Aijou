@@ -277,6 +277,19 @@ enum WorkflowRunStatus {
   SKIPPED
 }
 
+enum WhatsAppTemplatePurpose {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum WhatsAppTemplateStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                    String                 @id @default(cuid())
   name                  String
@@ -361,6 +374,7 @@ model Business {
   customerSegments     CustomerSegment[]
   complaints           Complaint[]
   broadcasts           BroadcastCampaign[]
+  whatsappTemplates    WhatsAppTemplate[]
   orders               Order[]
   shippingRates        ShippingRate[]
   workflows            AutomationWorkflow[]
@@ -636,6 +650,27 @@ model QuickReply {
   @@unique([businessId, name])
   @@index([businessId, isActive, sortOrder])
   @@map("quick_replies")
+}
+
+model WhatsAppTemplate {
+  id                    String                  @id @default(cuid())
+  businessId            String
+  name                  String
+  purpose               WhatsAppTemplatePurpose @default(UTILITY)
+  languageCode          String                  @default("id")
+  title                 String?
+  body                  String
+  headerImageUrl        String?
+  headerImagePath       String?
+  status                WhatsAppTemplateStatus  @default(DRAFT)
+  rejectionReason       String?
+  business              Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId, status, updatedAt])
+  @@map("whatsapp_templates")
 }
 
 model AgentSettings {
