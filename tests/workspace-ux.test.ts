@@ -117,7 +117,10 @@ test("keeps inbox resizing separate from the intentional collapse control", () =
   assert.match(conversationWorkspace, /role="separator"/);
   assert.match(conversationWorkspace, /className="chat-resizer-collapse"/);
   assert.match(conversationWorkspace, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
-  assert.match(conversationWorkspace, /Sembunyikan daftar percakapan/);
+  assert.match(conversationWorkspace, /collapsed=\{!leftOpen\}/);
+  assert.match(conversationWorkspace, /onToggle=\{\(\) => setLeftOpen\(\(open\) => !open\)\}/);
+  assert.match(conversationWorkspace, /props\.collapsed \? "Tampilkan daftar percakapan" : "Sembunyikan daftar percakapan"/);
+  assert.doesNotMatch(conversationWorkspace, /className="chat-layout-toggle"[\s\S]*Tampilkan daftar percakapan/);
 });
 
 test("gives slow chat actions immediate feedback and queues WhatsApp delivery", () => {

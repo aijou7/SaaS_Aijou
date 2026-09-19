@@ -14,6 +14,7 @@ import {
   getSafeOwnerEmailChangeError,
   requestOwnerEmailChange,
 } from "@/server/auth/owner-email-change";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 
 export async function updateAccountProfileAction(formData: FormData) {
   const session = await getSession();
@@ -142,7 +143,6 @@ export async function confirmOwnerEmailChangeAction(formData: FormData) {
 }
 
 function normalizeOwnerPhone(value: string) {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("0")) digits = `62${digits.slice(1)}`;
+  const digits = normalizeWhatsAppPhone(value);
   return /^\d{8,18}$/.test(digits) ? digits : null;
 }

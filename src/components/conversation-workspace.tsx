@@ -98,15 +98,6 @@ export function ConversationWorkspace(props: { leftPanel: ReactNode; children: R
             props.leftPanel
           ) : (
             <div className="chat-layout-collapsed-rail">
-              <button
-                className="chat-layout-toggle"
-                type="button"
-                onClick={() => setLeftOpen(true)}
-                aria-label="Tampilkan daftar percakapan"
-                title="Tampilkan daftar percakapan"
-              >
-                <span aria-hidden="true">›</span>
-              </button>
               <span className="chat-layout-rail-label">Daftar chat</span>
             </div>
           )}
@@ -118,7 +109,8 @@ export function ConversationWorkspace(props: { leftPanel: ReactNode; children: R
           min={MIN_INBOX_WIDTH}
           max={MAX_INBOX_WIDTH}
           onChange={setInboxWidth}
-          onCollapse={() => setLeftOpen(false)}
+          collapsed={!leftOpen}
+          onToggle={() => setLeftOpen((open) => !open)}
         />
 
         {props.children}
@@ -164,7 +156,8 @@ function ConversationColumnResizer(props: {
   min: number;
   max: number;
   onChange: (value: number) => void;
-  onCollapse?: () => void;
+  collapsed?: boolean;
+  onToggle?: () => void;
   direction?: "inbox" | "context";
 }) {
   const direction = props.direction ?? "inbox";
@@ -225,20 +218,20 @@ function ConversationColumnResizer(props: {
       }}
     >
       <span aria-hidden="true" />
-      {props.onCollapse ? (
+      {props.onToggle ? (
         <button
           className="chat-resizer-collapse"
           type="button"
-          aria-label="Sembunyikan daftar percakapan"
-          title="Sembunyikan daftar percakapan"
+          aria-label={props.collapsed ? "Tampilkan daftar percakapan" : "Sembunyikan daftar percakapan"}
+          title={props.collapsed ? "Tampilkan daftar percakapan" : "Sembunyikan daftar percakapan"}
           onPointerDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            props.onCollapse?.();
+            props.onToggle?.();
           }}
         >
-          ‹
+          {props.collapsed ? "›" : "‹"}
         </button>
       ) : null}
     </div>

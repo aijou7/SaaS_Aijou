@@ -6,6 +6,7 @@ import {
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppTemplateMessage } from "@/server/whatsapp/client";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 import {
   listApprovedMetaWhatsAppTemplateOptions,
   requireApprovedMetaWhatsAppTemplate,
@@ -363,14 +364,13 @@ function parseManualPhoneNumbers(value: FormDataEntryValue | null) {
   const invalidIndex = normalized.findIndex((item) => item === null);
   if (invalidIndex >= 0) {
     const invalidInput = numbers[invalidIndex] ?? "";
-    throw new Error(`Nomor WhatsApp tidak valid: ${invalidInput}. Gunakan format 62812xxxxxxx.`);
+    throw new Error(`Nomor WhatsApp tidak valid: ${invalidInput}. Contoh format: 08xxxx, 62812xxxxxxx, atau +62 812xxxxxxx.`);
   }
   return [...new Set(normalized.filter((item): item is string => Boolean(item)))];
 }
 
 function normalizeBroadcastPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
+  const normalized = normalizeWhatsAppPhone(value);
   return /^\d{7,15}$/.test(normalized) ? normalized : null;
 }
 

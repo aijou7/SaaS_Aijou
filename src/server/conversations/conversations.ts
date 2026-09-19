@@ -36,6 +36,7 @@ import {
   sendWhatsAppTemplateMessage,
   sendWhatsAppTextMessage,
 } from "@/server/whatsapp/client";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 import { deliverStoredTelegramTextMessage } from "@/server/telegram/delivery";
 import { normalizeTelegramChatId } from "@/server/telegram/payload";
 import {
@@ -1945,11 +1946,10 @@ function telegramChatIdFromContact(value: string) {
 }
 
 function normalizeOutboundWhatsAppPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
+  const normalized = normalizeWhatsAppPhone(value);
 
   if (!/^\d{7,15}$/.test(normalized)) {
-    throw new Error("Nomor WhatsApp tidak valid. Gunakan format internasional, contoh 62812xxxxxxx.");
+    throw new Error("Nomor WhatsApp tidak valid. Contoh format: 08xxxx, 62812xxxxxxx, atau +62 812xxxxxxx.");
   }
 
   return normalized;

@@ -3,6 +3,7 @@ import { UserRole } from "@/generated/prisma-beta/client";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { createEmptyOwnedWorkspace } from "@/server/auth/workspace-bootstrap";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 
 export class BetaInviteError extends Error {
   constructor(message: string) {
@@ -199,9 +200,8 @@ function cleanEmail(value: string | null | undefined) {
 }
 
 function normalizePhone(value: string | null | undefined) {
-  const phone = value?.replace(/[^\d+]/g, "") || "";
-  if (!phone) return null;
-  const normalized = phone.startsWith("+") ? phone.slice(1) : phone;
+  const normalized = normalizeWhatsAppPhone(value ?? "");
+  if (!normalized) return null;
   if (!/^\d{8,18}$/.test(normalized)) {
     throw new BetaInviteError("Nomor WhatsApp owner tidak valid.");
   }

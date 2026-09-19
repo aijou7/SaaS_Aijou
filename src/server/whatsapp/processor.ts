@@ -30,6 +30,7 @@ import {
   type WhatsAppWebhookPayload,
 } from "@/server/whatsapp/payload";
 import { downloadWhatsAppMedia } from "@/server/whatsapp/client";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 import {
   findBusinessForQueuedWhatsApp,
   findBusinessForWhatsAppMessage,
@@ -505,16 +506,10 @@ function isAuthorizedOwnerMessage(from: string | undefined, ownerPhone: string |
 }
 
 function normalizePhoneNumber(value?: string) {
-  const digits = value?.replace(/\D/g, "") ?? "";
-  let normalized = digits.startsWith("00") ? digits.slice(2) : digits;
-  const countryCode = /^\d{1,4}$/.test(process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "")
+  const defaultCountryCode = /^\d{1,4}$/.test(process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "")
     ? process.env.WHATSAPP_DEFAULT_COUNTRY_CODE!
     : "62";
-
-  if (normalized.startsWith("0")) {
-    normalized = `${countryCode}${normalized.slice(1)}`;
-  }
-
+  const normalized = normalizeWhatsAppPhone(value ?? "", defaultCountryCode);
   return normalized.length >= 7 ? normalized : "";
 }
 

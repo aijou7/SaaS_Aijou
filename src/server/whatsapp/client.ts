@@ -5,6 +5,7 @@ import {
   readWhatsAppGraphResponse,
   whatsAppGraphApiUrl,
 } from "@/server/whatsapp/graph-api";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 
 type SendTextMessageParams = {
   to: string;
@@ -464,8 +465,7 @@ function configuredMaxMediaBytes() {
 }
 
 function normalizeRecipient(value: string) {
-  const digits = value.replace(/\D/g, "");
-  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
+  const normalized = normalizeWhatsAppPhone(value);
   return /^\d{7,15}$/.test(normalized) ? normalized : "";
 }
 

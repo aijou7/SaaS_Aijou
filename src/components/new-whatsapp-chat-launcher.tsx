@@ -76,10 +76,10 @@ export function NewWhatsAppChatLauncher(props: {
                   type="tel"
                   inputMode="tel"
                   maxLength={24}
-                  placeholder="62812xxxxxxx"
+                  placeholder="08 / +62 / 62812xxxxxxx"
                   required
                 />
-                <small>Gunakan format internasional, misalnya 62812xxxxxxx.</small>
+                <small>08, +62, 62, spasi, dan strip diterima lalu dinormalisasi otomatis.</small>
               </label>
               <ApprovedWhatsAppTemplatePicker {...props.approvedWhatsAppTemplates} />
             </div>

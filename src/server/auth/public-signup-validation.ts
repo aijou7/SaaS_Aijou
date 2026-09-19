@@ -1,4 +1,5 @@
 import { validatePasswordStrength } from "@/lib/password";
+import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 import {
   normalizeBillingCycle,
   normalizePublicPlanId,
@@ -122,9 +123,8 @@ function normalizeEmail(value: string | null | undefined) {
 }
 
 function normalizePhone(value: string | null | undefined) {
-  const phone = value?.trim().replace(/[^\d+]/g, "") ?? "";
-  if (!phone) return null;
-  const normalized = phone.startsWith("+") ? phone.slice(1) : phone;
+  const normalized = normalizeWhatsAppPhone(value?.trim() ?? "");
+  if (!normalized) return null;
   if (!/^\d{8,18}$/.test(normalized)) {
     throw new PublicSignupError("Nomor WhatsApp owner tidak valid.");
   }
