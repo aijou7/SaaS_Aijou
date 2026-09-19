@@ -19,11 +19,28 @@ test("disabled business hours preserve 24/7 behavior", async () => {
 });
 
 test("broadcast requires current opt-in and rejects opted-out contacts", async () => {
-  const { isMarketingContactEligible } = await import("@/server/operations/broadcasts");
+  const {
+    isMarketingContactCooldownElapsed,
+    isMarketingContactEligible,
+    isMarketingContactSendable,
+    isMetaBroadcastThrottleError,
+  } = await import("@/server/operations/broadcasts");
   const optIn = new Date("2026-01-01T00:00:00Z");
   assert.equal(isMarketingContactEligible({ phoneNumber: "628123", marketingOptInAt: optIn, marketingOptOutAt: null }), true);
   assert.equal(isMarketingContactEligible({ phoneNumber: "628123", marketingOptInAt: optIn, marketingOptOutAt: new Date("2026-02-01T00:00:00Z") }), false);
   assert.equal(isMarketingContactEligible({ phoneNumber: "", marketingOptInAt: optIn, marketingOptOutAt: null }), false);
+  const now = new Date("2026-09-20T00:00:00Z");
+  assert.equal(isMarketingContactCooldownElapsed(new Date("2026-09-13T00:00:01Z"), now), false);
+  assert.equal(isMarketingContactSendable({ phoneNumber: "628123", marketingOptInAt: optIn, marketingOptOutAt: null, lastContactedAt: null }, now), true);
+  assert.equal(isMetaBroadcastThrottleError("131048"), true);
+  assert.equal(isMetaBroadcastThrottleError("131026"), false);
+});
+
+test("recognizes explicit marketing opt-out messages", async () => {
+  const { isMarketingOptOutMessage } = await import("@/server/operations/marketing-consent");
+  assert.equal(isMarketingOptOutMessage("STOP"), true);
+  assert.equal(isMarketingOptOutMessage(" berhenti! "), true);
+  assert.equal(isMarketingOptOutMessage("tolong stop promo"), false);
 });
 
 test("shipping quote applies base price and rounded-up kilogram charge", async () => {

@@ -144,6 +144,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: false as const,
       reason: "whatsapp_credentials_missing",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
   if (!recipient) {
@@ -151,6 +152,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: false as const,
       reason: "whatsapp_recipient_invalid",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
   if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
@@ -158,6 +160,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: false as const,
       reason: "whatsapp_template_name_invalid",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
   if (!/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(languageCode)) {
@@ -165,6 +168,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: false as const,
       reason: "whatsapp_template_language_invalid",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
   if (
@@ -175,6 +179,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: false as const,
       reason: "whatsapp_template_parameters_invalid",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
 
@@ -224,6 +229,7 @@ export async function sendWhatsAppTemplateMessage(
           ? "whatsapp_graph_api_rejected"
           : "whatsapp_provider_message_id_missing",
         providerMessageId: null,
+        providerErrorCode: extractProviderErrorCode(body),
         body,
       };
     }
@@ -231,6 +237,7 @@ export async function sendWhatsAppTemplateMessage(
       sent: true as const,
       status: response.status,
       providerMessageId,
+      providerErrorCode: null,
       body,
     };
   } catch (error) {
@@ -240,6 +247,7 @@ export async function sendWhatsAppTemplateMessage(
         ? "whatsapp_request_timeout"
         : "whatsapp_network_error",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
 }
@@ -436,6 +444,14 @@ function extractProviderMessageId(body: unknown) {
   }
 
   return typeof firstMessage.id === "string" ? firstMessage.id : null;
+}
+
+function extractProviderErrorCode(body: unknown) {
+  if (!body || typeof body !== "object" || !("error" in body)) return null;
+  const error = body.error;
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = error.code;
+  return typeof code === "number" || typeof code === "string" ? String(code) : null;
 }
 
 function configuredMaxMediaBytes() {

@@ -153,4 +153,7 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(whatsappTemplates, /whatsapp_templates_credentials_failed/);
   assert.match(messageTemplateServer, /localTemplateByKey/);
   assert.match(messageTemplateServer, /headerImageUrl: localTemplate\?\.headerImageUrl/);
+  assert.match(broadcastServer, /marketingCooldownMs/);
+  assert.match(broadcastServer, /isMetaBroadcastThrottleError/);
+  assert.match(broadcastServer, /marketing_cooldown_active/);
 });

@@ -13,6 +13,10 @@ import {
 } from "@/server/conversations/conversations";
 import { scheduleHumanTakeoverTimeoutWakeup } from "@/server/conversations/takeover-timeout";
 import {
+  isMarketingOptOutMessage,
+  recordMarketingOptOut,
+} from "@/server/operations/marketing-consent";
+import {
   cancelActiveExpense,
   confirmActiveExpense,
   createPendingExpenseFromExtraction,
@@ -204,13 +208,18 @@ async function processCustomerTextMessage(
     });
   }
 
+  const isOptOut = isMarketingOptOutMessage(message.text?.body ?? "");
   const result = await simulateCustomerMessageForBusiness(business.id, {
     leadSource: "WHATSAPP",
     message: (message.text?.body ?? "").slice(0, 4_096),
     phoneNumber: message.from,
     providerMessageId: message.id,
     rawPayload: toJsonValue(compactWhatsAppMessagePayload(message)),
+    suppressAutomatedReply: isOptOut,
   });
+  if (isOptOut) {
+    await recordMarketingOptOut(business.id, message.from);
+  }
   const storage = {
     stored: true,
     duplicate: result.deduped ?? false,
@@ -220,7 +229,7 @@ async function processCustomerTextMessage(
     mediaFileId: null,
   };
   const delivery =
-    result.aiMessageId && message.from
+    !isOptOut && result.aiMessageId && message.from
       ? await deliverStoredWhatsAppTextMessage({
           businessId: business.id,
           messageId: result.aiMessageId,

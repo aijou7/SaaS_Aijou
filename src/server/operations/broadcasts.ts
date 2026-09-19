@@ -15,6 +15,8 @@ import { assertWorkspaceFeature, getWorkspaceEntitlements } from "@/server/subsc
 
 export const broadcastJobType = "WHATSAPP_BROADCAST";
 const batchSize = 10;
+export const marketingCooldownMs = 7 * 24 * 60 * 60_000;
+const metaThrottleErrorCodes = new Set(["80007", "130429", "131048", "131056"]);
 
 export function isMarketingContactEligible(contact: {
   phoneNumber: string;
@@ -26,6 +28,23 @@ export function isMarketingContactEligible(contact: {
       contact.marketingOptInAt &&
       (!contact.marketingOptOutAt || contact.marketingOptOutAt < contact.marketingOptInAt),
   );
+}
+
+export function isMarketingContactCooldownElapsed(lastContactedAt: Date | null, now = new Date()) {
+  return !lastContactedAt || now.getTime() - lastContactedAt.getTime() >= marketingCooldownMs;
+}
+
+export function isMarketingContactSendable(contact: {
+  phoneNumber: string;
+  marketingOptInAt: Date | null;
+  marketingOptOutAt: Date | null;
+  lastContactedAt: Date | null;
+}, now = new Date()) {
+  return isMarketingContactEligible(contact) && isMarketingContactCooldownElapsed(contact.lastContactedAt, now);
+}
+
+export function isMetaBroadcastThrottleError(errorCode: string | null | undefined) {
+  return Boolean(errorCode && metaThrottleErrorCodes.has(errorCode));
 }
 
 export async function getBroadcastsPage(userId: string) {
@@ -73,7 +92,7 @@ export async function createBroadcast(userId: string, formData: FormData) {
   if (phoneNumbers.length === 0) throw new Error("Isi minimal satu nomor WhatsApp.");
   const contacts = await prisma.contact.findMany({
     where: { businessId: access.businessId },
-    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true },
+    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true },
   });
   const eligibleContacts = new Map(
     contacts
@@ -129,19 +148,28 @@ export async function startBroadcast(userId: string, campaignId: string) {
   const whatsApp = await prisma.whatsAppSettings.findUnique({ where: { businessId: access.businessId }, select: { isActive: true, phoneNumberId: true } });
   if (!whatsApp?.isActive || !whatsApp.phoneNumberId) throw new Error("Hubungkan WhatsApp Cloud API sebelum memulai broadcast.");
   const manualRecipients = await prisma.broadcastRecipient.findMany({
-    where: { campaignId },
+    where: {
+      campaignId,
+      status: {
+        in: [
+          BroadcastRecipientStatus.PENDING,
+          BroadcastRecipientStatus.FAILED,
+          BroadcastRecipientStatus.SKIPPED,
+        ],
+      },
+    },
     select: {
       id: true,
       phoneNumber: true,
-      contact: { select: { marketingOptInAt: true, marketingOptOutAt: true } },
+      contact: { select: { marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true } },
     },
   });
 
   if (manualRecipients.length > 0) {
     const eligible = manualRecipients.filter((recipient) =>
-      isMarketingContactEligible({ phoneNumber: recipient.phoneNumber, ...recipient.contact }),
+      isMarketingContactSendable({ phoneNumber: recipient.phoneNumber, ...recipient.contact }),
     );
-    if (eligible.length === 0) throw new Error("Tidak ada nomor manual yang masih memiliki opt-in WhatsApp.");
+    if (eligible.length === 0) throw new Error("Tidak ada nomor manual yang siap dikirim. Periksa consent dan cooldown promosi.");
     const eligibleIds = eligible.map((recipient) => recipient.id);
     const eligibleIdSet = new Set(eligibleIds);
     const ineligibleIds = manualRecipients
@@ -152,7 +180,7 @@ export async function startBroadcast(userId: string, campaignId: string) {
       if (ineligibleIds.length > 0) {
         await tx.broadcastRecipient.updateMany({
           where: { campaignId, id: { in: ineligibleIds } },
-          data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_consent_missing" },
+          data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_recipient_not_ready" },
         });
       }
       await tx.broadcastRecipient.updateMany({
@@ -183,9 +211,9 @@ export async function startBroadcast(userId: string, campaignId: string) {
       marketingOptOutAt: null,
       ...(campaign.segmentId ? { segmentMemberships: { some: { segmentId: campaign.segmentId } } } : {}),
     },
-    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true },
+    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true },
   });
-  const eligible = contacts.filter(isMarketingContactEligible);
+  const eligible = contacts.filter((contact) => isMarketingContactSendable(contact));
   if (eligible.length === 0) throw new Error("Tidak ada penerima yang sudah memberikan opt-in WhatsApp.");
   await prisma.$transaction([
     prisma.broadcastRecipient.createMany({
@@ -228,16 +256,37 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
     where: { campaignId, status: BroadcastRecipientStatus.PENDING },
     orderBy: { createdAt: "asc" },
     take: batchSize,
-    include: { contact: { select: { marketingOptInAt: true, marketingOptOutAt: true } } },
+    include: { contact: { select: { marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true } } },
   });
   const parameters = Array.isArray(campaign.bodyParameters)
     ? campaign.bodyParameters.filter((value): value is string => typeof value === "string")
     : [];
+  let throttledByMeta = false;
   for (const recipient of recipients) {
-    if (!isMarketingContactEligible({ phoneNumber: recipient.phoneNumber, ...recipient.contact })) {
+    const contact = { phoneNumber: recipient.phoneNumber, ...recipient.contact };
+    if (!isMarketingContactEligible(contact)) {
       await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_consent_missing" } });
       continue;
     }
+    if (!isMarketingContactCooldownElapsed(contact.lastContactedAt)) {
+      await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_cooldown_active" } });
+      continue;
+    }
+
+    const claimed = await prisma.contact.updateMany({
+      where: {
+        id: recipient.contactId,
+        marketingOptInAt: { not: null },
+        marketingOptOutAt: null,
+        lastContactedAt: contact.lastContactedAt,
+      },
+      data: { lastContactedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_recipient_changed" } });
+      continue;
+    }
+
     const delivery = await sendWhatsAppTemplateMessage({
       businessId,
       to: recipient.phoneNumber,
@@ -245,18 +294,30 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
       languageCode: campaign.languageCode,
       bodyParameters: parameters,
     });
+    const failureCode = delivery.providerErrorCode ?? delivery.reason;
     await prisma.broadcastRecipient.update({
       where: { id: recipient.id },
       data: delivery.sent
         ? { status: BroadcastRecipientStatus.SENT, providerMessageId: delivery.providerMessageId, sentAt: new Date(), errorCode: null }
-        : { status: BroadcastRecipientStatus.FAILED, errorCode: delivery.reason },
+        : { status: BroadcastRecipientStatus.FAILED, errorCode: failureCode },
     });
+    if (!delivery.sent && isMetaBroadcastThrottleError(delivery.providerErrorCode)) {
+      throttledByMeta = true;
+      break;
+    }
   }
   const [pending, sent, failed] = await Promise.all([
     prisma.broadcastRecipient.count({ where: { campaignId, status: BroadcastRecipientStatus.PENDING } }),
     prisma.broadcastRecipient.count({ where: { campaignId, status: { in: [BroadcastRecipientStatus.SENT, BroadcastRecipientStatus.DELIVERED, BroadcastRecipientStatus.READ] } } }),
     prisma.broadcastRecipient.count({ where: { campaignId, status: BroadcastRecipientStatus.FAILED } }),
   ]);
+  if (throttledByMeta) {
+    await prisma.broadcastCampaign.update({
+      where: { id: campaignId },
+      data: { status: BroadcastStatus.PAUSED, sentCount: sent, failedCount: failed },
+    });
+    return;
+  }
   if (pending === 0) {
     await prisma.broadcastCampaign.update({ where: { id: campaignId }, data: { status: BroadcastStatus.COMPLETED, completedAt: new Date(), sentCount: sent, failedCount: failed } });
     return;

@@ -64,6 +64,7 @@ type SimulateMessageInput = {
   leadSource?: string;
   providerMessageId?: string;
   rawPayload?: Prisma.InputJsonValue;
+  suppressAutomatedReply?: boolean;
 };
 
 type ConversationInboxFilters = {
@@ -562,7 +563,9 @@ async function simulateCustomerMessageForResolvedBusiness(
   const outsideBusinessHours = settings.isActive && !hours.isOpen;
   let operationalHandoffReason: string | null = null;
 
-  if (!subscriptionEntitlements.accessActive) {
+  if (input.suppressAutomatedReply) {
+    aiReply = null;
+  } else if (!subscriptionEntitlements.accessActive) {
     nextStatus = ConversationStatus.HUMAN_NEEDED;
     operationalHandoffReason = "Trial atau paket workspace perlu diaktifkan. Pesan tetap tersimpan untuk ditangani tim.";
   } else if (!settings.isActive) {
@@ -1454,6 +1457,7 @@ export async function deliverStoredWhatsAppTemplateMessage(params: {
       sent: false as const,
       reason: "whatsapp_delivery_exception",
       providerMessageId: null,
+      providerErrorCode: null,
     };
   }
 
