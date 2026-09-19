@@ -4,9 +4,11 @@ import { describe, test } from "node:test";
 import {
   aiDeliverySuppressionReason,
   conversationClosedDeliveryReason,
+  humanTakeoverIdleMs,
   humanTakeoverDeliveryReason,
   isAiDeliveryBlocked,
   isHumanTakeoverActive,
+  isHumanTakeoverIdle,
   resolveTakeoverSafeAiReply,
   shouldSuppressAiDelivery,
 } from "../src/server/conversations/takeover-safety";
@@ -40,6 +42,13 @@ describe("human takeover safety", () => {
     assert.equal(conversationClosedDeliveryReason, "conversation_closed");
     assert.equal(aiDeliverySuppressionReason("CLOSED"), conversationClosedDeliveryReason);
     assert.equal(aiDeliverySuppressionReason("HUMAN_NEEDED"), humanTakeoverDeliveryReason);
+  });
+
+  test("times out takeover only after one hour without activity", () => {
+    const now = new Date("2026-09-19T12:00:00.000Z");
+    assert.equal(isHumanTakeoverIdle(new Date(now.getTime() - humanTakeoverIdleMs), now), true);
+    assert.equal(isHumanTakeoverIdle(new Date(now.getTime() - humanTakeoverIdleMs + 1), now), false);
+    assert.equal(isHumanTakeoverIdle(null, now), false);
   });
 
   test("acknowledges customer media without silently freezing future AI replies", async () => {

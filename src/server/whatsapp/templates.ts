@@ -22,7 +22,7 @@ export type MetaWhatsAppTemplate = {
   languageCode: string;
   title: string | null;
   body: string;
-  headerImageUrl: null;
+  headerImageUrl: string | null;
   status: WhatsAppTemplateStatus;
   rejectionReason: string | null;
   createdAt: string;

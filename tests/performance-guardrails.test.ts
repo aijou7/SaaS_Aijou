@@ -6,9 +6,10 @@ describe("production performance guardrails", () => {
   test("keeps Vercel compute colocated with the Singapore database", async () => {
     const config = JSON.parse(
       await readFile(new URL("../vercel.json", import.meta.url), "utf8"),
-    ) as { regions?: string[] };
+    ) as { regions?: string[]; crons?: Array<{ path: string; schedule: string }> };
 
     assert.deepEqual(config.regions, ["sin1"]);
+    assert.equal(config.crons?.find((cron) => cron.path === "/api/cron/jobs")?.schedule, "0 3 * * *");
   });
 
   test("reuses the workspace from the authenticated session on the inbox path", async () => {

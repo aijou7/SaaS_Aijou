@@ -5,12 +5,18 @@ type DurableWakeResult =
   | { configured: true; dispatched: true; messageId: string | null }
   | { configured: true; dispatched: false; reason: string };
 
+type DurableWakeOptions = {
+  delaySeconds?: number;
+};
+
 /**
  * QStash is optional locally, but it closes the serverless reliability gap in
  * production: once a DB job is committed, an external durable delivery wakes
  * the worker even if the originating Vercel invocation is frozen.
  */
-export async function dispatchDurableJobWakeup(): Promise<DurableWakeResult> {
+export async function dispatchDurableJobWakeup(
+  options: DurableWakeOptions = {},
+): Promise<DurableWakeResult> {
   const qstashToken = process.env.QSTASH_TOKEN?.trim();
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!qstashToken || !cronSecret) {
@@ -25,21 +31,25 @@ export async function dispatchDurableJobWakeup(): Promise<DurableWakeResult> {
   const endpoint =
     process.env.QSTASH_PUBLISH_URL?.trim() ||
     "https://qstash.upstash.io/v2/publish";
+  const delaySeconds = normalizeDelaySeconds(options.delaySeconds);
 
   try {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${qstashToken}`,
+      "Content-Type": "application/json",
+      "Upstash-Forward-Authorization": `Bearer ${cronSecret}`,
+      "Upstash-Method": "POST",
+      "Upstash-Retries": "5",
+      "Upstash-Retry-Delay": "max(1000, pow(2, retried) * 1000)",
+      "Upstash-Timeout": "55s",
+    };
+    if (delaySeconds) headers["Upstash-Delay"] = `${delaySeconds}s`;
+
     const response = await fetch(
       `${endpoint.replace(/\/+$/, "")}/${encodeURIComponent(destination)}`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${qstashToken}`,
-          "Content-Type": "application/json",
-          "Upstash-Forward-Authorization": `Bearer ${cronSecret}`,
-          "Upstash-Method": "POST",
-          "Upstash-Retries": "5",
-          "Upstash-Retry-Delay": "max(1000, pow(2, retried) * 1000)",
-          "Upstash-Timeout": "55s",
-        },
+        headers,
         body: JSON.stringify({ source: "aijou-job-wakeup" }),
         signal: AbortSignal.timeout(8_000),
       },
@@ -71,6 +81,11 @@ export async function dispatchDurableJobWakeup(): Promise<DurableWakeResult> {
       ).slice(0, 160),
     };
   }
+}
+
+function normalizeDelaySeconds(value: number | undefined) {
+  if (!Number.isFinite(value) || !value || value <= 0) return null;
+  return Math.min(7 * 24 * 60 * 60, Math.max(1, Math.round(value)));
 }
 
 export async function wakeAndDrainJobs(limit = 2) {

@@ -130,6 +130,22 @@ describe("beta operations hardening", () => {
     assert.equal(new Headers(request.init?.headers).get("Upstash-Retries"), "5");
   });
 
+  test("supports a delayed durable wakeup for takeover timeout", async () => {
+    process.env.QSTASH_TOKEN = "qstash-test-token";
+    process.env.CRON_SECRET = "cron-test-secret";
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+    process.env.QSTASH_PUBLISH_URL = "https://qstash.example.test/v2/publish";
+    const requests: Array<{ init?: RequestInit }> = [];
+    globalThis.fetch = async (_input, init) => {
+      requests.push({ init });
+      return Response.json({ messageId: "msg_delayed" });
+    };
+
+    await dispatchDurableJobWakeup({ delaySeconds: 3_600 });
+
+    assert.equal(new Headers(requests[0]?.init?.headers).get("Upstash-Delay"), "3600s");
+  });
+
   test("moves only untouched Jakarta seed data to Lombok", async () => {
     const migration = await readFile(
       new URL(

@@ -45,6 +45,7 @@ import {
   resolveTakeoverSafeAiReply,
   shouldSuppressAiDelivery,
 } from "@/server/conversations/takeover-safety";
+import { scheduleHumanTakeoverTimeoutWakeup } from "@/server/conversations/takeover-timeout";
 import { buildSnapshotSafeMarkReadMutation } from "@/server/conversations/read-state";
 import { enqueueHumanTakeoverNotifications } from "@/server/notifications/notifications";
 import {
@@ -745,6 +746,10 @@ async function simulateCustomerMessageForResolvedBusiness(
     channel: conversationChannelFromSource(input.leadSource),
   });
 
+  if (finalized.status === ConversationStatus.HUMAN_NEEDED) {
+    scheduleHumanTakeoverTimeoutWakeup();
+  }
+
   return {
     conversationId: conversation.id,
     customerMessageId: customerMessage.id,
@@ -760,6 +765,7 @@ async function simulateCustomerMessageForResolvedBusiness(
 export async function setConversationTakeover(userId: string, conversationId: string, takeover: boolean) {
   const business = await requireBusinessForUser(userId);
   const status = takeover ? ConversationStatus.HUMAN_NEEDED : ConversationStatus.OPEN;
+  const transitionAt = new Date();
 
   await prisma.$transaction(async (tx) => {
     const lockedRows = await tx.$queryRaw<Array<{ id: string; status: ConversationStatus }>>`
@@ -775,6 +781,7 @@ export async function setConversationTakeover(userId: string, conversationId: st
       data: {
         status,
         resolvedAt: null,
+        lastMessageAt: transitionAt,
         ownerLastReadAt: new Date(),
       },
     });
@@ -830,6 +837,7 @@ export async function setConversationTakeover(userId: string, conversationId: st
   });
 
   if (takeover) {
+    scheduleHumanTakeoverTimeoutWakeup();
     after(async () => {
       await wakeAndDrainJobs(2);
     });
@@ -1022,6 +1030,8 @@ export async function sendConversationOwnerMessage(params: {
       ownerLastReadAt: new Date(),
     },
   });
+
+  scheduleHumanTakeoverTimeoutWakeup();
 
   if (channel === "WEB_CHAT") {
     return {
@@ -1812,6 +1822,7 @@ export async function sendOwnerWhatsAppTemplate(
       ownerLastReadAt: new Date(),
     },
   });
+  scheduleHumanTakeoverTimeoutWakeup();
   await enqueueWhatsAppOutbound({
     businessId: business.id,
     messageId: stored.id,

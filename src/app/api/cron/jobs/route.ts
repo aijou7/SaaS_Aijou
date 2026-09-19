@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getConfiguredRuntimeSecret } from "@/lib/runtime-secret";
+import { releaseStaleHumanTakeovers } from "@/server/conversations/takeover-timeout";
 import { processPendingJobs } from "@/server/jobs/background-jobs";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,17 @@ async function handle(request: NextRequest) {
   const startedAt = Date.now();
   let results: Array<{ id: string; ok: boolean }> = [];
   let queueFailures = 0;
+  let takeoverTimeouts = { scanned: 0, reactivated: 0 };
+  let takeoverFailures = 0;
+  try {
+    takeoverTimeouts = await releaseStaleHumanTakeovers(100);
+  } catch {
+    takeoverFailures += 1;
+    console.error("cron_takeover_timeout_pass_failed");
+  }
   try {
     // Do not start a provider job too close to the function deadline. Incoming
-    // webhooks already process a small queue slice; this daily cron is recovery.
+    // webhooks already process a small queue slice; this cron is recovery.
     results = await processPendingJobs(100, startedAt + 52_000, 25_000);
   } catch {
     queueFailures += 1;
@@ -35,6 +44,8 @@ async function handle(request: NextRequest) {
       succeeded: results.filter((item) => item.ok).length,
       failed: results.filter((item) => !item.ok).length,
       queueFailures,
+      takeoverTimeouts,
+      takeoverFailures,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

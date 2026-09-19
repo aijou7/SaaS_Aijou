@@ -11,6 +11,7 @@ import {
   sendAutomatedWhatsAppReply,
   simulateCustomerMessageForBusiness,
 } from "@/server/conversations/conversations";
+import { scheduleHumanTakeoverTimeoutWakeup } from "@/server/conversations/takeover-timeout";
 import {
   cancelActiveExpense,
   confirmActiveExpense,
@@ -296,6 +297,10 @@ async function processCustomerMediaMessage(
     message,
     role: "CUSTOMER_SERVICE",
   });
+
+  if (isStoredMessage(storage)) {
+    scheduleHumanTakeoverTimeoutWakeup();
+  }
 
   if (!isStoredMessage(storage) || storage.duplicate) {
     const delivery =

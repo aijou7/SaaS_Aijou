@@ -1,5 +1,12 @@
 export const humanTakeoverDeliveryReason = "human_takeover_active";
 export const conversationClosedDeliveryReason = "conversation_closed";
+export const humanTakeoverIdleMs = 60 * 60_000;
+
+export function isHumanTakeoverIdle(lastMessageAt: Date | null, now = new Date()) {
+  return Boolean(
+    lastMessageAt && now.getTime() - lastMessageAt.getTime() >= humanTakeoverIdleMs,
+  );
+}
 
 // HUMAN_NEEDED is the current persisted state. The alternate label is also
 // recognized at integration boundaries so delivery guards fail closed.

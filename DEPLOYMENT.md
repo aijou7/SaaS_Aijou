@@ -367,12 +367,12 @@ Sesudah tersambung, buka link username bot, tekan **Start**, dan kirim pesan tek
 
 ### Background job dan maintenance cron
 
-`vercel.json` memisahkan dua pekerjaan harian agar antrean provider tidak berebut durasi dengan housekeeping:
+`vercel.json` memisahkan recovery antrean harian dari housekeeping agar provider tidak berebut durasi dengan pekerjaan maintenance. Timeout human takeover memakai delayed wake-up QStash supaya tidak bergantung pada cron yang jarang.
 
-- `/api/cron/jobs` pukul `03:00 UTC` (`11:00` Singapore) memulihkan background job tertunda dengan pemilihan adil antar-workspace dan berhenti sebelum batas durasi function.
+- `/api/cron/jobs` pukul `03:00 UTC` (`11:00` Singapore) memulihkan background job tertunda dengan pemilihan adil antar-workspace dan menjadi fallback untuk conversation `HUMAN_NEEDED` yang idle.
 - `/api/cron/maintenance` pukul `04:00 UTC` (`12:00` Singapore) memangkas record lama serta menghapus maksimal satu akun yang grace period-nya sudah lewat pada setiap run.
 
-Keduanya harus membawa `Authorization: Bearer CRON_SECRET`. Normal webhook dan web chat tetap memproses irisan antrean kecil segera; cron adalah recovery path dan dapat mengambil maksimal 100 kandidat per run sesuai sisa waktu. Pantau backlog `background_jobs` selama beta.
+Keduanya harus membawa `Authorization: Bearer CRON_SECRET`. `QSTASH_TOKEN` dan `QSTASH_PUBLISH_URL` perlu tersedia di Production agar timeout satu jam berjalan tepat waktu; tanpa QStash, fallback cron tetap berjalan tetapi waktunya mengikuti jadwal recovery. Normal webhook dan web chat tetap memproses irisan antrean kecil segera; pantau backlog `background_jobs` selama beta.
 
 ## 8. Smoke test setelah deployment
 

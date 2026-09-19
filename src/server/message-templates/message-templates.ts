@@ -64,6 +64,19 @@ export async function getMessageTemplatesPage(userId: string, filters: MessageTe
   const metaKeySet = new Set(metaSync.templates.map((template) => templateKey(template)));
   const matchingMetaTemplates = metaSync.templates.filter((template) => matchesQuery(template, q));
   const matchingMetaKeySet = new Set(matchingMetaTemplates.map((template) => templateKey(template)));
+  const localTemplateByKey = new Map(
+    localTemplates.map((template) => [templateKey(template), template]),
+  );
+  const mergedMetaTemplates = matchingMetaTemplates.map((template) => {
+    const localTemplate = localTemplateByKey.get(templateKey(template));
+    return {
+      ...template,
+      // Meta returns the uploaded header handle, not a browser-displayable URL.
+      // Keep the public Blob URL from the local draft when the same template is
+      // synced back with its Meta status so the image does not disappear.
+      headerImageUrl: localTemplate?.headerImageUrl ?? template.headerImageUrl,
+    };
+  });
   const matchingLocalTemplates = localTemplates
     .filter((template) => !matchingMetaKeySet.has(templateKey(template)))
     .map((template) => ({
@@ -97,7 +110,7 @@ export async function getMessageTemplatesPage(userId: string, filters: MessageTe
   return {
     businessName: access.businessName,
     imageUploadReady: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-    templates: [...matchingMetaTemplates, ...matchingLocalTemplates],
+    templates: [...mergedMetaTemplates, ...matchingLocalTemplates],
     metaSyncError: metaSync.error,
     metaSyncTruncated: metaSync.truncated,
     summary: {

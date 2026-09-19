@@ -106,7 +106,7 @@ Domain `aijoutek.pro` harus sudah di-onboard pada Cloudflare Email Service > Ema
 
 Telegram dan Xendit dikonfigurasi per workspace dari dashboard. Bot token Telegram dan credential Xendit tidak perlu dan tidak boleh ditaruh dalam shared environment variable.
 
-Queue pekerjaan disimpan lebih dulu di PostgreSQL. Tanpa QStash, webhook tetap mencoba memproses batch kecil dan cron harian memulihkan job tertunda. Dengan `QSTASH_TOKEN`, setiap enqueue juga menjadwalkan wake-up eksternal yang durable ke `/api/cron/jobs`.
+Queue pekerjaan disimpan lebih dulu di PostgreSQL. Tanpa QStash, webhook tetap mencoba memproses batch kecil dan cron harian memulihkan job tertunda. Dengan `QSTASH_TOKEN`, setiap enqueue juga menjadwalkan wake-up eksternal yang durable ke `/api/cron/jobs`, termasuk pengecekan otomatis satu jam setelah human takeover atau aktivitas terakhir.
 
 `NEXT_PUBLIC_APP_URL` wajib berupa canonical HTTPS origin agar aplikasi dapat mendaftarkan webhook Telegram yang dapat dijangkau Telegram. Untuk lokal tanpa HTTPS publik, UI dan data dapat diuji tetapi webhook Telegram tidak akan menerima update dari internet.
 
