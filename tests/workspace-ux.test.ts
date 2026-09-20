@@ -7,6 +7,7 @@ const collapsibleWorkspace = readFileSync("src/components/collapsible-app-worksp
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const broadcasts = readFileSync("src/app/broadcasts/page.tsx", "utf8");
+const broadcastAudience = readFileSync("src/components/broadcast-audience-picker.tsx", "utf8");
 const messageTemplatesPage = readFileSync("src/app/message-templates/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
 const conversationWorkspace = readFileSync("src/components/conversation-workspace.tsx", "utf8");
@@ -134,7 +135,10 @@ test("gives slow chat actions immediate feedback and queues WhatsApp delivery", 
 });
 
 test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved templates", () => {
-  assert.match(broadcasts, /name="phoneNumbers"/);
+  assert.match(broadcasts, /BroadcastAudiencePicker/);
+  assert.match(broadcastAudience, /name="phoneNumbers"/);
+  assert.match(broadcastAudience, /value="all_opt_in"/);
+  assert.match(broadcastAudience, /Semua kontak opt-in/);
   assert.match(broadcasts, /ApprovedWhatsAppTemplatePicker/);
   assert.match(broadcastServer, /requireApprovedMetaWhatsAppTemplate/);
   assert.match(broadcastServer, /isMarketingContactEligible/);

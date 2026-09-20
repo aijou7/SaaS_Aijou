@@ -9165,6 +9165,18 @@ body {
 }
 
 .whatsapp-template-panel .form-grid { padding: 0 15px 15px; }
+.broadcast-audience-picker { display: grid; gap: 11px; border: 0; margin: 0; padding: 0; }
+.broadcast-audience-picker legend { color: #334155; font-size: 12px; font-weight: 750; }
+.broadcast-audience-options { display: grid; gap: 8px; }
+.broadcast-audience-option { display: grid !important; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px !important; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 11px 12px; cursor: pointer; }
+.broadcast-audience-option.active { border-color: #9bb8ff; background: #f5f8ff; box-shadow: inset 3px 0 0 var(--accent); }
+.broadcast-audience-option input { width: auto !important; margin: 3px 0 0; accent-color: var(--accent); }
+.broadcast-audience-option span { display: grid; gap: 3px; }
+.broadcast-audience-option strong { display: inline-flex; align-items: center; gap: 6px; color: #1e3a8a; }
+.broadcast-audience-option small, .broadcast-audience-all small { color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.45; }
+.broadcast-audience-all { display: flex; align-items: flex-start; gap: 9px; border: 1px solid #bbf7d0; border-radius: 11px; background: #f0fdf4; color: #166534; padding: 11px; }
+.broadcast-audience-all > svg { flex: 0 0 auto; margin-top: 1px; }
+.broadcast-audience-all span { display: grid; gap: 3px; }
 .quick-reply-strip > form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 0 14px 12px; }
 
 .chat-context-panel {

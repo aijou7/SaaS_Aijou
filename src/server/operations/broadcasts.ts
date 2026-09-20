@@ -48,6 +48,10 @@ export function isMetaBroadcastThrottleError(errorCode: string | null | undefine
   return Boolean(errorCode && metaThrottleErrorCodes.has(errorCode));
 }
 
+export function parseBroadcastAudience(value: FormDataEntryValue | null) {
+  return value === "all_opt_in" ? "all_opt_in" as const : "manual" as const;
+}
+
 export async function getBroadcastsPage(userId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
   const [campaigns, segments, optedInCount, whatsApp, approvedTemplates] = await Promise.all([
@@ -89,23 +93,29 @@ export async function createBroadcast(userId: string, formData: FormData) {
   const { templateName, languageCode } = parseApprovedTemplateKey(formData);
   await requireApprovedMetaWhatsAppTemplate(access.businessId, templateName, languageCode);
   if (!name) throw new Error("Nama campaign wajib diisi.");
-  const phoneNumbers = parseManualPhoneNumbers(formData.get("phoneNumbers"));
-  if (phoneNumbers.length === 0) throw new Error("Isi minimal satu nomor WhatsApp.");
-  const contacts = await prisma.contact.findMany({
-    where: { businessId: access.businessId },
-    select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true },
-  });
-  const eligibleContacts = new Map(
-    contacts
-      .filter(isMarketingContactEligible)
-      .map((contact) => [normalizeBroadcastPhone(contact.phoneNumber), contact] as const)
-      .filter(([phoneNumber]) => Boolean(phoneNumber)),
-  );
-  const missingNumbers = phoneNumbers.filter((phoneNumber) => !eligibleContacts.has(phoneNumber));
-  if (missingNumbers.length > 0) {
-    const sample = missingNumbers.slice(0, 3).join(", ");
-    const suffix = missingNumbers.length > 3 ? ` dan ${missingNumbers.length - 3} nomor lainnya` : "";
-    throw new Error(`Nomor ${sample}${suffix} belum tercatat sebagai kontak dengan opt-in marketing.`);
+  const audience = parseBroadcastAudience(formData.get("audience"));
+  let phoneNumbers: string[] = [];
+  let eligibleContacts = new Map<string, { id: string }>();
+
+  if (audience === "manual") {
+    phoneNumbers = parseManualPhoneNumbers(formData.get("phoneNumbers"));
+    if (phoneNumbers.length === 0) throw new Error("Isi minimal satu nomor WhatsApp atau pilih semua kontak opt-in.");
+    const contacts = await prisma.contact.findMany({
+      where: { businessId: access.businessId },
+      select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true },
+    });
+    eligibleContacts = new Map();
+    for (const contact of contacts) {
+      if (!isMarketingContactEligible(contact)) continue;
+      const phoneNumber = normalizeBroadcastPhone(contact.phoneNumber);
+      if (phoneNumber) eligibleContacts.set(phoneNumber, contact);
+    }
+    const missingNumbers = phoneNumbers.filter((phoneNumber) => !eligibleContacts.has(phoneNumber));
+    if (missingNumbers.length > 0) {
+      const sample = missingNumbers.slice(0, 3).join(", ");
+      const suffix = missingNumbers.length > 3 ? ` dan ${missingNumbers.length - 3} nomor lainnya` : "";
+      throw new Error(`Nomor ${sample}${suffix} belum tercatat sebagai kontak dengan opt-in marketing.`);
+    }
   }
   const bodyParameters = clean(formData.get("bodyParameters"), 10_000)
     .split("\n")
@@ -122,13 +132,15 @@ export async function createBroadcast(userId: string, formData: FormData) {
         bodyParameters: bodyParameters as unknown as Prisma.InputJsonValue,
       },
     });
-    await tx.broadcastRecipient.createMany({
-      data: phoneNumbers.map((phoneNumber) => ({
-        campaignId: campaign.id,
-        contactId: eligibleContacts.get(phoneNumber)!.id,
-        phoneNumber,
-      })),
-    });
+    if (audience === "manual") {
+      await tx.broadcastRecipient.createMany({
+        data: phoneNumbers.map((phoneNumber) => ({
+          campaignId: campaign.id,
+          contactId: eligibleContacts.get(phoneNumber)!.id,
+          phoneNumber,
+        })),
+      });
+    }
     return campaign;
   });
 }
@@ -209,7 +221,6 @@ export async function startBroadcast(userId: string, campaignId: string) {
     where: {
       businessId: access.businessId,
       marketingOptInAt: { not: null },
-      marketingOptOutAt: null,
       ...(campaign.segmentId ? { segmentMemberships: { some: { segmentId: campaign.segmentId } } } : {}),
     },
     select: { id: true, phoneNumber: true, marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true },
