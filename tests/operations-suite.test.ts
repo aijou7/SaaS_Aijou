@@ -25,6 +25,7 @@ test("broadcast requires current opt-in and rejects opted-out contacts", async (
     isMarketingContactSendable,
     isMetaBroadcastThrottleError,
     parseBroadcastAudience,
+    shouldReactivateBroadcastConversation,
   } = await import("@/server/operations/broadcasts");
   const optIn = new Date("2026-01-01T00:00:00Z");
   assert.equal(isMarketingContactEligible({ phoneNumber: "628123", marketingOptInAt: optIn, marketingOptOutAt: null }), true);
@@ -37,6 +38,9 @@ test("broadcast requires current opt-in and rejects opted-out contacts", async (
   assert.equal(isMetaBroadcastThrottleError("131026"), false);
   assert.equal(parseBroadcastAudience("all_opt_in"), "all_opt_in");
   assert.equal(parseBroadcastAudience("unexpected"), "manual");
+  assert.equal(shouldReactivateBroadcastConversation("HUMAN_NEEDED", "handoff_request"), true);
+  assert.equal(shouldReactivateBroadcastConversation("HUMAN_NEEDED", "human_takeover_enabled"), false);
+  assert.equal(shouldReactivateBroadcastConversation("OPEN", null), false);
 });
 
 test("recognizes explicit marketing opt-out messages", async () => {

@@ -1,7 +1,11 @@
 import {
   BroadcastRecipientStatus,
   BroadcastStatus,
+  ConversationStatus,
+  MessageType,
   Prisma,
+  ProcessingStatus,
+  SenderType,
   WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
@@ -50,6 +54,13 @@ export function isMetaBroadcastThrottleError(errorCode: string | null | undefine
 
 export function parseBroadcastAudience(value: FormDataEntryValue | null) {
   return value === "all_opt_in" ? "all_opt_in" as const : "manual" as const;
+}
+
+export function shouldReactivateBroadcastConversation(
+  status: ConversationStatus | string,
+  latestSystemIntent?: string | null,
+) {
+  return status === ConversationStatus.HUMAN_NEEDED && latestSystemIntent !== "human_takeover_enabled";
 }
 
 export async function getBroadcastsPage(userId: string) {
@@ -289,7 +300,7 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
       where: {
         id: recipient.contactId,
         marketingOptInAt: { not: null },
-        marketingOptOutAt: null,
+        marketingOptOutAt: contact.marketingOptOutAt,
         lastContactedAt: contact.lastContactedAt,
       },
       data: { lastContactedAt: new Date() },
@@ -299,6 +310,7 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
       continue;
     }
 
+    const broadcastSentAt = new Date();
     const delivery = await sendWhatsAppTemplateMessage({
       businessId,
       to: recipient.phoneNumber,
@@ -316,6 +328,9 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
     if (!delivery.sent && isMetaBroadcastThrottleError(delivery.providerErrorCode)) {
       throttledByMeta = true;
       break;
+    }
+    if (delivery.sent) {
+      await reactivateBroadcastConversationForAi(businessId, recipient.contactId, broadcastSentAt);
     }
   }
   const [pending, sent, failed] = await Promise.all([
@@ -350,6 +365,49 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
 
 function clean(value: FormDataEntryValue | null, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+async function reactivateBroadcastConversationForAi(businessId: string, contactId: string, broadcastSentAt: Date) {
+  const conversation = await prisma.whatsAppConversation.findFirst({
+    where: { businessId, contactId, channel: "WHATSAPP", status: ConversationStatus.HUMAN_NEEDED },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, status: true, lastCustomerMessageAt: true },
+  });
+  if (!conversation) return;
+  if (conversation.lastCustomerMessageAt && conversation.lastCustomerMessageAt > broadcastSentAt) return;
+
+  const latestSystemEvent = await prisma.whatsAppMessage.findFirst({
+    where: {
+      conversationId: conversation.id,
+      senderType: SenderType.SYSTEM,
+      intent: { in: ["human_takeover_enabled", "human_takeover_released", "human_takeover_timeout"] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { intent: true },
+  });
+  if (!shouldReactivateBroadcastConversation(conversation.status, latestSystemEvent?.intent)) return;
+
+  const reactivatedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.whatsAppConversation.updateMany({
+      where: { id: conversation.id, businessId, status: ConversationStatus.HUMAN_NEEDED },
+      data: { status: ConversationStatus.OPEN, resolvedAt: null, lastMessageAt: reactivatedAt },
+    });
+    if (updated.count !== 1) return;
+
+    await tx.whatsAppMessage.create({
+      data: {
+        conversationId: conversation.id,
+        providerMessageId: `system-${crypto.randomUUID()}`,
+        senderType: SenderType.SYSTEM,
+        messageType: MessageType.SYSTEM,
+        messageBody: "AI auto-reply aktif kembali setelah template broadcast dikirim.",
+        intent: "broadcast_ai_reactivated",
+        processingStatus: ProcessingStatus.PROCESSED,
+        deliveryStatus: "STORED",
+      },
+    });
+  });
 }
 
 function parseApprovedTemplateKey(formData: FormData) {

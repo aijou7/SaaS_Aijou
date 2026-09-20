@@ -142,6 +142,8 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(broadcasts, /ApprovedWhatsAppTemplatePicker/);
   assert.match(broadcastServer, /requireApprovedMetaWhatsAppTemplate/);
   assert.match(broadcastServer, /isMarketingContactEligible/);
+  assert.match(broadcastServer, /reactivateBroadcastConversationForAi/);
+  assert.match(broadcastServer, /broadcast_ai_reactivated/);
   assert.match(messageTemplateBuilder, /name="headerImage"/);
   assert.match(messageTemplateServer, /BLOB_READ_WRITE_TOKEN/);
   assert.match(messageTemplateActions, /submitMessageTemplate/);
