@@ -43,6 +43,19 @@ test("broadcast requires current opt-in and rejects opted-out contacts", async (
   assert.equal(shouldReactivateBroadcastConversation("OPEN", null), false);
 });
 
+test("normalizes Markdown strong text into WhatsApp bold pairs", async () => {
+  const { normalizeWhatsAppFormatting } = await import("@/lib/whatsapp-format");
+  assert.equal(
+    normalizeWhatsAppFormatting("**Khusus 20 pendaftar pertama, nikmati promo.**"),
+    "*Khusus 20 pendaftar pertama, nikmati promo.*",
+  );
+  assert.equal(
+    normalizeWhatsAppFormatting("Mulai **sekarang.\nJangan lewatkan!** ya."),
+    "Mulai *sekarang.\nJangan lewatkan!* ya.",
+  );
+  assert.equal(normalizeWhatsAppFormatting("*Sudah benar.*"), "*Sudah benar.*");
+});
+
 test("recognizes explicit marketing opt-out messages", async () => {
   const { isMarketingOptOutMessage } = await import("@/server/operations/marketing-consent");
   assert.equal(isMarketingOptOutMessage("STOP"), true);

@@ -5,6 +5,7 @@ import {
   WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { normalizeWhatsAppFormatting } from "@/lib/whatsapp-format";
 import { requireWorkspaceAccess } from "@/server/workspace-access";
 import {
   listMetaWhatsAppTemplates,
@@ -262,7 +263,7 @@ function parseMessageTemplateFormData(formData: FormData) {
   const purpose = String(formData.get("purpose") ?? "UTILITY") as WhatsAppTemplatePurpose;
   const languageCode = String(formData.get("languageCode") ?? "id").trim();
   const title = cleanOptional(formData.get("title"), 60);
-  const body = String(formData.get("body") ?? "").trim();
+  const body = normalizeWhatsAppFormatting(String(formData.get("body") ?? "").trim());
   const imageValue = formData.get("headerImage");
   const image = imageValue instanceof File && imageValue.size > 0 ? imageValue : null;
 

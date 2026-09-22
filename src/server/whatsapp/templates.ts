@@ -4,6 +4,7 @@ import {
   WhatsAppTemplateStatus,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
+import { normalizeWhatsAppFormatting } from "@/lib/whatsapp-format";
 import { getWhatsAppCredentialsForBusiness } from "@/server/whatsapp/settings";
 import {
   fetchWhatsAppGraph,
@@ -239,7 +240,7 @@ export async function submitMetaWhatsAppTemplate(
     throw new Error("Hubungkan WhatsApp Cloud API sebelum mengajukan template ke Meta.");
   }
 
-  const metaBody = input.headerImageUrl && input.title ? `${input.title}\n${input.body}` : input.body;
+  const metaBody = normalizeWhatsAppFormatting(input.headerImageUrl && input.title ? `${input.title}\n${input.body}` : input.body);
   if (metaBody.length > 1_024) {
     throw new Error("Judul dan isi template bergambar jika digabung maksimal 1.024 karakter.");
   }
