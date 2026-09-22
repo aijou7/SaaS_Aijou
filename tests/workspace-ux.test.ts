@@ -166,3 +166,13 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(broadcastServer, /isMetaBroadcastThrottleError/);
   assert.match(broadcastServer, /marketing_cooldown_active/);
 });
+
+test("gives broadcast start actions visible pending, success, and error feedback", () => {
+  assert.match(broadcasts, /FormSubmitButton/);
+  assert.match(broadcasts, /pendingLabel="Menyiapkan…"/);
+  assert.match(broadcasts, /params\.started/);
+  assert.match(broadcasts, /params\.error/);
+  assert.match(broadcasts, /Hubungkan WhatsApp dulu/);
+  assert.match(broadcasts, /Belum ada kontak opt-in/);
+  assert.match(styles, /\.broadcast-feedback/);
+});
