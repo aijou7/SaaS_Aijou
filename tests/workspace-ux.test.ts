@@ -7,6 +7,7 @@ const collapsibleWorkspace = readFileSync("src/components/collapsible-app-worksp
 const layout = readFileSync("src/app/layout.tsx", "utf8");
 const conversations = readFileSync("src/app/conversations/page.tsx", "utf8");
 const broadcasts = readFileSync("src/app/broadcasts/page.tsx", "utf8");
+const broadcastComposer = readFileSync("src/components/broadcast-composer-fields.tsx", "utf8");
 const broadcastAudience = readFileSync("src/components/broadcast-audience-picker.tsx", "utf8");
 const messageTemplatesPage = readFileSync("src/app/message-templates/page.tsx", "utf8");
 const liveConversation = readFileSync("src/components/live-conversation-detail.tsx", "utf8");
@@ -135,11 +136,11 @@ test("gives slow chat actions immediate feedback and queues WhatsApp delivery", 
 });
 
 test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved templates", () => {
-  assert.match(broadcasts, /BroadcastAudiencePicker/);
+  assert.match(broadcasts, /BroadcastComposerFields/);
   assert.match(broadcastAudience, /name="phoneNumbers"/);
   assert.match(broadcastAudience, /value="all_opt_in"/);
   assert.match(broadcastAudience, /Semua kontak opt-in/);
-  assert.match(broadcasts, /ApprovedWhatsAppTemplatePicker/);
+  assert.match(broadcastComposer, /ApprovedWhatsAppTemplatePicker/);
   assert.match(broadcastServer, /requireApprovedMetaWhatsAppTemplate/);
   assert.match(broadcastServer, /isMarketingContactEligible/);
   assert.match(broadcastServer, /reactivateBroadcastConversationForAi/);
@@ -159,6 +160,9 @@ test("keeps broadcasts manual, consent-aware, and restricted to Meta-approved te
   assert.match(messageTemplateBuilder, /useState\(initialTemplate\?\.body/);
   assert.match(whatsappTemplates, /message_templates/);
   assert.match(whatsappTemplates, /header_handle/);
+  assert.match(whatsappTemplates, /headerImageUrl: localByKey/);
+  assert.match(broadcastServer, /headerImageUrl: approvedTemplate\?\.headerImageUrl/);
+  assert.match(messageTemplateBuilder, /Gambar akan tampil di bagian atas pesan WhatsApp/);
   assert.match(whatsappTemplates, /whatsapp_templates_credentials_failed/);
   assert.match(messageTemplateServer, /localTemplateByKey/);
   assert.match(messageTemplateServer, /headerImageUrl: localTemplate\?\.headerImageUrl/);

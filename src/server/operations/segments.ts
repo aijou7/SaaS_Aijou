@@ -51,11 +51,11 @@ export async function updateContactAudience(userId: string, formData: FormData) 
   if (!contact) throw new Error("Kontak tidak ditemukan.");
 
   if (action === "OPT_IN") {
-    await prisma.contact.update({ where: { id: contactId }, data: { marketingOptInAt: new Date(), marketingOptOutAt: null } });
+    await prisma.contact.update({ where: { id: contactId }, data: { marketingOptInAt: new Date(), marketingOptOutAt: null, marketingConsentPendingAt: null } });
     return;
   }
   if (action === "OPT_OUT") {
-    await prisma.contact.update({ where: { id: contactId }, data: { marketingOptOutAt: new Date() } });
+    await prisma.contact.update({ where: { id: contactId }, data: { marketingOptOutAt: new Date(), marketingConsentPendingAt: null } });
     return;
   }
   if (!segmentId) throw new Error("Pilih segmen terlebih dahulu.");

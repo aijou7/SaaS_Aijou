@@ -23,7 +23,8 @@ type SendTemplateMessageParams = {
   templateName: string;
   languageCode?: string;
   bodyParameters?: string[];
-  businessId: string;
+  headerImageUrl?: string | null;
+  businessId?: string;
 };
 
 const defaultMaxMediaBytes = 10 * 1024 * 1024;
@@ -130,15 +131,19 @@ export async function sendWhatsAppTextMessage(params: SendTextMessageParams) {
 export async function sendWhatsAppTemplateMessage(
   params: SendTemplateMessageParams,
 ) {
-  const credentials = await getWhatsAppCredentialsForBusiness(
-    params.businessId,
-  );
+  const credentials = params.businessId
+    ? await getWhatsAppCredentialsForBusiness(params.businessId)
+    : {
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN || null,
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || null,
+      };
   const recipient = normalizeRecipient(params.to);
   const templateName = params.templateName.trim().toLowerCase();
   const languageCode = (params.languageCode || "id").trim();
   const bodyParameters = (params.bodyParameters ?? [])
     .map((value) => value.trim())
     .filter(Boolean);
+  const headerImageUrl = params.headerImageUrl?.trim() || null;
 
   if (!credentials.accessToken || !credentials.phoneNumberId) {
     return {
@@ -185,6 +190,14 @@ export async function sendWhatsAppTemplateMessage(
   }
 
   try {
+    const components = [
+      ...(headerImageUrl
+        ? [{ type: "header", parameters: [{ type: "image", image: { link: headerImageUrl } }] }]
+        : []),
+      ...(bodyParameters.length > 0
+        ? [{ type: "body", parameters: bodyParameters.map((text) => ({ type: "text", text })) }]
+        : []),
+    ];
     const response = await fetchWhatsAppGraph(
       whatsAppGraphApiUrl(
         `${encodeURIComponent(credentials.phoneNumberId)}/messages`,
@@ -203,19 +216,7 @@ export async function sendWhatsAppTemplateMessage(
           template: {
             name: templateName,
             language: { code: languageCode },
-            ...(bodyParameters.length > 0
-              ? {
-                  components: [
-                    {
-                      type: "body",
-                      parameters: bodyParameters.map((text) => ({
-                        type: "text",
-                        text,
-                      })),
-                    },
-                  ],
-                }
-              : {}),
+            ...(components.length > 0 ? { components } : {}),
           },
         }),
       },

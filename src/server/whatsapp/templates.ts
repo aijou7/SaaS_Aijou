@@ -3,6 +3,7 @@ import {
   WhatsAppTemplatePurpose,
   WhatsAppTemplateStatus,
 } from "@/generated/prisma-beta/client";
+import { prisma } from "@/lib/prisma";
 import { getWhatsAppCredentialsForBusiness } from "@/server/whatsapp/settings";
 import {
   fetchWhatsAppGraph,
@@ -41,6 +42,7 @@ export type ApprovedWhatsAppTemplateOption = {
   languageCode: string;
   title: string | null;
   body: string;
+  headerImageUrl: string | null;
 };
 
 export type ApprovedWhatsAppTemplateOptionsResult = {
@@ -174,12 +176,25 @@ export async function listApprovedMetaWhatsAppTemplateOptions(
   businessId: string,
 ): Promise<ApprovedWhatsAppTemplateOptionsResult> {
   const result = await listMetaWhatsAppTemplates(businessId);
+  const localTemplates = await prisma.whatsAppTemplate.findMany({
+    where: { businessId },
+    select: { name: true, languageCode: true, headerImageUrl: true },
+  });
+  const localByKey = new Map(
+    localTemplates.map((template) => [`${template.name.toLowerCase()}::${template.languageCode.toLowerCase()}`, template.headerImageUrl]),
+  );
 
   return {
     error: result.error,
     templates: result.templates
       .filter((template) => template.status === WhatsAppTemplateStatus.APPROVED)
-      .map(({ name, languageCode, title, body }) => ({ name, languageCode, title, body })),
+      .map(({ name, languageCode, title, body }) => ({
+        name,
+        languageCode,
+        title,
+        body,
+        headerImageUrl: localByKey.get(`${name.toLowerCase()}::${languageCode.toLowerCase()}`) ?? null,
+      })),
   };
 }
 
@@ -207,7 +222,11 @@ export async function requireApprovedMetaWhatsAppTemplate(
     );
   }
 
-  return template;
+  const localTemplate = await prisma.whatsAppTemplate.findFirst({
+    where: { businessId, name: template.name, languageCode: template.languageCode },
+    select: { headerImageUrl: true },
+  });
+  return { ...template, headerImageUrl: localTemplate?.headerImageUrl ?? null };
 }
 
 export async function submitMetaWhatsAppTemplate(

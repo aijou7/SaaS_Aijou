@@ -9179,6 +9179,7 @@ body {
 .broadcast-audience-all { display: flex; align-items: flex-start; gap: 9px; border: 1px solid #bbf7d0; border-radius: 11px; background: #f0fdf4; color: #166534; padding: 11px; }
 .broadcast-audience-all > svg { flex: 0 0 auto; margin-top: 1px; }
 .broadcast-audience-all span { display: grid; gap: 3px; }
+.broadcast-consent-preview { display: flex; align-items: flex-start; gap: 9px; border: 1px solid #bfdbfe; border-radius: 11px; background: #eff6ff; color: #1e40af; padding: 11px; }.broadcast-consent-preview > svg { flex: 0 0 auto; margin-top: 1px; }.broadcast-consent-preview span { display: grid; gap: 3px; }.broadcast-consent-preview small { color: #36558a; font-size: 11px; line-height: 1.45; }
 .quick-reply-strip > form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 0 14px 12px; }
 
 .chat-context-panel {
@@ -9769,6 +9770,8 @@ body {
   box-shadow: 0 4px 12px rgba(15, 23, 42, .05);
   padding: 12px 13px 10px;
 }
+
+.approved-template-preview-image { display: block; width: 100%; max-height: 150px; border-radius: 8px; object-fit: cover; margin: -2px 0 10px; }
 
 .approved-template-preview-bubble strong {
   display: block;

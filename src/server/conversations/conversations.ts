@@ -1422,6 +1422,7 @@ export async function deliverStoredWhatsAppTemplateMessage(params: {
   const rawPayload = jsonObject(message.rawPayload);
   const templateName = typeof rawPayload?.templateName === "string" ? rawPayload.templateName : "";
   const languageCode = typeof rawPayload?.languageCode === "string" ? rawPayload.languageCode : "id";
+  const headerImageUrl = typeof rawPayload?.headerImageUrl === "string" ? rawPayload.headerImageUrl : null;
   const bodyParameters = Array.isArray(rawPayload?.bodyParameters)
     ? rawPayload.bodyParameters.filter((value): value is string => typeof value === "string")
     : [];
@@ -1452,6 +1453,7 @@ export async function deliverStoredWhatsAppTemplateMessage(params: {
       templateName,
       languageCode,
       bodyParameters,
+      headerImageUrl,
     });
   } catch {
     delivery = {
@@ -1813,6 +1815,7 @@ export async function sendOwnerWhatsAppTemplate(
         templateName,
         languageCode,
         bodyParameters,
+        headerImageUrl: approvedTemplate.headerImageUrl,
         templateTitle: approvedTemplate.title,
         templateBody: approvedTemplate.body,
       }),

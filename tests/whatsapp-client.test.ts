@@ -7,7 +7,7 @@ const originalAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 const originalPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const originalGraphVersion = process.env.WHATSAPP_GRAPH_API_VERSION;
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
-const { sendWhatsAppTextMessage } = await import("../src/server/whatsapp/client");
+const { sendWhatsAppTemplateMessage, sendWhatsAppTextMessage } = await import("../src/server/whatsapp/client");
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -71,6 +71,36 @@ describe("WhatsApp Graph client", () => {
     assert.equal(result.sent, false);
     assert.equal(result.reason, "whatsapp_recipient_invalid");
     assert.equal(fetchCalls, 0);
+  });
+
+  test("includes the approved template image header when sending a template", async () => {
+    configureCredentials();
+    let requestBody: { template?: { components?: Array<{ type?: string; parameters?: unknown[] }> } } | null = null;
+    globalThis.fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.template" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    const result = await sendWhatsAppTemplateMessage({
+      to: "6281234567890",
+      templateName: "promo_open",
+      languageCode: "id",
+      headerImageUrl: "https://example.com/promo.png",
+      bodyParameters: ["Aijou"],
+    });
+
+    assert.equal(result.sent, true);
+    const sentBody = requestBody as unknown as { template?: { components?: unknown[] } };
+    assert.deepEqual(sentBody.template?.components, [
+      {
+        type: "header",
+        parameters: [{ type: "image", image: { link: "https://example.com/promo.png" } }],
+      },
+      { type: "body", parameters: [{ type: "text", text: "Aijou" }] },
+    ]);
   });
 });
 

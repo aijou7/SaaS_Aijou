@@ -1,4 +1,5 @@
 import {
+  BroadcastKind,
   BroadcastRecipientStatus,
   BroadcastStatus,
   ConversationStatus,
@@ -9,7 +10,7 @@ import {
   WorkspaceRole,
 } from "@/generated/prisma-beta/client";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppTemplateMessage } from "@/server/whatsapp/client";
+import { sendWhatsAppTemplateMessage, sendWhatsAppTextMessage } from "@/server/whatsapp/client";
 import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
 import {
   listApprovedMetaWhatsAppTemplateOptions,
@@ -21,6 +22,9 @@ import { assertWorkspaceFeature, getWorkspaceEntitlements } from "@/server/subsc
 export const broadcastJobType = "WHATSAPP_BROADCAST";
 const batchSize = 10;
 export const marketingCooldownMs = 7 * 24 * 60 * 60_000;
+export const consentRequestWindowMs = 24 * 60 * 60_000;
+export const consentRequestCooldownMs = 30 * 24 * 60 * 60_000;
+export const marketingConsentRequestBody = "Halo! Boleh kami mengirim info dan promo lewat WhatsApp? Balas YA PROMO untuk setuju atau TIDAK PROMO untuk menolak. Balas STOP kapan saja untuk berhenti.";
 const metaThrottleErrorCodes = new Set(["80007", "130429", "131048", "131056"]);
 
 export function isMarketingContactEligible(contact: {
@@ -48,12 +52,31 @@ export function isMarketingContactSendable(contact: {
   return isMarketingContactEligible(contact) && isMarketingContactCooldownElapsed(contact.lastContactedAt, now);
 }
 
+export function isConsentRequestEligible(contact: {
+  phoneNumber: string;
+  marketingOptInAt: Date | null;
+  marketingOptOutAt: Date | null;
+  marketingConsentPendingAt: Date | null;
+  lastCustomerMessageAt: Date | null;
+}, now = new Date()) {
+  return Boolean(
+    contact.phoneNumber.trim() &&
+      !contact.marketingOptInAt &&
+      !contact.marketingOptOutAt &&
+      (!contact.marketingConsentPendingAt || now.getTime() - contact.marketingConsentPendingAt.getTime() >= consentRequestCooldownMs) &&
+      contact.lastCustomerMessageAt &&
+      now.getTime() - contact.lastCustomerMessageAt.getTime() < consentRequestWindowMs,
+  );
+}
+
 export function isMetaBroadcastThrottleError(errorCode: string | null | undefined) {
   return Boolean(errorCode && metaThrottleErrorCodes.has(errorCode));
 }
 
 export function parseBroadcastAudience(value: FormDataEntryValue | null) {
-  return value === "all_opt_in" ? "all_opt_in" as const : "manual" as const;
+  if (value === "all_opt_in") return "all_opt_in" as const;
+  if (value === "recent_chat_consent") return "recent_chat_consent" as const;
+  return "manual" as const;
 }
 
 export function shouldReactivateBroadcastConversation(
@@ -65,7 +88,9 @@ export function shouldReactivateBroadcastConversation(
 
 export async function getBroadcastsPage(userId: string) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
-  const [campaigns, segments, optedInCount, whatsApp, approvedTemplates] = await Promise.all([
+  const recentChatSince = new Date(Date.now() - consentRequestWindowMs);
+  const consentRequestSince = new Date(Date.now() - consentRequestCooldownMs);
+  const [campaigns, segments, optedInCount, recentChatCount, whatsApp, approvedTemplates] = await Promise.all([
     prisma.broadcastCampaign.findMany({
       where: { businessId: access.businessId },
       orderBy: { createdAt: "desc" },
@@ -83,6 +108,15 @@ export async function getBroadcastsPage(userId: string) {
     prisma.contact.count({
       where: { businessId: access.businessId, marketingOptInAt: { not: null }, marketingOptOutAt: null },
     }),
+    prisma.contact.count({
+      where: {
+        businessId: access.businessId,
+        marketingOptInAt: null,
+        marketingOptOutAt: null,
+        OR: [{ marketingConsentPendingAt: null }, { marketingConsentPendingAt: { lt: consentRequestSince } }],
+        conversations: { some: { channel: "WHATSAPP", lastCustomerMessageAt: { gte: recentChatSince } } },
+      },
+    }),
     prisma.whatsAppSettings.findUnique({ where: { businessId: access.businessId }, select: { isActive: true, phoneNumberId: true } }),
     listApprovedMetaWhatsAppTemplateOptions(access.businessId),
   ]);
@@ -91,6 +125,7 @@ export async function getBroadcastsPage(userId: string) {
     campaigns,
     segments,
     optedInCount,
+    recentChatCount,
     whatsAppReady: Boolean(whatsApp?.isActive && whatsApp.phoneNumberId),
     templates: approvedTemplates.templates,
     templateError: approvedTemplates.error,
@@ -101,10 +136,17 @@ export async function createBroadcast(userId: string, formData: FormData) {
   const access = await requireWorkspaceAccess(userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
   await assertWorkspaceFeature(access.businessId, "BROADCAST");
   const name = clean(formData.get("name"), 120);
-  const { templateName, languageCode } = parseApprovedTemplateKey(formData);
-  await requireApprovedMetaWhatsAppTemplate(access.businessId, templateName, languageCode);
   if (!name) throw new Error("Nama campaign wajib diisi.");
   const audience = parseBroadcastAudience(formData.get("audience"));
+  const kind = audience === "recent_chat_consent" ? BroadcastKind.CONSENT_REQUEST : BroadcastKind.MARKETING;
+  let templateName = "consent_request";
+  let languageCode = "id";
+  if (kind === BroadcastKind.MARKETING) {
+    const approvedTemplate = parseApprovedTemplateKey(formData);
+    templateName = approvedTemplate.templateName;
+    languageCode = approvedTemplate.languageCode;
+    await requireApprovedMetaWhatsAppTemplate(access.businessId, templateName, languageCode);
+  }
   let phoneNumbers: string[] = [];
   let eligibleContacts = new Map<string, { id: string }>();
 
@@ -138,9 +180,11 @@ export async function createBroadcast(userId: string, formData: FormData) {
       data: {
         businessId: access.businessId,
         name,
+        kind,
         templateName,
         languageCode,
         bodyParameters: bodyParameters as unknown as Prisma.InputJsonValue,
+        consentMessage: kind === BroadcastKind.CONSENT_REQUEST ? marketingConsentRequestBody : null,
       },
     });
     if (audience === "manual") {
@@ -154,6 +198,43 @@ export async function createBroadcast(userId: string, formData: FormData) {
     }
     return campaign;
   });
+}
+
+async function findConsentRequestContacts(businessId: string, now: Date) {
+  const contacts = await prisma.contact.findMany({
+    where: {
+      businessId,
+      marketingOptInAt: null,
+      marketingOptOutAt: null,
+      OR: [{ marketingConsentPendingAt: null }, { marketingConsentPendingAt: { lt: new Date(now.getTime() - consentRequestCooldownMs) } }],
+      conversations: { some: { channel: "WHATSAPP", lastCustomerMessageAt: { gte: new Date(now.getTime() - consentRequestWindowMs) } } },
+    },
+    select: {
+      id: true,
+      phoneNumber: true,
+      marketingOptInAt: true,
+      marketingOptOutAt: true,
+      marketingConsentPendingAt: true,
+      conversations: {
+        where: { channel: "WHATSAPP", lastCustomerMessageAt: { not: null } },
+        orderBy: { lastCustomerMessageAt: "desc" },
+        take: 1,
+        select: { lastCustomerMessageAt: true },
+      },
+    },
+  });
+  return contacts.map((contact) => ({
+    recipientId: null,
+    contactId: contact.id,
+    phoneNumber: contact.phoneNumber,
+    contact: {
+      phoneNumber: contact.phoneNumber,
+      marketingOptInAt: contact.marketingOptInAt,
+      marketingOptOutAt: contact.marketingOptOutAt,
+      marketingConsentPendingAt: contact.marketingConsentPendingAt,
+      lastCustomerMessageAt: contact.conversations[0]?.lastCustomerMessageAt ?? null,
+    },
+  }));
 }
 
 export async function startBroadcast(userId: string, campaignId: string) {
@@ -171,6 +252,80 @@ export async function startBroadcast(userId: string, campaignId: string) {
   }
   const whatsApp = await prisma.whatsAppSettings.findUnique({ where: { businessId: access.businessId }, select: { isActive: true, phoneNumberId: true } });
   if (!whatsApp?.isActive || !whatsApp.phoneNumberId) throw new Error("Hubungkan WhatsApp Cloud API sebelum memulai broadcast.");
+  if (campaign.kind === BroadcastKind.CONSENT_REQUEST) {
+    const now = new Date();
+    const existingRecipients = await prisma.broadcastRecipient.findMany({
+      where: {
+        campaignId,
+        status: { in: [BroadcastRecipientStatus.PENDING, BroadcastRecipientStatus.FAILED, BroadcastRecipientStatus.SKIPPED] },
+      },
+      select: {
+        id: true,
+        phoneNumber: true,
+        contact: {
+          select: {
+            id: true,
+            phoneNumber: true,
+            marketingOptInAt: true,
+            marketingOptOutAt: true,
+            marketingConsentPendingAt: true,
+            conversations: {
+              where: { channel: "WHATSAPP", lastCustomerMessageAt: { not: null } },
+              orderBy: { lastCustomerMessageAt: "desc" },
+              take: 1,
+              select: { lastCustomerMessageAt: true },
+            },
+          },
+        },
+      },
+    });
+    const candidates = existingRecipients.length > 0
+      ? existingRecipients.map((recipient) => ({
+          recipientId: recipient.id,
+          contactId: recipient.contact.id,
+          phoneNumber: recipient.phoneNumber,
+          contact: {
+            phoneNumber: recipient.contact.phoneNumber,
+            marketingOptInAt: recipient.contact.marketingOptInAt,
+            marketingOptOutAt: recipient.contact.marketingOptOutAt,
+            marketingConsentPendingAt: recipient.contact.marketingConsentPendingAt,
+            lastCustomerMessageAt: recipient.contact.conversations[0]?.lastCustomerMessageAt ?? null,
+          },
+        }))
+      : await findConsentRequestContacts(access.businessId, now);
+    const eligible = candidates.filter((candidate) => isConsentRequestEligible(candidate.contact, now));
+    if (eligible.length === 0) throw new Error("Tidak ada customer yang chat dalam 24 jam terakhir dan siap menerima permintaan izin.");
+    const eligibleIds = new Set(eligible.map((candidate) => candidate.recipientId).filter((id): id is string => Boolean(id)));
+    await prisma.$transaction(async (tx) => {
+      const ineligibleIds = candidates
+        .map((candidate) => candidate.recipientId)
+        .filter((id): id is string => Boolean(id && !eligibleIds.has(id)));
+      if (ineligibleIds.length > 0) {
+        await tx.broadcastRecipient.updateMany({
+          where: { campaignId, id: { in: ineligibleIds } },
+          data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "consent_request_not_eligible" },
+        });
+      }
+      if (existingRecipients.length === 0) {
+        await tx.broadcastRecipient.createMany({
+          data: eligible.map((candidate) => ({ campaignId, contactId: candidate.contactId, phoneNumber: candidate.phoneNumber })),
+        });
+      } else {
+        await tx.broadcastRecipient.updateMany({
+          where: { campaignId, id: { in: Array.from(eligibleIds) } },
+          data: { status: BroadcastRecipientStatus.PENDING, providerMessageId: null, errorCode: null, sentAt: null },
+        });
+      }
+      await tx.broadcastCampaign.update({
+        where: { id: campaignId },
+        data: { status: BroadcastStatus.RUNNING, startedAt: now, completedAt: null, totalRecipients: eligible.length, failedCount: 0 },
+      });
+      await tx.backgroundJob.create({
+        data: { businessId: access.businessId, type: broadcastJobType, dedupeKey: `broadcast:${campaignId}:${crypto.randomUUID()}`, payload: { campaignId }, runAfter: now },
+      });
+    });
+    return;
+  }
   const manualRecipients = await prisma.broadcastRecipient.findMany({
     where: {
       campaignId,
@@ -279,14 +434,77 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
     where: { campaignId, status: BroadcastRecipientStatus.PENDING },
     orderBy: { createdAt: "asc" },
     take: batchSize,
-    include: { contact: { select: { marketingOptInAt: true, marketingOptOutAt: true, lastContactedAt: true } } },
+    include: {
+      contact: {
+        select: {
+          phoneNumber: true,
+          marketingOptInAt: true,
+          marketingOptOutAt: true,
+          marketingConsentPendingAt: true,
+          lastContactedAt: true,
+          conversations: {
+            where: { channel: "WHATSAPP", lastCustomerMessageAt: { not: null } },
+            orderBy: { lastCustomerMessageAt: "desc" },
+            take: 1,
+            select: { id: true, lastCustomerMessageAt: true },
+          },
+        },
+      },
+    },
   });
   const parameters = Array.isArray(campaign.bodyParameters)
     ? campaign.bodyParameters.filter((value): value is string => typeof value === "string")
     : [];
+  const approvedTemplate = campaign.kind === BroadcastKind.MARKETING
+    ? await requireApprovedMetaWhatsAppTemplate(businessId, campaign.templateName, campaign.languageCode)
+    : null;
   let throttledByMeta = false;
   for (const recipient of recipients) {
-    const contact = { phoneNumber: recipient.phoneNumber, ...recipient.contact };
+    const contact = recipient.contact;
+    if (campaign.kind === BroadcastKind.CONSENT_REQUEST) {
+      const latestCustomerMessageAt = recipient.contact.conversations[0]?.lastCustomerMessageAt ?? null;
+      if (!isConsentRequestEligible({ ...contact, lastCustomerMessageAt: latestCustomerMessageAt })) {
+        await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "consent_request_not_eligible" } });
+        continue;
+      }
+
+      const requestedAt = new Date();
+      const claimed = await prisma.contact.updateMany({
+        where: {
+          id: recipient.contactId,
+          marketingOptInAt: null,
+          marketingOptOutAt: null,
+          marketingConsentPendingAt: contact.marketingConsentPendingAt,
+        },
+        data: { marketingConsentPendingAt: requestedAt },
+      });
+      if (claimed.count !== 1) {
+        await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "consent_request_already_claimed" } });
+        continue;
+      }
+
+      const consentBody = campaign.consentMessage || marketingConsentRequestBody;
+      const delivery = await sendWhatsAppTextMessage({ businessId, to: recipient.phoneNumber, body: consentBody });
+      const failureCode = "providerErrorCode" in delivery ? delivery.providerErrorCode ?? delivery.reason : delivery.reason;
+      await prisma.broadcastRecipient.update({
+        where: { id: recipient.id },
+        data: delivery.sent
+          ? { status: BroadcastRecipientStatus.SENT, providerMessageId: delivery.providerMessageId, sentAt: new Date(), errorCode: null }
+          : { status: BroadcastRecipientStatus.FAILED, errorCode: failureCode },
+      });
+      if (!delivery.sent) {
+        await prisma.contact.updateMany({ where: { id: recipient.contactId, marketingConsentPendingAt: requestedAt }, data: { marketingConsentPendingAt: null } });
+        continue;
+      }
+      await storeConsentRequestMessage({
+        businessId,
+        contactId: recipient.contactId,
+        conversationId: recipient.contact.conversations[0]?.id,
+        providerMessageId: delivery.providerMessageId,
+        body: consentBody,
+      });
+      continue;
+    }
     if (!isMarketingContactEligible(contact)) {
       await prisma.broadcastRecipient.update({ where: { id: recipient.id }, data: { status: BroadcastRecipientStatus.SKIPPED, errorCode: "marketing_consent_missing" } });
       continue;
@@ -317,6 +535,7 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
       templateName: campaign.templateName,
       languageCode: campaign.languageCode,
       bodyParameters: parameters,
+      headerImageUrl: approvedTemplate?.headerImageUrl ?? null,
     });
     const failureCode = delivery.providerErrorCode ?? delivery.reason;
     await prisma.broadcastRecipient.update({
@@ -361,6 +580,46 @@ export async function processBroadcastJob(businessId: string, payload: Prisma.Js
       },
     }),
   ]);
+}
+
+async function storeConsentRequestMessage(params: {
+  businessId: string;
+  contactId: string;
+  conversationId?: string;
+  providerMessageId: string;
+  body: string;
+}) {
+  if (!params.conversationId) return;
+  try {
+    await prisma.whatsAppMessage.create({
+      data: {
+        conversationId: params.conversationId,
+        providerMessageId: params.providerMessageId,
+        senderType: SenderType.USER,
+        messageType: MessageType.TEXT,
+        messageBody: params.body,
+        intent: "broadcast_consent_request",
+        processingStatus: ProcessingStatus.PROCESSED,
+        deliveryStatus: "ACCEPTED",
+        rawPayload: {
+          channel: "WHATSAPP",
+          direction: "OUTBOUND",
+          source: "broadcast_consent_request",
+          contactId: params.contactId,
+        },
+      },
+    });
+    await prisma.whatsAppConversation.updateMany({
+      where: { id: params.conversationId, businessId: params.businessId },
+      data: { lastMessageAt: new Date() },
+    });
+  } catch (error) {
+    console.error("broadcast_consent_message_store_failed", {
+      businessId: params.businessId,
+      contactId: params.contactId,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
 }
 
 function clean(value: FormDataEntryValue | null, max: number) {

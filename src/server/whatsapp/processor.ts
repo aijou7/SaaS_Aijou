@@ -13,7 +13,9 @@ import {
 } from "@/server/conversations/conversations";
 import { scheduleHumanTakeoverTimeoutWakeup } from "@/server/conversations/takeover-timeout";
 import {
+  isMarketingOptInMessage,
   isMarketingOptOutMessage,
+  recordMarketingOptInFromConsent,
   recordMarketingOptOut,
 } from "@/server/operations/marketing-consent";
 import {
@@ -210,13 +212,17 @@ async function processCustomerTextMessage(
   }
 
   const isOptOut = isMarketingOptOutMessage(message.text?.body ?? "");
+  const isOptInRequest = isMarketingOptInMessage(message.text?.body ?? "");
+  const marketingOptInAccepted = isOptInRequest
+    ? await recordMarketingOptInFromConsent(business.id, message.from)
+    : false;
   const result = await simulateCustomerMessageForBusiness(business.id, {
     leadSource: "WHATSAPP",
     message: (message.text?.body ?? "").slice(0, 4_096),
     phoneNumber: message.from,
     providerMessageId: message.id,
     rawPayload: toJsonValue(compactWhatsAppMessagePayload(message)),
-    suppressAutomatedReply: isOptOut,
+    suppressAutomatedReply: isOptOut || marketingOptInAccepted,
   });
   if (isOptOut) {
     await recordMarketingOptOut(business.id, message.from);
@@ -229,8 +235,16 @@ async function processCustomerTextMessage(
     conversationId: result.conversationId,
     mediaFileId: null,
   };
-  const delivery =
-    !isOptOut && result.aiMessageId && message.from
+  const delivery = marketingOptInAccepted && message.from
+    ? await sendAutomatedWhatsAppReply({
+        businessId: business.id,
+        conversationId: result.conversationId,
+        to: message.from,
+        body: "Siap, kamu sudah terdaftar untuk menerima info dan promo dari kami. Balas STOP kapan saja untuk berhenti.",
+        intent: "marketing_opt_in_confirmed",
+        sourceProviderMessageId: message.id,
+      })
+    : !isOptOut && result.aiMessageId && message.from
       ? await deliverStoredWhatsAppTextMessage({
           businessId: business.id,
           messageId: result.aiMessageId,
@@ -249,7 +263,7 @@ async function processCustomerTextMessage(
       intent: "customer_service",
       confidenceScore: 0.9,
     },
-    reply: result.deduped ? null : result.aiReply,
+    reply: result.deduped ? null : marketingOptInAccepted ? "Siap, kamu sudah terdaftar untuk menerima info dan promo dari kami. Balas STOP kapan saja untuk berhenti." : result.aiReply,
     storage,
   });
 }

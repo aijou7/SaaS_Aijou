@@ -236,6 +236,11 @@ enum BroadcastStatus {
   FAILED
 }
 
+enum BroadcastKind {
+  MARKETING
+  CONSENT_REQUEST
+}
+
 enum BroadcastRecipientStatus {
   PENDING
   SENT
@@ -400,6 +405,7 @@ model Contact {
   tags          String[]               @default([])
   marketingOptInAt  DateTime?
   marketingOptOutAt DateTime?
+  marketingConsentPendingAt DateTime?
   lastContactedAt   DateTime?
   business      Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
   conversations WhatsAppConversation[]
@@ -778,9 +784,11 @@ model BroadcastCampaign {
   businessId     String
   segmentId      String?
   name           String
+  kind           BroadcastKind @default(MARKETING)
   templateName   String
   languageCode   String          @default("id")
   bodyParameters Json?
+  consentMessage String?
   status         BroadcastStatus @default(DRAFT)
   scheduledAt    DateTime?
   startedAt      DateTime?

@@ -7,6 +7,7 @@ export type ApprovedWhatsAppTemplatePickerOption = {
   languageCode: string;
   title: string | null;
   body: string;
+  headerImageUrl: string | null;
 };
 
 type ApprovedWhatsAppTemplatePickerProps = {
@@ -60,6 +61,7 @@ export function ApprovedWhatsAppTemplatePicker({
             <small>{selectedTemplate.languageCode}</small>
           </div>
           <div className="approved-template-preview-bubble">
+            {selectedTemplate.headerImageUrl ? <img className="approved-template-preview-image" src={selectedTemplate.headerImageUrl} alt="Header gambar template" /> : null}
             {selectedTemplate.title ? <strong>{selectedTemplate.title}</strong> : null}
             <p>{selectedTemplate.body}</p>
             <small>Template approved Meta</small>
