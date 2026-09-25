@@ -56,6 +56,13 @@ test("normalizes Markdown strong text into WhatsApp bold pairs", async () => {
   assert.equal(normalizeWhatsAppFormatting("*Sudah benar.*"), "*Sudah benar.*");
 });
 
+test("only the connected WABA number can enter the internal WhatsApp path", async () => {
+  const { isAuthorizedBusinessNumberMessage } = await import("@/server/whatsapp/authorization");
+  assert.equal(isAuthorizedBusinessNumberMessage("088229080443", "+62 882 2908 0443"), true);
+  assert.equal(isAuthorizedBusinessNumberMessage("088229080443", "+62 812 0000 0000"), false);
+  assert.equal(isAuthorizedBusinessNumberMessage("628229080443", undefined), false);
+});
+
 test("recognizes explicit marketing opt-out messages", async () => {
   const { isMarketingOptOutMessage } = await import("@/server/operations/marketing-consent");
   assert.equal(isMarketingOptOutMessage("STOP"), true);

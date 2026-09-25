@@ -192,5 +192,6 @@ describe("security and parsing helpers", () => {
 
     assert.equal(messages.length, 1);
     assert.deepEqual(messages[0].businessIdentifiers, ["phone-id", "628123"]);
+    assert.equal(messages[0].businessPhoneNumber, "628123");
   });
 });

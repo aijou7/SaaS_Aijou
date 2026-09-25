@@ -32,7 +32,7 @@ import {
   type WhatsAppWebhookPayload,
 } from "@/server/whatsapp/payload";
 import { downloadWhatsAppMedia } from "@/server/whatsapp/client";
-import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
+import { isAuthorizedBusinessNumberMessage } from "@/server/whatsapp/authorization";
 import {
   findBusinessForQueuedWhatsApp,
   findBusinessForWhatsAppMessage,
@@ -120,7 +120,10 @@ async function processIncomingMessage(
     });
   }
 
-  const isOwner = isAuthorizedOwnerMessage(message.from, business.user.phoneNumber);
+  // A profile owner's phone is never an internal WhatsApp credential. Only a
+  // message whose sender is the connected WABA number may use the internal
+  // owner/finance path; every other sender is a customer.
+  const isOwner = isAuthorizedBusinessNumberMessage(message.from, message.businessPhoneNumber);
 
   if (message.type === "text" && message.text?.body) {
     return isOwner
@@ -511,20 +514,6 @@ async function persistMessage(params: {
     stored: true,
     ...result,
   };
-}
-
-function isAuthorizedOwnerMessage(from: string | undefined, ownerPhone: string | null) {
-  const sender = normalizePhoneNumber(from);
-  const owner = normalizePhoneNumber(ownerPhone ?? undefined);
-  return Boolean(sender && owner && sender === owner);
-}
-
-function normalizePhoneNumber(value?: string) {
-  const defaultCountryCode = /^\d{1,4}$/.test(process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "")
-    ? process.env.WHATSAPP_DEFAULT_COUNTRY_CODE!
-    : "62";
-  const normalized = normalizeWhatsAppPhone(value ?? "", defaultCountryCode);
-  return normalized.length >= 7 ? normalized : "";
 }
 
 function buildMessageResult(

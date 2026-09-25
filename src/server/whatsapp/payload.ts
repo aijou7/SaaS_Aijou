@@ -43,6 +43,8 @@ export type WhatsAppIncomingMessage = {
 
 export type ExtractedWhatsAppMessage = WhatsAppIncomingMessage & {
   businessIdentifiers: string[];
+  /** The display number of the connected WABA, not the sender's number. */
+  businessPhoneNumber?: string;
 };
 
 export function extractMessages(payload: WhatsAppWebhookPayload) {
@@ -54,11 +56,13 @@ export function extractMessages(payload: WhatsAppWebhookPayload) {
           value?.metadata?.phone_number_id,
           value?.metadata?.display_phone_number,
         ].filter(Boolean) as string[];
+        const businessPhoneNumber = clean(value?.metadata?.display_phone_number, 40);
 
         return (
           value?.messages?.map((message) => ({
             ...message,
             businessIdentifiers,
+            ...(businessPhoneNumber ? { businessPhoneNumber } : {}),
           })) ?? []
         );
       }) ?? [],
@@ -86,6 +90,7 @@ export function compactWhatsAppMessagePayload(message: ExtractedWhatsAppMessage)
       .slice(0, 4)
       .map((value) => clean(value, 64))
       .filter(Boolean),
+    businessPhoneNumber: clean(message.businessPhoneNumber, 40),
     text:
       message.type === "text" && message.text?.body
         ? { body: message.text.body.slice(0, 4_096) }

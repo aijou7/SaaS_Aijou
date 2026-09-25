@@ -18,11 +18,6 @@ const businessContextSelect = {
   userId: true,
   businessName: true,
   whatsappNumber: true,
-  user: {
-    select: {
-      phoneNumber: true,
-    },
-  },
   whatsAppSettings: {
     select: {
       phoneNumberId: true,

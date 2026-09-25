@@ -110,7 +110,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 maxLength={24}
                 required
               />
-              <small>Hanya nomor ini yang boleh menjalankan perintah finance lewat WhatsApp.</small>
+              <small>Untuk profil owner saja. Akses internal dilakukan lewat dashboard; nomor ini tidak otomatis dianggap team di WhatsApp.</small>
             </label>
             <button className="primary-button span-2" type="submit">Simpan profil owner</button>
           </form>
