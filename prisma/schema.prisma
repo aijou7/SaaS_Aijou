@@ -45,6 +45,8 @@ enum AuthTokenPurpose {
   EMAIL_VERIFICATION
   LOGIN_OTP
   PASSWORD_RESET
+  PHONE_VERIFICATION
+  WHATSAPP_PASSWORD_RESET
 }
 
 enum ContactType {
@@ -301,6 +303,7 @@ model User {
   email                 String                 @unique
   passwordHash          String
   phoneNumber           String?
+  recoveryPhoneVerifiedAt DateTime?
   role                  UserRole               @default(OWNER)
   status                UserStatus             @default(ACTIVE)
   isPlatformAdmin       Boolean                @default(false)
@@ -1211,6 +1214,7 @@ model AuthToken {
   userId    String
   purpose   AuthTokenPurpose
   tokenHash String           @unique
+  phoneNumber String?
   expiresAt DateTime
   usedAt    DateTime?
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)

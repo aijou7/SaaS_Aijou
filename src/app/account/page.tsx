@@ -8,10 +8,13 @@ import {
   requestAccountDeletionAction,
   requestOwnerEmailChangeAction,
   updateAccountProfileAction,
+  submitRecoveryTemplateAction,
 } from "@/app/account/actions";
+import { PhoneRecoverySetup } from "@/app/account/phone-recovery-setup";
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { getRecoveryTemplateState } from "@/server/auth/whatsapp-recovery-template";
 
 type AccountPageProps = {
   searchParams: Promise<{
@@ -21,6 +24,9 @@ type AccountPageProps = {
     deletionCancelled?: string;
     emailChange?: string;
     emailError?: string;
+    profileError?: string;
+    recoveryError?: string;
+    recoveryTemplate?: string;
   }>;
 };
 
@@ -28,7 +34,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [params, user, business, pendingEmailChange] = await Promise.all([
+  const [params, user, business, pendingEmailChange, recoveryTemplate, whatsAppConnected] = await Promise.all([
     searchParams,
     prisma.user.findUnique({
       where: { id: session.userId },
@@ -36,6 +42,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         name: true,
         email: true,
         phoneNumber: true,
+        recoveryPhoneVerifiedAt: true,
         role: true,
         status: true,
         deletionRequestedAt: true,
@@ -54,6 +61,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           orderBy: { createdAt: "desc" },
           select: { id: true, newEmail: true, expiresAt: true },
         })
+      : Promise.resolve(null),
+    session.role === "OWNER" && session.business
+      ? getRecoveryTemplateState(session.business.id)
+      : Promise.resolve(null),
+    session.role === "OWNER" && session.business
+      ? prisma.whatsAppSettings.findUnique({ where: { businessId: session.business.id }, select: { isActive: true } })
       : Promise.resolve(null),
   ]);
 
@@ -110,10 +123,19 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 maxLength={24}
                 required
               />
-              <small>Untuk profil owner saja. Akses internal dilakukan lewat dashboard; nomor ini tidak otomatis dianggap team di WhatsApp.</small>
+              <small>Nomor ini bisa dipakai untuk recovery setelah diverifikasi. Akses team tetap lewat aplikasi.</small>
+            </label>
+            <label className="span-2">
+              Password saat ini (jika mengganti nomor)
+              <input name="currentPassword" type="password" autoComplete="current-password" maxLength={128} />
             </label>
             <button className="primary-button span-2" type="submit">Simpan profil owner</button>
           </form>
+          {params.profileError ? (
+            <div className="settings-note" role="alert">
+              {params.profileError === "password_required" ? "Password saat ini diperlukan untuk mengganti nomor." : "Nomor belum berhasil diubah."}
+            </div>
+          ) : null}
           {params.saved === "1" ? (
             <div className="settings-note" role="status">Profil owner berhasil disimpan.</div>
           ) : null}
@@ -167,6 +189,37 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </form>
         </div>
       </section>
+
+      {session.role === "OWNER" && business ? (
+        <section className="section">
+          <div className="card">
+            <p className="eyebrow">Recovery WhatsApp</p>
+            <h2>Pulihkan akun lewat nomor terverifikasi</h2>
+            <p className="muted">Kode recovery dikirim lewat template Authentication Meta. Nomor profil tidak memberi akses team atau perintah chat.</p>
+            {!whatsAppConnected?.isActive ? (
+              <div className="settings-note">Hubungkan WhatsApp Cloud API di Pengaturan sebelum menyiapkan recovery.</div>
+            ) : recoveryTemplate?.error ? (
+              <div className="settings-note" role="alert">{recoveryTemplate.error}</div>
+            ) : recoveryTemplate?.status !== "APPROVED" ? (
+              <div className="settings-note">
+                <strong>{recoveryTemplate?.status === "IN_REVIEW" ? "Template sedang direview Meta" : recoveryTemplate?.status === "REJECTED" ? "Template ditolak Meta" : "Template Authentication belum tersedia"}</strong>
+                <p>{recoveryTemplate?.status === "IN_REVIEW" ? "Refresh halaman setelah Meta menyetujuinya." : recoveryTemplate?.status === "REJECTED" ? "Periksa alasan penolakan di WhatsApp Manager. Template recovery perlu diperbaiki sebelum OTP dapat digunakan." : "Ajukan template kode recovery agar OTP WhatsApp bisa dipakai."}</p>
+                {!recoveryTemplate?.status ? (
+                  <form action={submitRecoveryTemplateAction}>
+                    <button className="ghost-button" type="submit">Ajukan template recovery ke Meta</button>
+                  </form>
+                ) : null}
+              </div>
+            ) : user.phoneNumber ? (
+              <PhoneRecoverySetup phoneNumber={user.phoneNumber} verified={Boolean(user.recoveryPhoneVerifiedAt)} />
+            ) : (
+              <div className="settings-note">Isi nomor WhatsApp profil terlebih dahulu.</div>
+            )}
+            {params.recoveryError ? <div className="settings-note" role="alert">{params.recoveryError}</div> : null}
+            {params.recoveryTemplate === "submitted" ? <div className="settings-note" role="status">Template recovery diajukan. Tunggu persetujuan Meta, lalu verifikasi nomor.</div> : null}
+          </div>
+        </section>
+      ) : null}
 
       {session.role === "OWNER" ? (
         <section className="section split-layout">

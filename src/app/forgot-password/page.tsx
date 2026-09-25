@@ -3,12 +3,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { ForgotPasswordForm } from "@/app/forgot-password/forgot-password-form";
+import { WhatsAppResetForm } from "@/app/forgot-password/whatsapp-reset-form";
 import { AijouLogo } from "@/components/aijou-logo";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Lupa password",
-  description: "Minta link sekali pakai untuk membuat password Aijou AI yang baru.",
+  description: "Pulihkan akun Aijou AI melalui email atau OTP WhatsApp terverifikasi.",
 };
 
 export default async function ForgotPasswordPage() {
@@ -26,13 +27,13 @@ export default async function ForgotPasswordPage() {
             <p className="eyebrow">Recovery akun</p>
             <h1>Balik masuk tanpa mengorbankan keamanan.</h1>
             <p>
-              Kami mengirim link sekali pakai ke email akunmu. Password lama tidak pernah
-              dikirim atau ditampilkan kembali.
+              Pilih email atau nomor WhatsApp recovery yang sudah kamu verifikasi.
+              Password lama tidak pernah dikirim atau ditampilkan kembali.
             </p>
           </div>
           <div className="login-feature-grid">
-            <span><KeyRound size={17} aria-hidden="true" /> Link berlaku 60 menit</span>
-            <span><LockKeyhole size={17} aria-hidden="true" /> Hanya dapat dipakai sekali</span>
+            <span><KeyRound size={17} aria-hidden="true" /> Link email 60 menit</span>
+            <span><LockKeyhole size={17} aria-hidden="true" /> OTP WhatsApp 10 menit</span>
             <span><ShieldCheck size={17} aria-hidden="true" /> Sesi lama dicabut setelah reset</span>
           </div>
         </section>
@@ -46,6 +47,12 @@ export default async function ForgotPasswordPage() {
             </p>
           </div>
           <ForgotPasswordForm />
+          <div className="auth-panel-heading">
+            <p className="eyebrow">Alternatif recovery</p>
+            <h2>Lewat WhatsApp.</h2>
+            <p className="muted">Tersedia setelah nomor recovery diverifikasi dari menu Akun.</p>
+          </div>
+          <WhatsAppResetForm />
           <p className="auth-switch-copy">
             Sudah ingat password? <Link href="/login">Kembali masuk</Link>
           </p>

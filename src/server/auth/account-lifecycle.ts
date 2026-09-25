@@ -29,6 +29,9 @@ import {
   sendTransactionalEmail,
 } from "@/server/email";
 import { activateVerifiedWorkspaceSubscriptions } from "@/server/subscriptions/subscriptions";
+import { hasVerifiedRecoveryPhone } from "@/server/auth/recovery-phone";
+import { sendWhatsAppTemplateMessage } from "@/server/whatsapp/client";
+import { getApprovedRecoveryTemplate, recoveryTemplateLanguage, recoveryTemplateName } from "@/server/auth/whatsapp-recovery-template";
 
 const resetRules = [
   { scope: "password-reset:subject:15m", max: 4, windowMs: 15 * 60_000 },
@@ -49,6 +52,10 @@ const otpIpAttemptRules = [
   { scope: "auth-otp:ip:15m", max: 60, windowMs: 15 * 60_000 },
 ] as const satisfies readonly DurableRateRule[];
 const otpTtlMs = 10 * 60_000;
+const phoneVerificationRules = [
+  { scope: "recovery-phone:user:15m", max: 3, windowMs: 15 * 60_000 },
+  { scope: "recovery-phone:user:24h", max: 10, windowMs: 24 * 60 * 60_000 },
+] as const satisfies readonly DurableRateRule[];
 
 export class AccountLifecycleError extends Error {
   constructor(readonly code: string, message: string) {
@@ -88,6 +95,130 @@ export async function requestPasswordReset(emailValue: string, clientIp: string)
     }),
   });
   return { accepted: true };
+}
+
+export async function requestPhoneVerification(userId: string, businessId: string, clientIp: string) {
+  const [userLimit, ipLimit] = await Promise.all([
+    consumeDurableRateLimit(userId, phoneVerificationRules),
+    consumeDurableRateLimit((clientIp || "unknown").slice(0, 64), phoneVerificationRules),
+  ]);
+  if (!userLimit.allowed || !ipLimit.allowed) {
+    throw new AccountLifecycleError("RATE_LIMITED", "Terlalu sering meminta kode. Coba lagi nanti.");
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { phoneNumber: true, recoveryPhoneVerifiedAt: true, status: true, businesses: { select: { id: true } } },
+  });
+  if (!user?.phoneNumber || !isAccountRecoveryAllowed(user.status) || !user.businesses.some((business) => business.id === businessId)) {
+    throw new AccountLifecycleError("ACCOUNT_UNAVAILABLE", "Nomor recovery tidak tersedia.");
+  }
+  if (user.recoveryPhoneVerifiedAt) {
+    throw new AccountLifecycleError("ALREADY_VERIFIED", "Nomor recovery sudah terverifikasi.");
+  }
+  if (!await getApprovedRecoveryTemplate(businessId)) {
+    throw new AccountLifecycleError("TEMPLATE_UNAVAILABLE", "Template kode recovery belum disetujui Meta.");
+  }
+
+  const token = await issueOtpToken(userId, AuthTokenPurpose.PHONE_VERIFICATION, user.phoneNumber);
+  const delivery = await deliverIssuedWhatsAppOtp(token, businessId, user.phoneNumber);
+  if (!delivery.sent) {
+    console.error("recovery_phone_verification_delivery_failed", { businessId, reason: delivery.reason });
+    throw new AccountLifecycleError("DELIVERY_FAILED", "Kode belum berhasil dikirim ke WhatsApp. Coba lagi nanti.");
+  }
+  return { challengeId: token.id };
+}
+
+export async function verifyPhoneVerification(userId: string, challengeId: string, code: string, clientIp: string) {
+  await consumeOtpAttemptLimit(challengeId, clientIp);
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.PHONE_VERIFICATION);
+  if (!token || token.userId !== userId || !token.phoneNumber || !otpHashMatches(token.tokenHash, challengeId, code)) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode salah atau sudah kedaluwarsa.");
+  }
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.authToken.updateMany({
+      where: { id: token.id, tokenHash: token.tokenHash, purpose: AuthTokenPurpose.PHONE_VERIFICATION, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    });
+    if (claimed.count !== 1) throw new AccountLifecycleError("INVALID_OTP", "Kode sudah dipakai atau kedaluwarsa.");
+    const verified = await tx.user.updateMany({
+      where: { id: userId, phoneNumber: token.phoneNumber, recoveryPhoneVerifiedAt: null, status: { in: [UserStatus.ACTIVE, UserStatus.DELETION_PENDING] } },
+      data: { recoveryPhoneVerifiedAt: now },
+    });
+    if (verified.count !== 1) throw new AccountLifecycleError("PHONE_CHANGED", "Nomor akun berubah. Minta kode baru.");
+    await tx.authToken.updateMany({
+      where: { userId, purpose: AuthTokenPurpose.PHONE_VERIFICATION, usedAt: null },
+      data: { usedAt: now },
+    });
+  });
+  await clearDurableRateLimit(challengeId, otpChallengeAttemptRules);
+}
+
+export async function requestWhatsAppPasswordReset(emailValue: string, clientIp: string) {
+  // A synthetic challenge preserves the same public response for unknown accounts,
+  // unavailable providers and accounts without a verified recovery number.
+  const syntheticChallengeId = randomBytes(24).toString("base64url");
+  const email = normalizeEmail(emailValue);
+  const [emailLimit, ipLimit] = await Promise.all([
+    consumeDurableRateLimit(email || "invalid", resetRules),
+    consumeDurableRateLimit((clientIp || "unknown").slice(0, 64), resetRules),
+  ]);
+  if (!emailLimit.allowed || !ipLimit.allowed || !email) return { challengeId: syntheticChallengeId };
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, phoneNumber: true, recoveryPhoneVerifiedAt: true, emailVerifiedAt: true, status: true, businesses: { select: { id: true } } },
+  });
+  const businessId = user?.businesses[0]?.id;
+  if (!user?.phoneNumber || !hasVerifiedRecoveryPhone(user, user.phoneNumber) || !businessId || !isAccountRecoveryAllowed(user.status)) {
+    return { challengeId: syntheticChallengeId };
+  }
+  if (!await getApprovedRecoveryTemplate(businessId)) return { challengeId: syntheticChallengeId };
+
+  const token = await issueOtpToken(user.id, AuthTokenPurpose.WHATSAPP_PASSWORD_RESET, user.phoneNumber);
+  const delivery = await deliverIssuedWhatsAppOtp(token, businessId, user.phoneNumber);
+  if (!delivery.sent) {
+    console.error("whatsapp_password_reset_delivery_failed", { businessId, reason: delivery.reason });
+  }
+  return { challengeId: delivery.sent ? token.id : syntheticChallengeId };
+}
+
+export async function resetPasswordWithWhatsAppOtp(challengeId: string, code: string, newPassword: string, clientIp: string) {
+  await consumeOtpAttemptLimit(challengeId, clientIp);
+  const token = await getUsableOtpToken(challengeId, AuthTokenPurpose.WHATSAPP_PASSWORD_RESET);
+  if (!token?.phoneNumber || !otpHashMatches(token.tokenHash, challengeId, code)) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode salah atau sudah kedaluwarsa.");
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: token.userId },
+    select: { email: true, phoneNumber: true, recoveryPhoneVerifiedAt: true, emailVerifiedAt: true, status: true },
+  });
+  if (!user || !hasVerifiedRecoveryPhone(user, token.phoneNumber, token.createdAt) || !isAccountRecoveryAllowed(user.status)) {
+    throw new AccountLifecycleError("INVALID_OTP", "Kode salah atau sudah kedaluwarsa.");
+  }
+  const passwordError = validatePasswordStrength(newPassword, user.email);
+  if (passwordError) throw new AccountLifecycleError("WEAK_PASSWORD", passwordError);
+  const passwordHash = await hashPassword(newPassword);
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.authToken.updateMany({
+      where: { id: token.id, tokenHash: token.tokenHash, purpose: AuthTokenPurpose.WHATSAPP_PASSWORD_RESET, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    });
+    if (claimed.count !== 1) throw new AccountLifecycleError("INVALID_OTP", "Kode sudah dipakai atau kedaluwarsa.");
+    const recovered = await tx.user.updateMany({
+      where: {
+        id: token.userId, phoneNumber: token.phoneNumber,
+        recoveryPhoneVerifiedAt: { not: null, lte: token.createdAt },
+        emailVerifiedAt: { not: null },
+        status: { in: [UserStatus.ACTIVE, UserStatus.DELETION_PENDING] },
+      },
+      data: { passwordHash, status: UserStatus.ACTIVE, deletionRequestedAt: null },
+    });
+    if (recovered.count !== 1) throw new AccountLifecycleError("INVALID_OTP", "Nomor recovery berubah. Minta kode baru.");
+    await tx.authToken.updateMany({ where: { userId: token.userId, usedAt: null }, data: { usedAt: now } });
+  });
+  await clearDurableRateLimit(challengeId, otpChallengeAttemptRules);
 }
 
 export async function resetPasswordWithToken(tokenValue: string, newPassword: string) {
@@ -145,10 +276,7 @@ export async function resetPasswordWithToken(tokenValue: string, newPassword: st
     if (recovered.count !== 1) {
       throw new AccountLifecycleError("INVALID_TOKEN", "Akun tidak lagi dapat dipulihkan.");
     }
-    await tx.authToken.updateMany({
-      where: { userId: token.userId, purpose: AuthTokenPurpose.PASSWORD_RESET, usedAt: null },
-      data: { usedAt: now },
-    });
+    await tx.authToken.updateMany({ where: { userId: token.userId, usedAt: null }, data: { usedAt: now } });
   });
 }
 
@@ -882,6 +1010,7 @@ async function issueToken(
 async function issueOtpToken(
   userId: string,
   purpose: AuthTokenPurpose,
+  phoneNumber?: string,
 ): Promise<IssuedAuthToken> {
   const id = randomBytes(24).toString("base64url");
   const value = randomInt(0, 1_000_000).toString().padStart(6, "0");
@@ -897,6 +1026,7 @@ async function issueOtpToken(
         userId,
         purpose,
         tokenHash,
+        phoneNumber,
         expiresAt: new Date(Date.now() + otpTtlMs),
       },
     });
@@ -921,6 +1051,8 @@ async function getUsableOtpToken(
       id: true,
       userId: true,
       tokenHash: true,
+      phoneNumber: true,
+      createdAt: true,
       expiresAt: true,
       user: { select: { email: true } },
     },
@@ -954,6 +1086,24 @@ async function deliverIssuedTokenEmail(
 
   await settleIssuedTokenDelivery(token, delivery.sent);
   return delivery;
+}
+
+async function deliverIssuedWhatsAppOtp(token: IssuedAuthToken, businessId: string, phoneNumber: string) {
+  try {
+    const delivery = await sendWhatsAppTemplateMessage({
+      businessId,
+      to: phoneNumber,
+      templateName: recoveryTemplateName,
+      languageCode: recoveryTemplateLanguage,
+      bodyParameters: [token.value],
+      authenticationCode: token.value,
+    });
+    await settleIssuedTokenDelivery(token, delivery.sent);
+    return delivery;
+  } catch (error) {
+    await settleIssuedTokenDelivery(token, false);
+    throw error;
+  }
 }
 
 async function settleIssuedTokenDelivery(token: IssuedAuthToken, sent: boolean) {

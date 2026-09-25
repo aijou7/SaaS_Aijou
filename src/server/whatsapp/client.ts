@@ -25,6 +25,7 @@ type SendTemplateMessageParams = {
   bodyParameters?: string[];
   headerImageUrl?: string | null;
   businessId?: string;
+  authenticationCode?: string;
 };
 
 const defaultMaxMediaBytes = 10 * 1024 * 1024;
@@ -144,6 +145,7 @@ export async function sendWhatsAppTemplateMessage(
     .map((value) => value.trim())
     .filter(Boolean);
   const headerImageUrl = params.headerImageUrl?.trim() || null;
+  const authenticationCode = params.authenticationCode?.trim() || null;
 
   if (!credentials.accessToken || !credentials.phoneNumberId) {
     return {
@@ -188,6 +190,14 @@ export async function sendWhatsAppTemplateMessage(
       providerErrorCode: null,
     };
   }
+  if (authenticationCode && (!/^\d{6}$/.test(authenticationCode) || bodyParameters.length !== 1 || bodyParameters[0] !== authenticationCode || headerImageUrl)) {
+    return {
+      sent: false as const,
+      reason: "whatsapp_authentication_parameters_invalid",
+      providerMessageId: null,
+      providerErrorCode: null,
+    };
+  }
 
   try {
     const components = [
@@ -196,6 +206,9 @@ export async function sendWhatsAppTemplateMessage(
         : []),
       ...(bodyParameters.length > 0
         ? [{ type: "body", parameters: bodyParameters.map((text) => ({ type: "text", text })) }]
+        : []),
+      ...(authenticationCode
+        ? [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: authenticationCode }] }]
         : []),
     ];
     const response = await fetchWhatsAppGraph(

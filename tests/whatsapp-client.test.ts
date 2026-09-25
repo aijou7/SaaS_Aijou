@@ -102,6 +102,46 @@ describe("WhatsApp Graph client", () => {
       { type: "body", parameters: [{ type: "text", text: "Aijou" }] },
     ]);
   });
+
+  test("sends an authentication code in both the body and copy-code button", async () => {
+    configureCredentials();
+    let requestBody: unknown = null;
+    globalThis.fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.recovery" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    const result = await sendWhatsAppTemplateMessage({
+      to: "0812 3456 7890",
+      templateName: "aijou_account_recovery_code",
+      languageCode: "id",
+      bodyParameters: ["123456"],
+      authenticationCode: "123456",
+    });
+
+    assert.equal(result.sent, true);
+    assert.deepEqual((requestBody as { template: { components: unknown[] } }).template.components, [
+      { type: "body", parameters: [{ type: "text", text: "123456" }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] },
+    ]);
+  });
+
+  test("rejects malformed authentication payloads before contacting Meta", async () => {
+    configureCredentials();
+    let calls = 0;
+    globalThis.fetch = async () => { calls += 1; return new Response(null, { status: 500 }); };
+
+    const result = await sendWhatsAppTemplateMessage({
+      to: "6281234567890", templateName: "aijou_account_recovery_code",
+      bodyParameters: ["654321"], authenticationCode: "123456",
+    });
+    assert.equal(result.sent, false);
+    assert.equal(result.reason, "whatsapp_authentication_parameters_invalid");
+    assert.equal(calls, 0);
+  });
 });
 
 function configureCredentials() {

@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { getClientIpFromHeaders } from "@/lib/abuse-guard";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { clearSessionCookie, getSession } from "@/lib/session";
@@ -8,6 +10,8 @@ import {
   AccountLifecycleError,
   cancelAccountDeletion,
   requestAccountDeletion,
+  requestPhoneVerification,
+  verifyPhoneVerification,
 } from "@/server/auth/account-lifecycle";
 import {
   confirmOwnerEmailChange,
@@ -15,6 +19,7 @@ import {
   requestOwnerEmailChange,
 } from "@/server/auth/owner-email-change";
 import { normalizeWhatsAppPhone } from "@/server/whatsapp/phone";
+import { submitRecoveryTemplate } from "@/server/auth/whatsapp-recovery-template";
 
 export async function updateAccountProfileAction(formData: FormData) {
   const session = await getSession();
@@ -25,11 +30,77 @@ export async function updateAccountProfileAction(formData: FormData) {
   if (!name) redirect("/account?error=name_required");
   if (!phoneNumber) redirect("/account?error=phone_invalid");
 
-  await prisma.user.update({
+  const current = await prisma.user.findUnique({
     where: { id: session.userId },
-    data: { name, phoneNumber },
+    select: { phoneNumber: true, passwordHash: true },
+  });
+  if (!current) redirect("/login");
+  const changedPhone = current.phoneNumber !== phoneNumber;
+  if (changedPhone && !await verifyPassword(String(formData.get("currentPassword") ?? ""), current.passwordHash)) {
+    redirect("/account?profileError=password_required");
+  }
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.updateMany({
+      where: { id: session.userId, phoneNumber: current.phoneNumber, passwordHash: current.passwordHash },
+      data: {
+        name, phoneNumber,
+        ...(changedPhone ? { recoveryPhoneVerifiedAt: null } : {}),
+      },
+    });
+    if (updated.count !== 1) throw new Error("Account profile changed during update.");
+    if (changedPhone) {
+      await tx.authToken.updateMany({
+        where: { userId: session.userId, purpose: { in: ["PHONE_VERIFICATION", "WHATSAPP_PASSWORD_RESET"] }, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    }
   });
   redirect("/account?saved=1");
+}
+
+export async function submitRecoveryTemplateAction() {
+  const session = await getSession();
+  if (!session?.business || session.role !== "OWNER") redirect("/login");
+  try {
+    await submitRecoveryTemplate(session.business.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Template belum berhasil diajukan.";
+    redirect(`/account?recoveryError=${encodeURIComponent(message)}`);
+  }
+  redirect("/account?recoveryTemplate=submitted");
+}
+
+export type PhoneRecoveryState = { challengeId?: string; error?: string; verified?: boolean };
+
+export async function requestPhoneVerificationAction(
+  _previous: PhoneRecoveryState,
+  _formData: FormData,
+): Promise<PhoneRecoveryState> {
+  const session = await getSession();
+  if (!session?.business || session.role !== "OWNER") return { error: "Masuk sebagai owner untuk melanjutkan." };
+  try {
+    const requestHeaders = await headers();
+    return await requestPhoneVerification(session.userId, session.business.id, getClientIpFromHeaders(requestHeaders));
+  } catch (error) {
+    return { error: error instanceof AccountLifecycleError ? error.message : "Kode belum bisa dikirim. Coba lagi nanti." };
+  }
+}
+
+export async function verifyPhoneVerificationAction(
+  _previous: PhoneRecoveryState,
+  formData: FormData,
+): Promise<PhoneRecoveryState> {
+  const session = await getSession();
+  if (!session?.business || session.role !== "OWNER") return { error: "Masuk sebagai owner untuk melanjutkan." };
+  const challengeId = String(formData.get("challengeId") ?? "");
+  if (!/^[A-Za-z0-9_-]{32}$/.test(challengeId)) return { error: "Minta kode baru untuk melanjutkan." };
+  try {
+    const requestHeaders = await headers();
+    await verifyPhoneVerification(session.userId, challengeId, String(formData.get("code") ?? "").trim(), getClientIpFromHeaders(requestHeaders));
+    return { verified: true };
+  } catch (error) {
+    return { challengeId, error: error instanceof AccountLifecycleError ? error.message : "Kode belum bisa diverifikasi." };
+  }
 }
 
 export async function changePasswordAction(formData: FormData) {
@@ -63,12 +134,18 @@ export async function changePasswordAction(formData: FormData) {
   }
 
   const passwordHash = await hashPassword(newPassword);
-  const update = await prisma.user.updateMany({
-    where: {
-      id: user.id,
-      passwordHash: user.passwordHash,
-    },
-    data: { passwordHash },
+  const update = await prisma.$transaction(async (tx) => {
+    const changed = await tx.user.updateMany({
+      where: { id: user.id, passwordHash: user.passwordHash },
+      data: { passwordHash },
+    });
+    if (changed.count === 1) {
+      await tx.authToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    }
+    return changed;
   });
 
   if (update.count !== 1) {
